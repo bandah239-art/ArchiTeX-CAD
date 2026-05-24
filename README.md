@@ -1,4 +1,4 @@
-# INFRAFRICA
+# ArchiTeX-CAD
 
 Calculation Engine + BIM Viewer — Desktop application for structural engineering calculations and IFC model viewing.
 
