@@ -2,11 +2,14 @@ import type { ModelStats } from '../types/ifc';
 
 export async function loadIFC(path: string): Promise<{ arrayBuffer: ArrayBuffer; stats: ModelStats }> {
   const start = performance.now();
-
   let arrayBuffer: ArrayBuffer;
 
-  if (window.electronAPI) {
-    const response = await fetch(`file://${path}`);
+  if (window.electronAPI?.readIfcFile) {
+    const data = await window.electronAPI.readIfcFile(path);
+    arrayBuffer = new Uint8Array(data).buffer;
+  } else if (path.startsWith('blob:') || path.startsWith('http')) {
+    const response = await fetch(path);
+    if (!response.ok) throw new Error(`Failed to load IFC: ${response.statusText}`);
     arrayBuffer = await response.arrayBuffer();
   } else {
     const response = await fetch(path);

@@ -1,4 +1,5 @@
 import { useAiStore } from '../../store/aiStore';
+import { useTranslation } from 'react-i18next';
 
 const COUNTRIES = [
   { code: 'ZM', label: '🇿🇲 Zambia' },
@@ -8,6 +9,7 @@ const COUNTRIES = [
 ];
 
 export function AIDesignPanel() {
+  const { t } = useTranslation();
   const {
     prompt,
     countryCode,
@@ -16,7 +18,9 @@ export function AIDesignPanel() {
     designBrief,
     variants,
     isGenerating,
+    isPushing,
     error,
+    pushMessage,
     setPrompt,
     setCountryCode,
     setBudgetUsd,
@@ -24,6 +28,7 @@ export function AIDesignPanel() {
     generateDesign,
     generateVariants,
     pushToCalculators,
+    pushToCalcAndBoq,
     exportProposal,
   } = useAiStore();
 
@@ -57,12 +62,14 @@ export function AIDesignPanel() {
           </select>
         </div>
         <input type="number" value={budgetUsd} onChange={(e) => setBudgetUsd(Number(e.target.value))} placeholder="Budget USD" className="w-full px-2 py-1.5 text-sm bg-infra-darker border border-infra-accent/40 rounded text-white" />
+        <p className="text-[10px] text-gray-500">{t('ai.budgetHint')}</p>
 
         <button type="button" onClick={() => generateDesign()} disabled={isGenerating} className="w-full py-2 bg-infra-highlight text-white text-sm font-semibold rounded disabled:opacity-50">
-          {isGenerating ? 'Generating...' : 'GENERATE DESIGN'}
+          {isGenerating ? 'Generating...' : t('ai.generate')}
         </button>
 
         {error && <div className="text-xs text-red-300 bg-red-900/30 p-2 rounded">{error}</div>}
+        {pushMessage && <div className="text-xs text-emerald-300 bg-emerald-900/30 p-2 rounded">{pushMessage}</div>}
 
         {designBrief && (
           <div className="p-3 bg-infra-darker border border-infra-accent/30 rounded text-xs text-gray-300 space-y-2">
@@ -83,7 +90,8 @@ export function AIDesignPanel() {
         {designBrief && (
           <div className="flex flex-wrap gap-1">
             <button type="button" onClick={() => generateVariants()} className="flex-1 py-1.5 text-xs border border-infra-accent/50 rounded">Variants</button>
-            <button type="button" onClick={() => pushToCalculators()} className="flex-1 py-1.5 text-xs border border-infra-accent/50 rounded">Push to Calculators</button>
+            <button type="button" onClick={() => pushToCalculators()} disabled={isPushing} className="flex-1 py-1.5 text-xs border border-infra-accent/50 rounded disabled:opacity-50">{t('ai.pushCalc')}</button>
+            <button type="button" onClick={() => pushToCalcAndBoq()} disabled={isPushing} className="flex-1 py-1.5 text-xs bg-emerald-900/40 border border-emerald-500/50 rounded text-emerald-300 disabled:opacity-50">{isPushing ? '…' : t('ai.pushCalcBoq')}</button>
             <button type="button" onClick={() => exportProposal()} className="flex-1 py-1.5 text-xs border border-infra-accent/50 rounded">Export Proposal</button>
           </div>
         )}

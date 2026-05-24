@@ -7,12 +7,17 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      '@infraafrica/shared': path.resolve(__dirname, './packages/shared/src/index.ts'),
     },
   },
   base: './',
   server: {
     port: 5173,
   },
+  optimizeDeps: {
+    exclude: ['web-ifc'],
+  },
+  assetsInclude: ['**/*.wasm'],
   build: {
     outDir: 'dist',
   },

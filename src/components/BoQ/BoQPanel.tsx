@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useBoQStore } from '../../store/boqStore';
 import { useViewerStore } from '../../store/viewerStore';
 import { elementsFromViewer, toBimPayload } from '../../services/ifcBoqService';
+import { useIfcModelStore } from '../../store/ifcModelStore';
 
 const COUNTRIES = [
   { code: 'ZM', label: '🇿🇲 Zambia' },
@@ -35,10 +36,12 @@ export function BoQPanel() {
     importFromBim,
     isImportingBim,
   } = useBoQStore();
-  const { loadedModel, selectedElement } = useViewerStore();
+  const { selectedElement } = useViewerStore();
+  const { getBoqElements } = useIfcModelStore();
 
   const handleImportBim = () => {
-    const els = elementsFromViewer(loadedModel, selectedElement);
+    const parsed = getBoqElements();
+    const els = elementsFromViewer(parsed.length ? parsed : null, selectedElement);
     importFromBim(toBimPayload(els));
   };
 

@@ -1,0 +1,79 @@
+{
+  "app": { "name": "INFRAFRICA", "tagline": "Plateforme d'ingénierie des infrastructures africaines" },
+  "sidebar": {
+    "viewer": "Visionneuse 3D",
+    "calculator": "Calculateur",
+    "boq": "Métré / Devis",
+    "geo": "Géo-intelligence",
+    "ai": "Conception IA",
+    "realestate": "Immobilier",
+    "government": "Gouvernement",
+    "documents": "Documents",
+    "wash": "Eau & Assainissement",
+    "energy": "Solaire/Énergie",
+    "intelligence": "Jumeau numérique",
+    "carbon": "Carbone/ESG",
+    "schedule": "Planning 4D",
+    "optimizer": "Design génératif",
+    "seismic": "Analyse sismique",
+    "emerging": "Tech émergente"
+  },
+  "topbar": {
+    "openIfc": "Ouvrir IFC",
+    "save": "Enregistrer",
+    "exportIfc": "Exporter IFC",
+    "inspector": "Inspecteur",
+    "calculator": "Calculateur",
+    "dashboard": "Tableau de bord"
+  },
+  "collab": {
+    "live": "En direct",
+    "offline": "Hors ligne",
+    "users": "utilisateurs en ligne",
+    "connect": "Rejoindre la session"
+  },
+  "schedule": {
+    "title": "Planning de construction 4D / 5D",
+    "build": "Générer depuis BIM",
+    "totalCost": "Coût total",
+    "weeks": "semaines"
+  },
+  "geo": {
+    "title": "Géo-intelligence africaine",
+    "subtitle": "Choisissez un site sur la carte — analyse et budget automatiques",
+    "siteLocation": "Emplacement du site",
+    "runAnalysis": "Analyser le site",
+    "searchPlaceholder": "Rechercher une adresse…",
+    "search": "Rechercher",
+    "country": "Pays",
+    "projectType": "Type de projet",
+    "gfa": "Surface brute (m²)",
+    "plotArea": "Surface parcelle (m²)",
+    "autoAnalyse": "Analyser et budgétiser au déplacement du repère",
+    "offlineMode": "Mode hors ligne / terrain",
+    "offlineOnly": "Hors ligne uniquement",
+    "useCache": "Mettre en cache pour le terrain",
+    "analysing": "Analyse et budget en cours…",
+    "locateAnalyseBudget": "Localiser · Analyser · Budgétiser",
+    "siteBudget": "Budget ajusté au site (USD)",
+    "applyToAi": "Appliquer à la conception IA",
+    "applyToBoq": "Appliquer au métré",
+    "designParams": "Paramètres de conception",
+    "exportReport": "Exporter le rapport",
+    "pushCalc": "Envoyer aux calculateurs",
+    "floodSim": "Simulation inondation",
+    "runFlood": "Lancer la simulation"
+  },
+  "ai": {
+    "generate": "Générer la conception",
+    "pushCalcBoq": "Envoyer vers Calc + Métré",
+    "pushCalc": "Envoyer vers calculateurs",
+    "budgetHint": "Utilisez Géo → Appliquer à la conception IA pour un budget ajusté au site"
+  },
+  "status": {
+    "serverOnline": "Serveur Python en ligne",
+    "serverOffline": "Serveur Python hors ligne — mode cache",
+    "offlineCache": "Cache hors ligne actif"
+  },
+  "lang": { "en": "English", "fr": "Français" }
+}

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
@@ -9,6 +9,7 @@ from calculations.structural.slab import calculate_slab
 from calculations.structural.column import calculate_column
 from calculations.structural.foundation import calculate_foundation
 from calculations.loads.load_combinations import calculate_loads
+from calculations.loads.wind_loads import calculate_wind_loads
 from calculations.civil.pavement import calculate_pavement
 from calculations.civil.drainage import calculate_drainage
 from boq.quantity_extractor import extract_quantities
@@ -16,11 +17,26 @@ from boq.boq_compiler import compile_boq
 from boq.excel_generator import generate_boq_excel_bytes
 from boq.pdf_generator import generate_boq_pdf_bytes
 from geo.geo_intelligence import run_site_analysis
+from geo.geocoder import geocode_search, reverse_geocode
+from geo.site_budget import compute_site_budget
 from geo.terrain_analyser import analyse_terrain
 from geo.soil_intelligence import analyse_soil
 from geo.climate_intelligence import analyse_climate
 from geo.seismic_intelligence import analyse_seismic
 from bim.ifc_to_boq import extract_from_bim
+from bim.ifc_geometry import parse_ifc_file, parse_ifc_bytes, HAS_IFCOPENSHELL
+from bim.ifc_export import export_ifc_from_elements
+from bim.geometry_kernel import boolean_operation, mesh_intersection_volume, region_boolean
+from bim.geometry_extensions import (
+    extensions_status,
+    polygon_area,
+    polygon_contains,
+    polyline_length,
+    transform_point,
+    flatten_xy,
+)
+from bim.autocad_bridge import autocad_bridge_status, export_dwg_geometry
+from bim.plan_detection import extract_plan_takeoff
 from geo.geo_cache import cache_status, clear_cache
 from ai.design_generator import generate_design
 from ai.variant_generator import generate_variants
@@ -52,6 +68,35 @@ from documents.calculation_report import generate_calculation_report
 from documents.eia_screening import screen_eia
 from sync.mobile_sync import list_sync_items, receive_sync_item
 from mobile.quick_calculators import concrete_mix, quick_beam_check, rebar_weight
+from calculations.wash.water_demand import calculate_water_demand
+from calculations.wash.borehole import calculate_borehole
+from calculations.wash.sewerage import calculate_sewerage
+from calculations.energy.solar_pv import calculate_solar_pv
+from calculations.energy.battery_storage import calculate_battery
+from collaboration.room_manager import handle_message, join_room, leave_room, room_status
+from collaboration.ws_manager import register, unregister, broadcast
+from calculations.sustainability.carbon import calculate_construction_carbon, calculate_carbon_credits
+from simulations.flood.d8_flood import simulate_flood_inundation
+from intelligence.digital_twin import get_asset, ingest_reading, list_assets, register_asset, seed_demo_assets
+from intelligence.predictive_maintenance import analyse_asset, analyse_portfolio
+from scheduling.construction_4d import build_schedule_from_bim
+from cache.calc_cache import cache_status as calc_cache_status, clear_cache as clear_calc_cache, get_cached, set_cached
+from cache.project_cache import load_project_meta, save_project_meta
+from documents.esg_report import generate_esg_report
+from emerging.platform import (
+    ar_mobile_scene,
+    blockchain_anchor,
+    cv_safety_scan,
+    disaster_response_plan,
+    drone_photogrammetry,
+    marketplace_listings,
+    satellite_analysis,
+    voice_command,
+)
+from simulations.thermal.thermal_building import simulate_thermal
+from simulations.seismic.seismic_response import simulate_seismic_response
+from calculations.generative.optimizer import optimize_structural_layout, optimize_solar_orientation
+from sync.desktop_sync import process_sync_batch
 
 app = FastAPI(title="INFRAFRICA Calculation Engine")
 
@@ -180,6 +225,30 @@ class GeoSiteInput(BaseModel):
     country_code: str = "ZM"
     project_name: str = "Site Analysis"
     analysis_radius_km: float = Field(5.0, gt=0)
+    platform_area_m2: float = Field(400, gt=0)
+    use_cache: bool = True
+    offline_only: bool = False
+
+
+class GeoGeocodeInput(BaseModel):
+    query: str = Field(..., min_length=2)
+
+
+class GeoReverseInput(BaseModel):
+    latitude: float
+    longitude: float
+
+
+class GeoSiteBudgetInput(BaseModel):
+    latitude: float
+    longitude: float
+    country_code: str = "ZM"
+    project_name: str = "Site Budget"
+    project_type: str = "residential"
+    gfa_m2: float = Field(142, gt=0)
+    platform_area_m2: float = Field(400, gt=0)
+    use_cache: bool = True
+    offline_only: bool = False
 
 
 class GeoTerrainInput(BaseModel):
@@ -217,6 +286,97 @@ class BimExtractInput(BaseModel):
     elements: list[dict[str, Any]]
     project_id: str = ""
     source: str = "ifc"
+
+
+class BimParsePathInput(BaseModel):
+    path: str
+
+
+class GeometryBooleanInput(BaseModel):
+    operation: str = "intersection"
+    mesh_a: dict[str, Any] = Field(default_factory=dict)
+    mesh_b: dict[str, Any] = Field(default_factory=dict)
+
+
+class RegionBooleanInput(BaseModel):
+    operation: str = "intersection"
+    polygons_a: list[list[list[float]]] = Field(default_factory=list)
+    polygons_b: list[list[list[float]]] = Field(default_factory=list)
+
+
+class PolygonVerticesInput(BaseModel):
+    vertices: list[list[float]] = Field(default_factory=list)
+    point: list[float] | None = None
+
+
+class PolylineLengthInput(BaseModel):
+    segments: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class TransformPointInput(BaseModel):
+    matrix: list[float] = Field(default_factory=list)
+    point: list[float] = Field(default_factory=list)
+
+
+class DwgExportInput(BaseModel):
+    path: str
+
+
+class ScheduleBuildInput(BaseModel):
+    project_name: str = "Project"
+    duration_weeks: int = 52
+    elements: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class OptimizerInput(BaseModel):
+    floor_area_m2: float = Field(400, gt=0)
+    span_min_m: float = Field(4, gt=0)
+    span_max_m: float = Field(12, gt=0)
+    n_spans_min: int = Field(2, ge=1)
+    n_spans_max: int = Field(8, ge=1)
+    weight_steel: float = 1.0
+    weight_cost: float = 1.5
+    weight_deflection: float = 0.1
+    max_iterations: int = Field(200, ge=10, le=1000)
+
+
+class SolarOptimizerInput(BaseModel):
+    latitude: float = -15.4
+    longitude: float = 28.3
+    roof_area_m2: float = Field(80, gt=0)
+    n_trials: int = Field(100, ge=10, le=500)
+
+
+class SeismicAnalysisInput(BaseModel):
+    analysis_type: str = Field("modal", pattern="^(modal|time_history|pushover)$")
+    pga_g: float = Field(0.15, gt=0)
+    n_storeys: int = Field(4, ge=1, le=30)
+    storey_height_m: float = Field(3.0, gt=0)
+    bay_width_m: float = Field(6.0, gt=0)
+    n_bays: int = Field(3, ge=1)
+    site_class: str = "B"
+    mass_t: float = Field(500, gt=0)
+
+
+class SyncBatchInput(BaseModel):
+    operations: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class EsgReportInput(BaseModel):
+    project_name: str = "Project"
+    elements: list[dict[str, Any]] = Field(default_factory=list)
+    material_totals: dict[str, float] = Field(default_factory=dict)
+
+
+class EmergingInput(BaseModel):
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class ProjectMetaInput(BaseModel):
+    name: str = ""
+    ifc_path: str = ""
+    country_code: str = "ZM"
+    last_opened: str = ""
 
 
 class AiDesignInput(BaseModel):
@@ -410,6 +570,111 @@ class SyncReceiveInput(BaseModel):
     data: dict[str, Any] = Field(default_factory=dict)
 
 
+class WashDemandInput(BaseModel):
+    population: int = 500
+    lpcd: float = 50
+    context: str = "urban_low"
+    peak_factor: float = 2.5
+    storage_days: float = 1.0
+    leakage_pct: float = 15
+    country: str = "Zambia"
+
+
+class BoreholeInput(BaseModel):
+    aquifer_yield_lps: float = 2.5
+    static_level_m: float = 25
+    drawdown_m: float = 10
+    total_depth_m: float = 45
+    daily_demand_m3: float = 50
+    pumping_hours: float = 8
+    delivery_head_m: float = 15
+    country: str = "Zambia"
+
+
+class SewerageInput(BaseModel):
+    population: int = 500
+    lpcd: float = 80
+    return_factor: float = 0.8
+    peak_factor: float = 2.5
+    system_type: str = "septic"
+    country: str = "Zambia"
+
+
+class SolarPvInput(BaseModel):
+    daily_load_kwh: float = 15
+    country: str = "Zambia"
+    ghi_kwh_m2_day: float = 0
+    panel_watt: float = 550
+    system_losses_pct: float = 20
+    latitude: float = -15.4
+
+
+class BatteryInput(BaseModel):
+    daily_load_kwh: float = 15
+    autonomy_days: float = 2
+    depth_of_discharge_pct: float = 80
+    system_voltage: float = 48
+    battery_type: str = "lithium"
+    country: str = "Zambia"
+
+
+class TwinAssetInput(BaseModel):
+    asset_name: str
+    asset_type: str = "structure"
+    project_id: str = ""
+    location: str = ""
+
+
+class SensorReadingInput(BaseModel):
+    asset_id: str
+    sensor_type: str = "generic"
+    value: float
+    unit: str = ""
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class CollabJoinInput(BaseModel):
+    user_id: str
+    user_name: str = "Engineer"
+
+
+class WindInputs(BaseModel):
+    basic_wind_speed: float = Field(45, gt=0, description="Basic wind speed m/s")
+    building_height: float = Field(12, gt=0, description="Mean roof height m")
+    building_width: float = Field(20, gt=0, description="Building width m")
+    building_length: float = Field(30, gt=0, description="Building length m")
+    exposure_category: str = Field("B", pattern="^(A|B|C|D|0|I|II|III|IV)$")
+
+
+class CarbonInputs(BaseModel):
+    materials: dict[str, float] = Field(default_factory=dict)
+    transport: dict[str, list[float]] = Field(default_factory=dict)
+    energy: dict[str, float] = Field(default_factory=dict)
+
+
+class CarbonCreditInputs(BaseModel):
+    baseline_emissions_tCO2e: float = Field(100, ge=0)
+    project_emissions_tCO2e: float = Field(60, ge=0)
+    sequestration_tCO2e: float = Field(0, ge=0)
+    project_life_years: int = Field(20, ge=1)
+    price_per_vcu_usd: float = Field(15, ge=0)
+    methodology: str = "VCS VM0045"
+
+
+class FloodInputs(BaseModel):
+    grid_size: int = Field(64, ge=16, le=256)
+    cell_size_m: float = Field(30, gt=0)
+    rainfall_mm: float = Field(80, gt=0)
+    catchment_area_km2: float = Field(2.5, gt=0)
+    return_period_years: int = Field(100, ge=2)
+
+
+class IfcExportInput(BaseModel):
+    name: str = "INFRAFRICA Export"
+    site_name: str = "Site"
+    elements: list[dict[str, Any]] = Field(default_factory=list)
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -453,6 +718,46 @@ def calculate_foundation_endpoint(inputs: FoundationInputs):
 def calculate_loads_endpoint(inputs: LoadInputs):
     try:
         return calculate_loads(inputs.model_dump())
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/calculate/wind")
+def calculate_wind_endpoint(inputs: WindInputs):
+    try:
+        return calculate_wind_loads(inputs.model_dump())
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/calculate/carbon")
+def calculate_carbon_endpoint(inputs: CarbonInputs):
+    try:
+        return calculate_construction_carbon(inputs.model_dump())
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/calculate/carbon/credits")
+def calculate_carbon_credits_endpoint(inputs: CarbonCreditInputs):
+    try:
+        return calculate_carbon_credits(inputs.model_dump())
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/simulate/flood")
+def simulate_flood_endpoint(inputs: FloodInputs):
+    try:
+        return simulate_flood_inundation(inputs.model_dump())
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/bim/export-ifc")
+def bim_export_ifc(inputs: IfcExportInput):
+    try:
+        return export_ifc_from_elements(inputs.model_dump())
     except (ValueError, KeyError) as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -526,6 +831,30 @@ def geo_site_analysis(inputs: GeoSiteInput):
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@app.post("/geo/geocode")
+def geo_geocode(inputs: GeoGeocodeInput):
+    try:
+        return {"results": geocode_search(inputs.query)}
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/geo/reverse-geocode")
+def geo_reverse_geocode(inputs: GeoReverseInput):
+    try:
+        return reverse_geocode(inputs.latitude, inputs.longitude)
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/geo/site-budget")
+def geo_site_budget(inputs: GeoSiteBudgetInput):
+    try:
+        return compute_site_budget(inputs.model_dump())
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @app.post("/geo/terrain")
 def geo_terrain(inputs: GeoTerrainInput):
     try:
@@ -580,6 +909,131 @@ def geo_cache_clear():
 def boq_extract_from_bim(inputs: BimExtractInput):
     try:
         return extract_from_bim(inputs.model_dump())
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/bim/status")
+def bim_geometry_status():
+    ext = extensions_status()
+    return {
+        "ifcopenshell": HAS_IFCOPENSHELL,
+        "geometry_extensions": ext,
+        "engines": {
+            "client": "web-ifc",
+            "server": "ifcopenshell" if HAS_IFCOPENSHELL else "unavailable",
+            "2d_kernel": ext["engines"]["2d_regions"],
+            "3d_kernel": ext["engines"]["3d_mesh"],
+        },
+    }
+
+
+@app.get("/geometry/extensions/status")
+def geometry_extensions_status():
+    return extensions_status()
+
+
+@app.post("/geometry/polygon/area")
+def geometry_polygon_area(inputs: PolygonVerticesInput):
+    verts = [(v[0], v[1]) for v in inputs.vertices if len(v) >= 2]
+    return polygon_area(verts)
+
+
+@app.post("/geometry/polygon/contains")
+def geometry_polygon_contains(inputs: PolygonVerticesInput):
+    if not inputs.point or len(inputs.point) < 2:
+        raise HTTPException(status_code=400, detail="point [x,y] required")
+    verts = [(v[0], v[1]) for v in inputs.vertices if len(v) >= 2]
+    return polygon_contains(verts, (inputs.point[0], inputs.point[1]))
+
+
+@app.post("/geometry/polyline/length")
+def geometry_polyline_length(inputs: PolylineLengthInput):
+    return {"length": polyline_length(inputs.segments)}
+
+
+@app.post("/geometry/transform/point")
+def geometry_transform_point(inputs: TransformPointInput):
+    if len(inputs.matrix) != 16 or len(inputs.point) < 3:
+        raise HTTPException(status_code=400, detail="matrix(16) and point[3] required")
+    pt = transform_point(inputs.matrix, tuple(inputs.point[:3]))
+    return {"point": list(pt), "flattened": list(flatten_xy(pt))}
+
+
+@app.post("/geometry/region/boolean")
+def geometry_region_boolean(inputs: RegionBooleanInput):
+    polys_a = [[(p[0], p[1]) for p in poly] for poly in inputs.polygons_a]
+    polys_b = [[(p[0], p[1]) for p in poly] for poly in inputs.polygons_b]
+    op = inputs.operation if inputs.operation in ("union", "difference", "intersection") else "intersection"
+    result = region_boolean(polys_a, polys_b, op)
+    if result.get("status") == "error":
+        raise HTTPException(status_code=400, detail=result.get("error", "Region boolean failed"))
+    return result
+
+
+@app.post("/geometry/autocad/export-dwg")
+def geometry_autocad_export(inputs: DwgExportInput):
+    return export_dwg_geometry(inputs.path)
+
+
+@app.get("/geometry/autocad/status")
+def geometry_autocad_status():
+    return autocad_bridge_status()
+
+
+@app.post("/bim/parse-ifc-path")
+def bim_parse_ifc_path(inputs: BimParsePathInput):
+    try:
+        result = parse_ifc_file(inputs.path)
+        if result.get("status") == "error":
+            raise HTTPException(status_code=503, detail=result.get("error", "Parse failed"))
+        return result
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/bim/parse-ifc-upload")
+async def bim_parse_ifc_upload(file: UploadFile = File(...)):
+    try:
+        data = await file.read()
+        result = parse_ifc_bytes(data)
+        if result.get("status") == "error":
+            raise HTTPException(status_code=503, detail=result.get("error", "Parse failed"))
+        return result
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/bim/geometry/boolean")
+def bim_geometry_boolean(inputs: GeometryBooleanInput):
+    try:
+        result = boolean_operation(inputs.model_dump())
+        if result.get("status") == "error":
+            raise HTTPException(status_code=400, detail=result.get("error", "Boolean failed"))
+        return result
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/bim/plan-takeoff")
+def bim_plan_takeoff(inputs: BimParsePathInput):
+    try:
+        result = extract_plan_takeoff(inputs.path)
+        if result.get("status") == "error":
+            raise HTTPException(status_code=503, detail=result.get("error", "Plan takeoff failed"))
+        return result
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/bim/geometry/intersection-volume")
+def bim_geometry_intersection(inputs: GeometryBooleanInput):
+    try:
+        return mesh_intersection_volume(inputs.model_dump())
     except (ValueError, KeyError) as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -802,6 +1256,258 @@ def sync_receive(inputs: SyncReceiveInput):
 @app.get("/sync/items")
 def sync_items():
     return {"items": list_sync_items()}
+
+
+# --- TIER 2: WASH + Energy + Collaboration ---
+
+@app.post("/calculate/wash/demand")
+def wash_demand(inputs: WashDemandInput):
+    try:
+        return calculate_water_demand(inputs.model_dump())
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/calculate/wash/borehole")
+def wash_borehole(inputs: BoreholeInput):
+    try:
+        return calculate_borehole(inputs.model_dump())
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/calculate/wash/sewerage")
+def wash_sewerage(inputs: SewerageInput):
+    try:
+        return calculate_sewerage(inputs.model_dump())
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/calculate/energy/solar")
+def energy_solar(inputs: SolarPvInput):
+    try:
+        return calculate_solar_pv(inputs.model_dump())
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/calculate/energy/battery")
+def energy_battery(inputs: BatteryInput):
+    try:
+        return calculate_battery(inputs.model_dump())
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/collaboration/rooms/{project_id}")
+def collab_room_status(project_id: str):
+    return room_status(project_id)
+
+
+@app.post("/collaboration/rooms/{project_id}/join")
+def collab_join(project_id: str, inputs: CollabJoinInput):
+    return join_room(project_id, inputs.user_id, inputs.user_name)
+
+
+@app.post("/collaboration/rooms/{project_id}/leave")
+def collab_leave(project_id: str, inputs: CollabJoinInput):
+    return leave_room(project_id, inputs.user_id)
+
+
+@app.websocket("/collaboration/ws/{project_id}/{user_id}")
+async def collab_websocket(websocket: WebSocket, project_id: str, user_id: str):
+    await websocket.accept()
+    register(project_id, user_id, websocket)
+    try:
+        while True:
+            raw = await websocket.receive_text()
+            response = handle_message(project_id, user_id, raw)
+            if response:
+                await websocket.send_json(response)
+                if response.get("type") == "event":
+                    await broadcast(project_id, response, exclude_user=user_id)
+                elif response.get("type") == "room_state":
+                    await broadcast(project_id, response, exclude_user=user_id)
+    except WebSocketDisconnect:
+        leave_room(project_id, user_id)
+        unregister(project_id, user_id)
+        await broadcast(project_id, {"type": "room_state", "data": room_status(project_id)})
+
+
+# --- TIER 3: Digital Twin + Predictive Maintenance ---
+
+@app.post("/intelligence/twin/assets")
+def twin_register(inputs: TwinAssetInput):
+    try:
+        return register_asset(inputs.model_dump())
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/intelligence/twin/assets")
+def twin_list_assets(project_id: str = ""):
+    assets = list_assets(project_id)
+    if not assets:
+        assets = seed_demo_assets()
+    return {"assets": assets}
+
+
+@app.get("/intelligence/twin/assets/{asset_id}")
+def twin_get_asset(asset_id: str):
+    asset = get_asset(asset_id)
+    if not asset:
+        raise HTTPException(status_code=404, detail="Asset not found")
+    return asset
+
+
+@app.post("/intelligence/twin/ingest")
+def twin_ingest(inputs: SensorReadingInput):
+    try:
+        return ingest_reading(inputs.model_dump())
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/intelligence/predictive/{asset_id}")
+def predictive_asset(asset_id: str):
+    result = analyse_asset(asset_id)
+    if result.get("error"):
+        raise HTTPException(status_code=404, detail=result["error"])
+    return result
+
+
+@app.get("/intelligence/predictive")
+def predictive_portfolio(project_id: str = ""):
+    return analyse_portfolio(project_id)
+
+
+@app.post("/intelligence/twin/seed")
+def twin_seed():
+    return {"assets": seed_demo_assets()}
+
+
+# --- 4D/5D Scheduling ---
+@app.post("/schedule/build-from-bim")
+def schedule_build_from_bim(inputs: ScheduleBuildInput):
+    try:
+        return build_schedule_from_bim(inputs.model_dump())
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# --- Generative design optimizer ---
+@app.post("/optimize/structural")
+def optimize_structural_endpoint(inputs: OptimizerInput):
+    try:
+        return optimize_structural_layout(inputs.model_dump())
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/optimize/solar")
+def optimize_solar_endpoint(inputs: SolarOptimizerInput):
+    try:
+        return optimize_solar_orientation(inputs.model_dump())
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# --- Desktop offline sync ---
+@app.post("/sync/batch")
+def sync_batch_endpoint(inputs: SyncBatchInput):
+    try:
+        return process_sync_batch(inputs.model_dump())
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# --- Offline cache ---
+@app.get("/cache/calc/status")
+def calc_cache_status_endpoint():
+    return calc_cache_status()
+
+
+@app.post("/cache/calc/clear")
+def calc_cache_clear_endpoint():
+    return clear_calc_cache()
+
+
+@app.get("/cache/project")
+def project_meta_load():
+    return load_project_meta()
+
+
+@app.post("/cache/project")
+def project_meta_save(inputs: ProjectMetaInput):
+    return save_project_meta(inputs.model_dump())
+
+
+# --- ESG documents ---
+@app.post("/documents/esg-report")
+def documents_esg_report(inputs: EsgReportInput):
+    try:
+        return generate_esg_report(inputs.model_dump())
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# --- Emerging tech platform ---
+@app.post("/emerging/blockchain/anchor")
+def emerging_blockchain(inputs: EmergingInput):
+    return blockchain_anchor(inputs.payload)
+
+
+@app.get("/emerging/marketplace")
+def emerging_marketplace(country_code: str = "ZM"):
+    return marketplace_listings({"country_code": country_code})
+
+
+@app.post("/emerging/disaster/plan")
+def emerging_disaster(inputs: EmergingInput):
+    return disaster_response_plan(inputs.payload)
+
+
+@app.post("/emerging/satellite/analyse")
+def emerging_satellite(inputs: EmergingInput):
+    return satellite_analysis(inputs.payload)
+
+
+@app.post("/emerging/drone/process")
+def emerging_drone(inputs: EmergingInput):
+    return drone_photogrammetry(inputs.payload)
+
+
+@app.post("/emerging/voice/command")
+def emerging_voice(inputs: EmergingInput):
+    return voice_command(inputs.payload)
+
+
+@app.post("/emerging/cv/safety")
+def emerging_cv_safety(inputs: EmergingInput):
+    return cv_safety_scan(inputs.payload)
+
+
+@app.post("/emerging/ar/scene")
+def emerging_ar(inputs: EmergingInput):
+    return ar_mobile_scene(inputs.payload)
+
+
+# --- Physics simulations ---
+@app.post("/simulate/thermal")
+def simulate_thermal_endpoint(inputs: EmergingInput):
+    try:
+        return simulate_thermal(inputs.payload)
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/simulate/seismic")
+def simulate_seismic_endpoint(inputs: SeismicAnalysisInput):
+    try:
+        return simulate_seismic_response(inputs.model_dump())
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 import type { BoQElement, CompiledBoQ } from '../types/boq';
 
-const API_BASE = 'http://localhost:8000';
+import { API_BASE } from './apiConfig';
 
 async function post<T>(endpoint: string, body: unknown): Promise<T> {
   const response = await fetch(`${API_BASE}${endpoint}`, {
@@ -64,6 +64,7 @@ export interface GeoSitePayload {
   longitude: number;
   country_code: string;
   project_name: string;
+  platform_area_m2?: number;
   use_cache?: boolean;
   offline_only?: boolean;
 }
@@ -77,6 +78,24 @@ export const geoAPI = {
       '/geo/site-report',
       payload
     ),
+
+  geocode: (query: string) =>
+    post<{ results: import('../types/geo').GeocodeResult[] }>('/geo/geocode', { query }),
+
+  reverseGeocode: (latitude: number, longitude: number) =>
+    post<import('../types/geo').GeocodeResult>('/geo/reverse-geocode', { latitude, longitude }),
+
+  siteBudget: (payload: {
+    latitude: number;
+    longitude: number;
+    country_code: string;
+    project_name: string;
+    project_type: string;
+    gfa_m2: number;
+    platform_area_m2?: number;
+    use_cache?: boolean;
+    offline_only?: boolean;
+  }) => post<import('../types/geo').SiteBudget>('/geo/site-budget', payload),
 
   cacheStatus: () => fetch(`${API_BASE}/geo/cache/status`).then((r) => r.json()),
 
@@ -142,4 +161,38 @@ export const documentsAPI = {
 
   eiaScreening: (payload: Record<string, unknown>) =>
     post<Record<string, unknown>>('/documents/eia-screening', payload),
+
+  esgReport: (payload: Record<string, unknown>) =>
+    post<Record<string, unknown>>('/documents/esg-report', payload),
+};
+
+export const tier2API = {
+  washDemand: (payload: Record<string, unknown>) =>
+    post<Record<string, unknown>>('/calculate/wash/demand', payload),
+  washBorehole: (payload: Record<string, unknown>) =>
+    post<Record<string, unknown>>('/calculate/wash/borehole', payload),
+  washSewerage: (payload: Record<string, unknown>) =>
+    post<Record<string, unknown>>('/calculate/wash/sewerage', payload),
+  solarPv: (payload: Record<string, unknown>) =>
+    post<Record<string, unknown>>('/calculate/energy/solar', payload),
+  battery: (payload: Record<string, unknown>) =>
+    post<Record<string, unknown>>('/calculate/energy/battery', payload),
+  collabJoin: (projectId: string, payload: Record<string, unknown>) =>
+    post<Record<string, unknown>>(`/collaboration/rooms/${projectId}/join`, payload),
+  collabStatus: (projectId: string) =>
+    fetch(`${API_BASE}/collaboration/rooms/${projectId}`).then((r) => r.json()),
+};
+
+export const tier3API = {
+  listAssets: (projectId?: string) =>
+    fetch(`${API_BASE}/intelligence/twin/assets${projectId ? `?project_id=${projectId}` : ''}`).then((r) => r.json()),
+  getAsset: (assetId: string) =>
+    fetch(`${API_BASE}/intelligence/twin/assets/${assetId}`).then((r) => r.json()),
+  ingestReading: (payload: Record<string, unknown>) =>
+    post<Record<string, unknown>>('/intelligence/twin/ingest', payload),
+  analyseAsset: (assetId: string) =>
+    fetch(`${API_BASE}/intelligence/predictive/${assetId}`).then((r) => r.json()),
+  analysePortfolio: (projectId?: string) =>
+    fetch(`${API_BASE}/intelligence/predictive${projectId ? `?project_id=${projectId}` : ''}`).then((r) => r.json()),
+  seedTwin: () => post<{ assets: Record<string, unknown>[] }>('/intelligence/twin/seed', {}),
 };

@@ -10,3 +10,5 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+python/cache/last_project.json
+python/geo/cache/

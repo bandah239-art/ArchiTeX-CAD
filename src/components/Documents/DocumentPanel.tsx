@@ -4,6 +4,7 @@ const TABS = [
   { id: 'tender' as const, label: 'Tender' },
   { id: 'calculation' as const, label: 'Calc Report' },
   { id: 'eia' as const, label: 'EIA' },
+  { id: 'esg' as const, label: 'ESG / Carbon' },
   { id: 'ipc' as const, label: 'IPC' },
 ];
 
@@ -46,6 +47,12 @@ export function DocumentPanel() {
             <option value="water_wash">Water/WASH</option>
             <option value="industrial">Industrial</option>
           </select>
+        )}
+
+        {store.activeTab === 'esg' && (
+          <div className="text-xs text-gray-400 p-2 bg-infra-darker border border-emerald-500/30 rounded">
+            Generates embodied carbon report from current BoQ material quantities. Import BIM or compile BoQ first for best results.
+          </div>
         )}
 
         <button

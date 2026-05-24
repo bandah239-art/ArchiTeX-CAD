@@ -41,13 +41,13 @@ def run_site_analysis(payload: dict[str, Any]) -> dict[str, Any]:
         if cached:
             cached["from_cache"] = True
             return cached
-        payload_offline = {**payload, "latitude": lat, "longitude": lon}
+        payload_offline = {**payload, "latitude": lat, "longitude": lon, "platform_area_m2": payload.get("platform_area_m2", 400)}
         terrain = analyse_terrain(payload_offline)
         soil = analyse_soil({**payload_offline, "elevation_m": terrain["elevation_m"]})
         climate = analyse_climate(payload_offline)
         seismic = analyse_seismic({**payload_offline, "country_code": country})
     else:
-        terrain = analyse_terrain({**payload, "latitude": lat, "longitude": lon})
+        terrain = analyse_terrain({**payload, "latitude": lat, "longitude": lon, "platform_area_m2": payload.get("platform_area_m2", 400)})
         soil = analyse_soil({**payload, "latitude": lat, "longitude": lon, "elevation_m": terrain["elevation_m"]})
         climate = analyse_climate({**payload, "latitude": lat, "longitude": lon})
         seismic = analyse_seismic({**payload, "latitude": lat, "longitude": lon})

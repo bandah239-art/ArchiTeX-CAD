@@ -5,7 +5,7 @@ export interface BIMViewerProps {
   onElementSelected: (element: IFCElement) => void;
   onModelLoaded: (stats: ModelStats) => void;
   activeStorey: number | null;
-  visibleLayers: string[];
+  hiddenLayers: string[];
 }
 
 export interface ViewerToolbarAction {

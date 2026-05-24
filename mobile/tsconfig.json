@@ -1,11 +1,11 @@
 {
+  "extends": "../node_modules/expo/tsconfig.base.json",
   "compilerOptions": {
     "strict": true,
-    "jsx": "react-native",
-    "moduleResolution": "node",
-    "allowSyntheticDefaultImports": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true
+    "baseUrl": ".",
+    "paths": {
+      "@infraafrica/shared": ["../packages/shared/src/index.ts"]
+    }
   },
-  "extends": "expo/tsconfig.base"
+  "include": ["**/*.ts", "**/*.tsx"]
 }

@@ -32,8 +32,8 @@ export function ElementInspector({ element }: ElementInspectorProps) {
           {element.length != null && <Row label="Length" value={`${element.length} m`} />}
           {element.width != null && <Row label="Width" value={`${element.width} m`} />}
           {element.height != null && <Row label="Height" value={`${element.height} m`} />}
-          {element.volume != null && <Row label="Volume" value={`${element.volume} m³`} />}
-          {element.area != null && <Row label="Area" value={`${element.area} m²`} />}
+          {element.volume != null && <Row label="Volume" value={`${element.volume.toFixed(3)} m³`} />}
+          {element.area != null && <Row label="Area" value={`${element.area.toFixed(3)} m²`} />}
           {element.weight != null && <Row label="Weight (est.)" value={`${element.weight} kg`} />}
         </dl>
       </section>

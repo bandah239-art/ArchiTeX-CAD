@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { BoQElement, CompiledBoQ } from '../types/boq';
 import { boqAPI } from '../services/boqAPI';
+import { API_BASE } from '../services/apiConfig';
 
 const IFC_CALC_MAP: Record<string, BoQElement['calculation_type']> = {
   IfcFooting: 'foundation',
@@ -79,7 +80,7 @@ function toCalcPayload(el: BoQElement): Record<string, unknown> {
 
 async function fetchCalculation(el: BoQElement): Promise<Record<string, unknown>> {
   const endpoint = CALC_ENDPOINTS[el.calculation_type];
-  const res = await fetch(`http://localhost:8000${endpoint}`, {
+  const res = await fetch(`${API_BASE}${endpoint}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(toCalcPayload(el)),

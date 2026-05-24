@@ -1,0 +1,79 @@
+{
+  "app": { "name": "INFRAFRICA", "tagline": "African Infrastructure Engineering Platform" },
+  "sidebar": {
+    "viewer": "3D Viewer",
+    "calculator": "Calculator",
+    "boq": "Bill of Quantities",
+    "geo": "Geo Intelligence",
+    "ai": "AI Design",
+    "realestate": "Real Estate",
+    "government": "Government",
+    "documents": "Documents",
+    "wash": "WASH",
+    "energy": "Solar/Energy",
+    "intelligence": "Digital Twin",
+    "carbon": "Carbon/ESG",
+    "schedule": "4D Schedule",
+    "optimizer": "Generative Design",
+    "seismic": "Seismic Analysis",
+    "emerging": "Emerging Tech"
+  },
+  "topbar": {
+    "openIfc": "Open IFC",
+    "save": "Save",
+    "exportIfc": "Export IFC",
+    "inspector": "Inspector",
+    "calculator": "Calculator",
+    "dashboard": "Dashboard"
+  },
+  "collab": {
+    "live": "Live",
+    "offline": "Offline",
+    "users": "users online",
+    "connect": "Join session"
+  },
+  "schedule": {
+    "title": "4D / 5D Construction Schedule",
+    "build": "Build from BIM",
+    "totalCost": "Total cost",
+    "weeks": "weeks"
+  },
+  "geo": {
+    "title": "African Geo Intelligence",
+    "subtitle": "Pick a site on the map — geo analysis and budget follow automatically",
+    "siteLocation": "Site Location",
+    "runAnalysis": "Run Site Analysis",
+    "searchPlaceholder": "Search address or place…",
+    "search": "Search",
+    "country": "Country",
+    "projectType": "Project type",
+    "gfa": "GFA (m²)",
+    "plotArea": "Plot area (m²)",
+    "autoAnalyse": "Auto-analyse & budget when pin moves",
+    "offlineMode": "Offline / Field Mode",
+    "offlineOnly": "Offline only (cached geo)",
+    "useCache": "Cache results for field use",
+    "analysing": "Analysing site & budget…",
+    "locateAnalyseBudget": "Locate · Analyse · Budget",
+    "siteBudget": "Site-adjusted budget (USD)",
+    "applyToAi": "Apply to AI Design",
+    "applyToBoq": "Apply to BoQ",
+    "designParams": "Design parameters",
+    "exportReport": "Export Site Report",
+    "pushCalc": "Push to Calculators",
+    "floodSim": "Flood simulation",
+    "runFlood": "Run flood inundation"
+  },
+  "ai": {
+    "generate": "Generate Design",
+    "pushCalcBoq": "Push to Calc + BoQ",
+    "pushCalc": "Push to Calculators",
+    "budgetHint": "Use Geo panel → Apply to AI Design for site-adjusted budget"
+  },
+  "status": {
+    "serverOnline": "Python Server Online",
+    "serverOffline": "Python Server Offline — cached mode",
+    "offlineCache": "Offline cache active"
+  },
+  "lang": { "en": "English", "fr": "Français" }
+}

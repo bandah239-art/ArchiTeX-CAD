@@ -1,6 +1,6 @@
 import type { IFCElement } from '../types/ifc';
 
-/** Representative residential BIM elements when viewer geometry is unavailable. */
+/** Representative residential BIM elements when no geometry is available. */
 export function sampleBimElements(): IFCElement[] {
   return [
     { id: '1', globalId: 'W-001', type: 'IfcWall', name: 'External Wall North', length: 12, width: 0.23, height: 2.8 },
@@ -11,6 +11,64 @@ export function sampleBimElements(): IFCElement[] {
     { id: '6', globalId: 'B-001', type: 'IfcBeam', name: 'Beam B1', length: 6, width: 0.3, height: 0.5 },
     { id: '7', globalId: 'R-001', type: 'IfcRoof', name: 'Main Roof', length: 12, width: 10, area: 120 },
   ];
+}
+
+export function designBriefToBimPayload(brief: Record<string, unknown>): Record<string, unknown>[] {
+  const gfa = Number(brief.gross_floor_area ?? 100);
+  const spaces = (brief.spatial_programme as { space: string; area_m2: number }[]) ?? [];
+  const side = Math.sqrt(gfa);
+
+  const elements: Record<string, unknown>[] = spaces.map((s, i) => ({
+    id: String(i + 1),
+    globalId: `AI-S-${i + 1}`,
+    type: 'IfcSlab',
+    name: s.space,
+    area: s.area_m2,
+    length: Math.sqrt(s.area_m2),
+    width: Math.sqrt(s.area_m2),
+    height: 0.175,
+  }));
+
+  elements.push(
+    {
+      id: 'w1',
+      globalId: 'AI-W-N',
+      type: 'IfcWall',
+      name: 'External wall north',
+      length: side,
+      width: 0.23,
+      height: 2.8,
+    },
+    {
+      id: 'w2',
+      globalId: 'AI-W-S',
+      type: 'IfcWall',
+      name: 'External wall south',
+      length: side,
+      width: 0.23,
+      height: 2.8,
+    },
+    {
+      id: 'f1',
+      globalId: 'AI-F-1',
+      type: 'IfcFooting',
+      name: 'Pad footing',
+      length: 2.4,
+      width: 2.4,
+      height: 0.45,
+    },
+    {
+      id: 'r1',
+      globalId: 'AI-R-1',
+      type: 'IfcRoof',
+      name: 'Main roof',
+      area: gfa * 1.1,
+      length: side,
+      width: side,
+    }
+  );
+
+  return elements;
 }
 
 export function toBimPayload(elements: IFCElement[]): Record<string, unknown>[] {
@@ -29,14 +87,17 @@ export function toBimPayload(elements: IFCElement[]): Record<string, unknown>[] 
 }
 
 export function elementsFromViewer(
-  loadedModel: { elementCount: number } | null,
+  parsedElements: IFCElement[] | null,
   selectedElement: IFCElement | null
 ): IFCElement[] {
-  if (selectedElement?.type?.startsWith('Ifc')) {
+  if (selectedElement && (selectedElement.volume || selectedElement.area || selectedElement.length)) {
     return [selectedElement];
   }
-  if (loadedModel && loadedModel.elementCount > 0) {
-    return sampleBimElements();
+  if (parsedElements?.length) {
+    return parsedElements.filter((e) => e.volume || e.area || e.length);
+  }
+  if (selectedElement?.type?.startsWith('Ifc')) {
+    return [selectedElement];
   }
   return sampleBimElements();
 }

@@ -5,6 +5,19 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import http from 'http';
 import { createMenu } from './menu.js';
+import {
+  recordChange,
+  getSyncStatus,
+  getUnsyncedCount,
+  syncToServer,
+  saveProjectLocal,
+  loadProjectsLocal,
+  saveCalculationLocal,
+  loadCalculationsLocal,
+  closeOfflineDb,
+} from './offline-sync.js';
+
+const API_BASE = process.env.VITE_API_BASE ?? 'http://127.0.0.1:8000';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -73,6 +86,44 @@ function waitForServer(port, maxAttempts = 30, interval = 1000) {
     };
 
     check();
+  });
+}
+
+function getPythonPipArgs() {
+  if (process.platform === 'win32') {
+    return { cmd: 'py', args: ['-3', '-m', 'pip', 'install', '-r', 'requirements.txt'] };
+  }
+  return { cmd: 'python3', args: ['-m', 'pip', 'install', '-r', 'requirements.txt'] };
+}
+
+function ensurePythonDependencies() {
+  return new Promise((resolve) => {
+    if (!isDev) {
+      resolve();
+      return;
+    }
+
+    const pythonDir = getPythonScriptPath();
+    const { cmd, args } = getPythonPipArgs();
+    console.log('[Python] Checking dependencies...');
+
+    const proc = spawn(cmd, args, {
+      cwd: pythonDir,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      shell: process.platform === 'win32',
+    });
+
+    proc.on('close', (code) => {
+      if (code !== 0) {
+        console.warn(`[Python] Dependency install exited with code ${code}`);
+      }
+      resolve();
+    });
+
+    proc.on('error', (err) => {
+      console.warn('[Python] Dependency install failed:', err.message);
+      resolve();
+    });
   });
 }
 
@@ -208,6 +259,13 @@ ipcMain.handle('save-file-dialog', async (_, defaultName) => {
   return result.canceled ? null : result.filePath;
 });
 
+ipcMain.handle('read-ifc-file', async (_, filePath) => {
+  if (!filePath || typeof filePath !== 'string') {
+    throw new Error('Invalid IFC file path');
+  }
+  return fs.readFileSync(filePath);
+});
+
 ipcMain.handle('get-app-version', () => app.getVersion());
 
 ipcMain.handle('python-server-status', async () => {
@@ -231,6 +289,20 @@ ipcMain.handle('python-server-status', async () => {
   });
 });
 
+// Offline sync IPC
+ipcMain.handle('sync:status', () => getSyncStatus());
+ipcMain.handle('sync:unsynced-count', () => getUnsyncedCount());
+ipcMain.handle('sync:push', () => syncToServer(API_BASE));
+ipcMain.handle('sync:record-change', (_, table, recordId, operation, data) =>
+  recordChange(table, recordId, operation, data)
+);
+ipcMain.handle('offline:save-project', (_, id, data) => saveProjectLocal(id, data));
+ipcMain.handle('offline:load-projects', () => loadProjectsLocal());
+ipcMain.handle('offline:save-calculation', (_, id, projectId, type, inputs, results) =>
+  saveCalculationLocal(id, projectId, type, inputs, results)
+);
+ipcMain.handle('offline:load-calculations', (_, projectId) => loadCalculationsLocal(projectId));
+
 app.whenReady().then(async () => {
   if (isDev) {
     session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
@@ -238,14 +310,25 @@ app.whenReady().then(async () => {
         responseHeaders: {
           ...details.responseHeaders,
           'Content-Security-Policy': [
-            "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' http://localhost:* ws://localhost:*; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:;",
+            "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.openstreetmap.org;",
           ],
         },
       });
     });
   }
 
-  spawnPythonServer();
+  await ensurePythonDependencies();
+
+  if (!process.env.INFRA_PYTHON_EXTERNAL) {
+    spawnPythonServer();
+  } else {
+    const ok = await checkServerHealth(PYTHON_PORT);
+    console.log(
+      ok
+        ? `Using external Python server on port ${PYTHON_PORT}`
+        : `Warning: INFRA_PYTHON_EXTERNAL set but no server on port ${PYTHON_PORT}`
+    );
+  }
 
   try {
     await waitForServer(PYTHON_PORT);
@@ -268,6 +351,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   killPythonServer();
+  closeOfflineDb();
 });
 
 process.on('exit', () => {

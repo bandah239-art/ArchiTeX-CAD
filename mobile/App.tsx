@@ -6,6 +6,7 @@ import { ProjectsScreen } from './src/screens/ProjectsScreen';
 import { SiteReportScreen } from './src/screens/SiteReportScreen';
 import { CalculatorScreen } from './src/screens/CalculatorScreen';
 import { SyncScreen } from './src/screens/SyncScreen';
+import { ChecklistScreen } from './src/screens/ChecklistScreen';
 
 const Tab = createBottomTabNavigator();
 
@@ -26,6 +27,7 @@ export default function App() {
         <Tab.Screen name="Projects" component={ProjectsScreen} />
         <Tab.Screen name="Report" component={SiteReportScreen} />
         <Tab.Screen name="Calc" component={CalculatorScreen} />
+        <Tab.Screen name="Checklist" component={ChecklistScreen} options={{ title: 'Checklist' }} />
         <Tab.Screen name="Sync" component={SyncScreen} />
       </Tab.Navigator>
     </NavigationContainer>

@@ -1,7 +1,21 @@
 import { create } from 'zustand';
 import { documentsAPI } from '../services/boqAPI';
+import { useBoQStore } from './boqStore';
+import type { BoQElement } from '../types/boq';
 
-type DocTab = 'tender' | 'calculation' | 'eia' | 'ipc';
+type DocTab = 'tender' | 'calculation' | 'eia' | 'ipc' | 'esg';
+
+function aggregateMaterialTotals(elements: BoQElement[]): Record<string, number> {
+  const totals: Record<string, number> = {};
+  for (const el of elements) {
+    for (const item of el.items ?? []) {
+      const mid = item.material_id;
+      if (!mid) continue;
+      totals[mid] = (totals[mid] ?? 0) + Number(item.quantity ?? 0);
+    }
+  }
+  return totals;
+}
 
 interface DocumentsState {
   activeTab: DocTab;
@@ -66,6 +80,14 @@ export const useDocumentsStore = create<DocumentsState>((set, get) => ({
           country_code: s.countryCode,
           estimated_value_usd: s.estimatedValue,
         });
+      } else if (s.activeTab === 'esg') {
+        const boq = useBoQStore.getState();
+        const materialTotals = aggregateMaterialTotals(boq.elements);
+        result = await documentsAPI.esgReport({
+          project_name: s.projectName,
+          material_totals: materialTotals,
+          elements: boq.elements.map((el) => ({ items: el.items })),
+        });
       } else {
         result = { content: 'Generate IPC from Government Dashboard project detail view.' };
       }
@@ -82,7 +104,7 @@ export const useDocumentsStore = create<DocumentsState>((set, get) => ({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `infraafrica_${get().activeTab}.txt`;
+    a.download = `infraafrica_${get().activeTab}_${Date.now()}.txt`;
     a.click();
     URL.revokeObjectURL(url);
   },

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Optional AutoCAD bridge — builds only when ObjectARX/AutoCAD managed assemblies are installed.
+  Set environment variables before build:
+    ACAD_CORE=C:\Program Files\Autodesk\AutoCAD 2026\AcCoreMgd.dll
+    ACAD_DB=C:\Program Files\Autodesk\AutoCAD 2026\AcDbMgd.dll
+    ACAD_MGD=C:\Program Files\Autodesk\AutoCAD 2026\AcMgd.dll
+    ACAD_BREP=C:\Program Files\Autodesk\AutoCAD 2026\acdbmgdbrep.dll
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RootNamespace>InfraAfrica.Bridge</RootNamespace>
+    <PlatformTarget>x64</PlatformTarget>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(ACAD_CORE)' != ''">
+    <Reference Include="AcCoreMgd"><HintPath>$(ACAD_CORE)</HintPath><Private>false</Private></Reference>
+    <Reference Include="AcDbMgd"><HintPath>$(ACAD_DB)</HintPath><Private>false</Private></Reference>
+    <Reference Include="AcMgd"><HintPath>$(ACAD_MGD)</HintPath><Private>false</Private></Reference>
+    <Reference Include="AcDbMgdBrep" Condition="'$(ACAD_BREP)' != ''"><HintPath>$(ACAD_BREP)</HintPath><Private>false</Private></Reference>
+    <Reference Include="GeometryExtensions">
+      <HintPath>..\GeometryExtensionsR25\bin\Release\net8.0-windows\GeometryExtensionsR25.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+</Project>

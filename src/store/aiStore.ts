@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { aiAPI } from '../services/boqAPI';
 import { useCalculationStore } from './calculationStore';
 import { useGeoStore } from './geoStore';
+import { useBoQStore } from './boqStore';
+import { designBriefToBimPayload } from '../services/ifcBoqService';
 
 interface AiState {
   prompt: string;
@@ -11,7 +13,9 @@ interface AiState {
   designBrief: Record<string, unknown> | null;
   variants: Record<string, unknown> | null;
   isGenerating: boolean;
+  isPushing: boolean;
   error: string | null;
+  pushMessage: string | null;
   setPrompt: (v: string) => void;
   setCountryCode: (v: string) => void;
   setBudgetUsd: (v: number) => void;
@@ -19,7 +23,29 @@ interface AiState {
   generateDesign: () => Promise<void>;
   generateVariants: () => Promise<void>;
   pushToCalculators: () => Promise<void>;
+  pushToCalcAndBoq: () => Promise<void>;
   exportProposal: () => Promise<void>;
+}
+
+function applyCalculatorInputs(
+  calc: ReturnType<typeof useCalculationStore.getState>,
+  calculators: Record<string, Record<string, unknown>>
+) {
+  const foundation = calculators.foundation;
+  if (foundation) {
+    calc.setModule('foundation');
+    Object.entries(foundation).forEach(([k, v]) => calc.setInput(k, v));
+  }
+  const slab = calculators.slab;
+  if (slab) {
+    calc.setModule('slab');
+    Object.entries(slab).forEach(([k, v]) => calc.setInput(k, v));
+  }
+  const loads = calculators.loads;
+  if (loads) {
+    calc.setModule('loads');
+    Object.entries(loads).forEach(([k, v]) => calc.setInput(k, v));
+  }
 }
 
 export const useAiStore = create<AiState>((set, get) => ({
@@ -31,7 +57,9 @@ export const useAiStore = create<AiState>((set, get) => ({
   designBrief: null,
   variants: null,
   isGenerating: false,
+  isPushing: false,
   error: null,
+  pushMessage: null,
 
   setPrompt: (v) => set({ prompt: v }),
   setCountryCode: (v) => set({ countryCode: v }),
@@ -85,17 +113,54 @@ export const useAiStore = create<AiState>((set, get) => ({
   pushToCalculators: async () => {
     const { designBrief, countryCode } = get();
     if (!designBrief) return;
-    const geo = useGeoStore.getState().analysis;
-    const result = await aiAPI.pushToCalculators({
-      design_brief: designBrief,
-      geo_data: geo?.design_parameters ?? {},
-      country_code: countryCode,
-    });
-    const calc = useCalculationStore.getState();
-    const inputs = result.calculators.foundation;
-    if (inputs) {
-      calc.setModule('foundation');
-      Object.entries(inputs).forEach(([k, v]) => calc.setInput(k, v));
+    set({ isPushing: true, pushMessage: null, error: null });
+    try {
+      const geo = useGeoStore.getState().analysis;
+      const result = await aiAPI.pushToCalculators({
+        design_brief: designBrief,
+        geo_data: geo?.design_parameters ?? {},
+        country_code: countryCode,
+      });
+      const calculators = (result.calculators ?? {}) as Record<string, Record<string, unknown>>;
+      applyCalculatorInputs(useCalculationStore.getState(), calculators);
+      set({ isPushing: false, pushMessage: 'Calculator inputs updated from design brief.' });
+    } catch (err) {
+      set({
+        error: err instanceof Error ? err.message : 'Push to calculators failed',
+        isPushing: false,
+      });
+    }
+  },
+
+  pushToCalcAndBoq: async () => {
+    const { designBrief, countryCode } = get();
+    if (!designBrief) return;
+    set({ isPushing: true, pushMessage: null, error: null });
+    try {
+      const geo = useGeoStore.getState().analysis;
+      const result = await aiAPI.pushToCalculators({
+        design_brief: designBrief,
+        geo_data: geo?.design_parameters ?? {},
+        country_code: countryCode,
+      });
+      const calculators = (result.calculators ?? {}) as Record<string, Record<string, unknown>>;
+      applyCalculatorInputs(useCalculationStore.getState(), calculators);
+
+      const bimPayload = designBriefToBimPayload(designBrief);
+      const boq = useBoQStore.getState();
+      boq.setProjectName(String(designBrief.project_type ?? 'AI Design'));
+      boq.setCountryCode(countryCode);
+      await boq.importFromBim(bimPayload);
+
+      set({
+        isPushing: false,
+        pushMessage: `Pushed to foundation, slab, loads calculators and BoQ (${bimPayload.length} elements).`,
+      });
+    } catch (err) {
+      set({
+        error: err instanceof Error ? err.message : 'Push to calc + BoQ failed',
+        isPushing: false,
+      });
     }
   },
 

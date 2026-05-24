@@ -119,6 +119,15 @@ export type CalculationModule =
   | 'column'
   | 'foundation'
   | 'loads'
+  | 'wind'
   | 'road';
 
 export type RoadSubmodule = 'pavement' | 'drainage';
+
+export interface WindInputs {
+  basic_wind_speed: number;
+  building_height: number;
+  building_width: number;
+  building_length: number;
+  exposure_category: 'A' | 'B' | 'C' | 'D' | '0' | 'I' | 'II' | 'III' | 'IV';
+}

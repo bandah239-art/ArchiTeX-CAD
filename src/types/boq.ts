@@ -83,4 +83,4 @@ export interface SiteAnalysis {
   recommendations: string[];
 }
 
-export type WorkspacePanel = 'viewer' | 'calculator' | 'boq' | 'geo' | 'ai' | 'realestate' | 'government' | 'documents';
+export type WorkspacePanel = 'viewer' | 'calculator' | 'boq' | 'geo' | 'ai' | 'realestate' | 'government' | 'documents' | 'wash' | 'energy' | 'intelligence' | 'carbon' | 'schedule' | 'emerging' | 'optimizer' | 'seismic';

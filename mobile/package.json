@@ -8,6 +8,7 @@
     "ios": "expo start --ios"
   },
   "dependencies": {
+    "@infraafrica/shared": "file:../packages/shared",
     "expo": "~50.0.0",
     "expo-camera": "~14.1.0",
     "expo-file-system": "~16.0.0",

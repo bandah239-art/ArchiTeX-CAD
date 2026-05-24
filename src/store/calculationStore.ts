@@ -9,6 +9,7 @@ import type {
   LoadInputs,
   PavementInputs,
   DrainageInputs,
+  WindInputs,
   RoadSubmodule,
 } from '../types/calculations';
 import { calculationAPI } from '../services/calculationAPI';
@@ -72,6 +73,13 @@ const DEFAULT_INPUTS: Record<CalculationModule, Record<string, unknown>> = {
     load_type: 'udl',
     design_code: 'eurocode',
     structure_class: 'ordinary',
+  },
+  wind: {
+    basic_wind_speed: 45,
+    building_height: 12,
+    building_width: 20,
+    building_length: 30,
+    exposure_category: 'B',
   },
   road: {
     road_submodule: 'pavement' as RoadSubmodule,
@@ -171,6 +179,9 @@ export const useCalculationStore = create<CalculationState>((set, get) => ({
         case 'loads':
           result = await calculationAPI.calculateLoads(inputs as unknown as LoadInputs);
           break;
+        case 'wind':
+          result = await calculationAPI.calculateWind(inputs as unknown as WindInputs);
+          break;
         case 'road': {
           const submodule = (inputs.road_submodule as RoadSubmodule) ?? 'pavement';
           result =
@@ -184,6 +195,18 @@ export const useCalculationStore = create<CalculationState>((set, get) => ({
       }
 
       set({ currentResults: result, isCalculating: false });
+
+      // Persist to Electron offline SQLite when available
+      if (window.electronAPI?.offlineSaveCalculation) {
+        const projectId = 'default';
+        void window.electronAPI.offlineSaveCalculation(
+          crypto.randomUUID(),
+          projectId,
+          activeModule,
+          inputs as Record<string, unknown>,
+          result as unknown as Record<string, unknown>
+        );
+      }
     } catch (err) {
       set({
         error: getErrorMessage(err),

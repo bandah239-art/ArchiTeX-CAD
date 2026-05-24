@@ -2,7 +2,7 @@ import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
 import { StatusBar } from './StatusBar';
 import { BIMViewer } from '../BIMViewer/BIMViewer';
-import { ElementInspector } from '../BIMViewer/ElementInspector';
+import { ViewerSidePanel } from '../BIMViewer/ViewerSidePanel';
 import { CalculatorPanel } from '../Calculator/CalculatorPanel';
 import { BoQPanel } from '../BoQ/BoQPanel';
 import { GeoPanel } from '../GeoIntelligence/GeoPanel';
@@ -10,6 +10,14 @@ import { AIDesignPanel } from '../AIDesign/AIDesignPanel';
 import { RealEstatePanel } from '../RealEstate/RealEstatePanel';
 import { PortfolioDashboard } from '../Government/PortfolioDashboard';
 import { DocumentPanel } from '../Documents/DocumentPanel';
+import { WashPanel } from '../WASH/WashPanel';
+import { EnergyPanel } from '../Energy/EnergyPanel';
+import { IntelligencePanel } from '../Intelligence/IntelligencePanel';
+import { CarbonPanel } from '../Sustainability/CarbonPanel';
+import { SchedulePanel } from '../Schedule/SchedulePanel';
+import { OptimizerPanel } from '../Optimizer/OptimizerPanel';
+import { SeismicPanel } from '../Seismic/SeismicPanel';
+import { EmergingTechPanel } from '../Emerging/EmergingTechPanel';
 import { LayerPanel } from '../BIMViewer/LayerPanel';
 import { ModelTree } from '../BIMViewer/ModelTree';
 import { useViewerStore } from '../../store/viewerStore';
@@ -24,10 +32,10 @@ interface AppShellProps {
 export function AppShell({ onBackToDashboard }: AppShellProps) {
   const [activePanel, setActivePanel] = useState<WorkspacePanel>('viewer');
   const [showInspector, setShowInspector] = useState(true);
-  const { modelPath, activeStorey, visibleTypes, selectedElement } = useViewerStore();
+  const { modelPath, activeStorey, hiddenTypes, selectedElement } = useViewerStore();
   const { handleElementSelected, handleModelLoaded } = useBIMViewer();
 
-  const showSidePanel = ['calculator', 'boq', 'geo', 'ai', 'realestate', 'government', 'documents'].includes(activePanel);
+  const showSidePanel = ['calculator', 'boq', 'geo', 'ai', 'realestate', 'government', 'documents', 'wash', 'energy', 'intelligence', 'carbon', 'schedule', 'emerging', 'optimizer', 'seismic'].includes(activePanel);
 
   const renderSidePanel = () => {
     switch (activePanel) {
@@ -45,6 +53,22 @@ export function AppShell({ onBackToDashboard }: AppShellProps) {
         return <PortfolioDashboard />;
       case 'documents':
         return <DocumentPanel />;
+      case 'wash':
+        return <WashPanel />;
+      case 'energy':
+        return <EnergyPanel />;
+      case 'intelligence':
+        return <IntelligencePanel />;
+      case 'carbon':
+        return <CarbonPanel />;
+      case 'schedule':
+        return <SchedulePanel />;
+      case 'optimizer':
+        return <OptimizerPanel />;
+      case 'seismic':
+        return <SeismicPanel />;
+      case 'emerging':
+        return <EmergingTechPanel />;
       default:
         return null;
     }
@@ -70,12 +94,12 @@ export function AppShell({ onBackToDashboard }: AppShellProps) {
               onElementSelected={handleElementSelected}
               onModelLoaded={handleModelLoaded}
               activeStorey={activeStorey}
-              visibleLayers={visibleTypes}
+              hiddenLayers={hiddenTypes}
             />
           </div>
           {showInspector && (
-            <div className="w-72 flex-shrink-0 border-l border-infra-accent/30 overflow-y-auto">
-              <ElementInspector element={selectedElement} />
+            <div className="w-80 flex-shrink-0 border-l border-infra-accent/30 overflow-hidden flex flex-col">
+              <ViewerSidePanel element={selectedElement} />
             </div>
           )}
         </div>

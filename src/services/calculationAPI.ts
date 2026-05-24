@@ -6,10 +6,11 @@ import type {
   LoadInputs,
   PavementInputs,
   DrainageInputs,
+  WindInputs,
   CalculationResult,
 } from '../types/calculations';
 
-const API_BASE = 'http://localhost:8000';
+import { API_BASE } from './apiConfig';
 
 type FastAPIValidationError = {
   loc?: (string | number)[];
@@ -85,6 +86,18 @@ export const calculationAPI = {
 
   calculateDrainage: (inputs: DrainageInputs): Promise<CalculationResult> =>
     post('/calculate/road/drainage', inputs),
+
+  calculateWind: (inputs: WindInputs): Promise<CalculationResult> =>
+    post('/calculate/wind', inputs),
+
+  calculateCarbon: (inputs: Record<string, unknown>): Promise<CalculationResult> =>
+    post('/calculate/carbon', inputs),
+
+  calculateCarbonCredits: (inputs: Record<string, unknown>): Promise<CalculationResult> =>
+    post('/calculate/carbon/credits', inputs),
+
+  simulateFlood: (inputs: Record<string, unknown>): Promise<CalculationResult> =>
+    post('/simulate/flood', inputs),
 
   checkHealth: async (): Promise<boolean> => {
     try {

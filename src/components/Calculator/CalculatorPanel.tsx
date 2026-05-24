@@ -5,6 +5,7 @@ import { ColumnCalculator } from './modules/ColumnCalculator';
 import { FoundationCalculator } from './modules/FoundationCalculator';
 import { LoadCalculator } from './modules/LoadCalculator';
 import { RoadCalculator } from './modules/RoadCalculator';
+import { WindCalculator } from './modules/WindCalculator';
 import { ResultsDisplay } from './ResultsDisplay';
 import { ReportExporter } from './ReportExporter';
 import type { CalculationModule } from '../../types/calculations';
@@ -15,6 +16,7 @@ const MODULES: { id: CalculationModule; label: string }[] = [
   { id: 'column', label: 'Column' },
   { id: 'foundation', label: 'Foundation' },
   { id: 'loads', label: 'Loads' },
+  { id: 'wind', label: 'Wind' },
   { id: 'road', label: 'Road' },
 ];
 
@@ -47,6 +49,8 @@ export function CalculatorPanel() {
         return <FoundationCalculator {...props} />;
       case 'loads':
         return <LoadCalculator {...props} />;
+      case 'wind':
+        return <WindCalculator {...props} />;
       case 'road':
         return <RoadCalculator {...props} />;
       default:

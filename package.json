@@ -4,20 +4,31 @@
   "description": "INFRAFRICA — Calculation Engine + BIM Viewer",
   "main": "electron/main.js",
   "type": "module",
+  "workspaces": [
+    "packages/*",
+    "mobile"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 http://localhost:5174 && electron .\"",
+    "electron:dev": "npm run python:install && concurrently -k \"vite\" \"npm run python:dev\" \"wait-on http://localhost:5173 http-get://127.0.0.1:8000/health && node scripts/start-electron.mjs\"",
     "electron:build": "npm run build && electron-builder",
-    "python:install": "pip install -r python/requirements.txt",
-    "python:dev": "cd python && uvicorn main:app --reload --port 8000"
+    "python:install": "py -3 -m pip install -r python/requirements.txt",
+    "python:dev": "node scripts/start-python.mjs",
+    "python:status": "node -e \"fetch('http://127.0.0.1:8000/health').then(r=>r.json()).then(d=>console.log('Python server OK:',d)).catch(()=>console.log('Python server offline'))\""
   },
   "dependencies": {
+    "@infraafrica/shared": "file:packages/shared",
+    "@types/leaflet": "^1.9.21",
     "@xeokit/xeokit-sdk": "^2.6.0",
+    "better-sqlite3": "^11.0.0",
+    "i18next": "^26.2.0",
+    "leaflet": "^1.9.4",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "web-ifc": "^0.0.51",
+    "react-i18next": "^17.0.8",
+    "web-ifc": "^0.0.68",
     "zustand": "^4.4.0"
   },
   "devDependencies": {
