@@ -14,6 +14,7 @@ const PANELS: { id: WorkspacePanel; icon: string; key: string }[] = [
   { id: 'optimizer', icon: '🧬', key: 'sidebar.optimizer' },
   { id: 'seismic', icon: '🌋', key: 'sidebar.seismic' },
   { id: 'geo', icon: '🌍', key: 'sidebar.geo' },
+  { id: 'vision', icon: '👁️', key: 'sidebar.vision' },
   { id: 'ai', icon: '🤖', key: 'sidebar.ai' },
   { id: 'realestate', icon: '🏠', key: 'sidebar.realestate' },
   { id: 'government', icon: '🏛️', key: 'sidebar.government' },

@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useViewerStore } from '../../store/viewerStore';
 import { ElementInspector } from './ElementInspector';
 import { AssetsPanel } from './AssetsPanel';
 import { QuantitiesPanel } from './QuantitiesPanel';
 import { GeometryKernelPanel } from './GeometryKernelPanel';
+import { BoxSelectPanel } from './BoxSelectPanel';
 import type { IFCElement } from '../../types/ifc';
 
 type Tab = 'inspector' | 'assets' | 'quantities' | 'geometry';
@@ -12,7 +14,12 @@ interface ViewerSidePanelProps {
 }
 
 export function ViewerSidePanel({ element }: ViewerSidePanelProps) {
+  const boxCount = useViewerStore((s) => s.resolvedBoxSelection.length);
   const [tab, setTab] = useState<Tab>('assets');
+
+  useEffect(() => {
+    if (element || boxCount > 0) setTab('inspector');
+  }, [element, boxCount]);
 
   return (
     <div className="flex flex-col h-full">
@@ -45,6 +52,7 @@ export function ViewerSidePanel({ element }: ViewerSidePanelProps) {
         {tab === 'quantities' && <QuantitiesPanel />}
         {tab === 'geometry' && <GeometryKernelPanel />}
       </div>
+      <BoxSelectPanel />
     </div>
   );
 }

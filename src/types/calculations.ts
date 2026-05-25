@@ -1,14 +1,24 @@
 export type CalculationStatus = 'pass' | 'fail' | 'warning' | 'info';
 
+export type StepReviewStatus = 'accepted' | 'overridden' | 'flagged' | 'pending';
+
 export interface CalculationStep {
   step_number: number;
   title: string;
   formula: string;
   substitution: string;
   result: string;
+  platform_result?: string;
   unit: string;
   reference: string;
   status?: CalculationStatus;
+  review_status?: StepReviewStatus;
+  engineer_override?: string | null;
+  override_reason?: string | null;
+  engineer_flag?: boolean;
+  flag_note?: string | null;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
 }
 
 export interface CalculationResult {
@@ -18,6 +28,16 @@ export interface CalculationResult {
   warnings: string[];
   errors: string[];
   timestamp: string;
+  review_summary?: Record<string, number>;
+  pressure_bearing?: CalculationResult;
+  pressure_pavement?: CalculationResult;
+  pressure_lateral?: CalculationResult;
+  pressure_bridge?: CalculationResult;
+  pressure_wind?: CalculationResult;
+  pressure_consolidation?: CalculationResult;
+  pressure_boussinesq?: CalculationResult;
+  pressure_pipe?: CalculationResult;
+  pressure_tank?: CalculationResult;
 }
 
 export type SupportCondition =
@@ -114,15 +134,25 @@ export interface DrainageInputs {
 }
 
 export type CalculationModule =
+  | 'loadCombinations'
   | 'beam'
   | 'slab'
   | 'column'
   | 'foundation'
   | 'loads'
   | 'wind'
-  | 'road';
+  | 'bearing'
+  | 'materials'
+  | 'road'
+  | 'wash'
+  | 'geo'
+  | 'pressure';
 
-export type RoadSubmodule = 'pavement' | 'drainage';
+export type RoadSubmodule = 'pavement' | 'drainage' | 'geometric_design' | 'traffic_load';
+
+export type WashSubmodule = 'water_demand' | 'pipe_network' | 'sewer_design' | 'borehole' | 'treatment_plant';
+
+export type GeoSubmodule = 'bearing_capacity' | 'settlement' | 'slope_stability' | 'site_classification';
 
 export interface WindInputs {
   basic_wind_speed: number;

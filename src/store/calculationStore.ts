@@ -12,9 +12,20 @@ import type {
   WindInputs,
   RoadSubmodule,
 } from '../types/calculations';
+import type { IFCElement } from '../types/ifc';
 import { calculationAPI } from '../services/calculationAPI';
+import { pressureAPI } from '../services/pressureAPI';
+import { calcInputsFromElement, calcModuleForIfcType } from '../services/selectionBridge';
 
 const DEFAULT_INPUTS: Record<CalculationModule, Record<string, unknown>> = {
+  loadCombinations: {
+    gk: 15,
+    qk: 10,
+    wk: 3,
+    ek: 0,
+    code: 'EC0',
+    unit: 'kN/m',
+  },
   beam: {
     span: 6,
     support_condition: 'simply_supported',
@@ -64,6 +75,30 @@ const DEFAULT_INPUTS: Record<CalculationModule, Record<string, unknown>> = {
     fyk: 500,
     column_width: 300,
     column_depth: 300,
+    max_iterations: 200,
+  },
+  bearing: {
+    bearing_type: 'elastomeric',
+    vertical_load: 800,
+    horizontal_load: 40,
+    rotation: 0.01,
+    span: 15,
+    material: 'concrete',
+    fck: 30,
+    bearing_width: 300,
+    column_width: 200,
+    pad_thickness: 20,
+    sigma_allow: 10.0,
+    horizontal_movement_mm: 40.0,
+    layer_thickness_mm: 10.0,
+  },
+  materials: {
+    structure_type: 'beam',
+    span: 5.0,
+    load: 10.0,
+    exposure: 'internal',
+    budget: 'medium',
+    availability: 'Zambia',
   },
   loads: {
     dead_load_g: 20,
@@ -99,14 +134,219 @@ const DEFAULT_INPUTS: Record<CalculationModule, Record<string, unknown>> = {
     pipe_material: 'concrete',
     pipe_length: 100,
     region: '',
+    design_speed_kmh: 80,
+    radius_m: 300,
+    max_superelevation_pct: 8.0,
+    side_friction_factor: 0.14,
+    aadt: 1000,
+    growth_rate_pct: 4.0,
+    design_life_yrs: 20,
+    truck_pct: 10.0,
+    bus_pct: 5.0,
+    vdf_truck: 3.0,
+    vdf_bus: 1.2,
+    directional_split: 0.5,
+    lane_factor: 1.0,
   },
+  wash: {
+    wash_submodule: 'water_demand' as any,
+    population: 500,
+    lpcd: 50,
+    context: 'urban_low',
+    peak_factor: 2.5,
+    storage_days: 1.0,
+    leakage_pct: 15,
+    country: 'Zambia',
+    infiltration_pct: 20,
+    material: 'pvc',
+    pumping_rate_m3d: 100,
+    transmissivity_m2d: 50,
+    storage_coeff: 0.001,
+    time_days: 1.0,
+    radius_m: 0.1,
+    aquifer_thickness_m: 20,
+    static_lift_m: 30,
+    friction_losses_m: 5,
+    residual_pressure_m: 15,
+    flow_rate_m3h: 100,
+    floc_detention_min: 30,
+    velocity_gradient_g: 40,
+    surface_overflow_rate_mh: 1.5,
+    sed_detention_hr: 3,
+    filter_type: 'rapid',
+    filtration_rate_mh: 10,
+    chlorine_contact_min: 30,
+    chlorine_residual_mgl: 0.5,
+  },
+  geo: {
+    geo_submodule: 'bearing_capacity' as any,
+    soil_type: 'sandy',
+    foundation_width_m: 2.0,
+    foundation_length_m: 2.0,
+    foundation_depth_m: 1.2,
+    fos: 3.0,
+    use_custom_soil: false,
+    cohesion_kpa: 0,
+    friction_angle_deg: 30,
+    unit_weight_knm3: 18,
+    applied_pressure_kpa: 150.0,
+    poissons_ratio: 0.3,
+    elastic_modulus_kpa: 20000.0,
+    shape_factor_is: 1.0,
+    calc_consolidation: true,
+    compression_index_cc: 0.3,
+    clay_layer_thickness_m: 5.0,
+    initial_void_ratio_e0: 0.8,
+    initial_effective_stress_kpa: 50.0,
+    stress_increase_kpa: 75.0,
+    allowable_settlement_mm: 25.0,
+    spt_n: 15,
+    energy_ratio: 60,
+    borehole_diam_mm: 100,
+    sampler_type: 'standard',
+    rod_length_m: 5.0,
+    effective_stress_kpa: 50.0,
+    pga_g: 0.15,
+    magnitude: 7.5,
+    retaining_wall_height_m: 5,
+  },
+  pressure: {},
 };
+
+function geoSoil(inputs: Record<string, unknown>) {
+  return {
+    phi: Number(inputs.friction_angle_deg ?? 30),
+    c: Number(inputs.cohesion_kpa ?? 0),
+    gamma: Number(inputs.unit_weight_knm3 ?? 18),
+    B: Number(inputs.foundation_width_m ?? 2),
+    L: Number(inputs.foundation_length_m ?? 2),
+    H: Number(inputs.retaining_wall_height_m ?? 5),
+  };
+}
+
+function terrainCategoryNum(cat: unknown): number {
+  const map: Record<string, number> = { '0': 0, I: 1, II: 2, III: 3, IV: 4, A: 0, B: 1, C: 2, D: 3 };
+  const s = String(cat ?? 'II');
+  return map[s] ?? 2;
+}
+
+async function attachPressureOutputs(
+  module: CalculationModule,
+  result: CalculationResult,
+  inputs: Record<string, unknown>
+): Promise<CalculationResult> {
+  const out = { ...result };
+  try {
+    if (module === 'road' && ((inputs.road_submodule as string) ?? 'pavement') === 'pavement') {
+      out.pressure_pavement = await pressureAPI.pavement({
+        P: 80,
+        p0: 552,
+        asphalt_mm: 100,
+        base_mm: 200,
+        CBR: inputs.cbr_subgrade ?? 6,
+        n_contact_points: 4,
+      });
+    }
+    if (module === 'wind') {
+      out.pressure_wind = await pressureAPI.windDistribution({
+        vb: inputs.basic_wind_speed ?? 30,
+        height: inputs.building_height ?? 12,
+        terrain_category: terrainCategoryNum(inputs.exposure_category),
+        cpi: 0.2,
+      });
+    }
+    if (module === 'bearing') {
+      const hydro = await pressureAPI.bridgeHydrostatic({
+        pier_width: (inputs.bearing_width as number) ?? 1.5,
+        water_depth: (inputs.water_depth as number) ?? 8,
+        gamma_w: 9.81,
+        N_total: inputs.vertical_load ?? 800,
+      });
+      const hydroDyn = await pressureAPI.bridgeHydrodynamic({
+        pier_width: (inputs.bearing_width as number) ?? 1.5,
+        water_depth: (inputs.water_depth as number) ?? 8,
+        velocity: (inputs.flood_velocity as number) ?? 2,
+      });
+      out.pressure_bridge = {
+        ...hydro,
+        summary: { ...hydro.summary, hydrodynamic: hydroDyn.summary },
+        warnings: [...(hydro.warnings ?? []), ...(hydroDyn.warnings ?? [])],
+      };
+    }
+    if (module === 'geo') {
+      const sub = (inputs.geo_submodule as string) ?? 'bearing_capacity';
+      const soil = geoSoil(inputs);
+      if (sub === 'slope_stability' || sub === 'site_classification') {
+        out.pressure_lateral = await pressureAPI.lateralEarth({
+          phi: soil.phi,
+          c: soil.c,
+          gamma: soil.gamma,
+          H: soil.H,
+          q: 0,
+        });
+      }
+      if (sub === 'settlement') {
+        const applied = Number(inputs.applied_pressure_kpa ?? 150);
+        const delta = Number(inputs.stress_increase_kpa ?? applied);
+        out.pressure_consolidation = await pressureAPI.consolidation({
+          delta_sigma: delta,
+          water_table_depth: 99,
+          layers: [{ gamma: soil.gamma, thickness: Number(inputs.clay_layer_thickness_m ?? 5) }],
+        });
+        out.pressure_boussinesq = await pressureAPI.boussinesq({
+          q: applied,
+          B: soil.B,
+          L: soil.L,
+          z: 0.5,
+          use_2_1: true,
+        });
+      }
+      if (sub === 'bearing_capacity') {
+        out.pressure_boussinesq = await pressureAPI.boussinesq({
+          q: Number(inputs.applied_pressure_kpa ?? 150),
+          B: soil.B,
+          L: soil.L,
+          z: Number(inputs.foundation_depth_m ?? 1.2),
+          use_2_1: true,
+        });
+      }
+    }
+    if (module === 'wash') {
+      const sub = (inputs.wash_submodule as string) ?? 'water_demand';
+      if (sub === 'pipe_network') {
+        out.pressure_pipe = await pressureAPI.pipe({
+          P_node: Number(inputs.node_pressure_kpa ?? 320),
+          diameter_mm: Number(inputs.diameter_mm ?? 200),
+          wall_mm: Number(inputs.wall_mm ?? 10),
+          material: String(inputs.pipe_material ?? 'HDPE'),
+        });
+      }
+      if (sub === 'treatment_plant') {
+        out.pressure_tank = await pressureAPI.tank({
+          height: Number(inputs.tank_height_m ?? 6),
+          radius: Number(inputs.tank_radius_m ?? 4),
+          gamma_w: 9.81,
+          wind_force: 80,
+          mu: 0.5,
+          tank_weight: 500,
+        });
+      }
+    }
+  } catch {
+    /* supplementary pressure — must not fail parent calculation */
+  }
+  return out;
+}
 
 function mergeWithDefaults(
   module: CalculationModule,
   inputs: Record<string, unknown>
 ): Record<string, unknown> {
   return { ...DEFAULT_INPUTS[module], ...inputs };
+}
+
+function roundLoad(v: number): number {
+  return Math.round(v * 100) / 100;
 }
 
 function getErrorMessage(err: unknown): string {
@@ -126,8 +366,10 @@ interface CalculationState {
   isCalculating: boolean;
   error: string | null;
   setModule: (module: CalculationModule) => void;
+  prefillFromElement: (element: IFCElement) => CalculationModule | null;
   setInput: (key: string, value: unknown) => void;
   setInputs: (inputs: Record<string, unknown>) => void;
+  applyGoverningLoad: (target: 'beam' | 'slab' | 'foundation', designLoad: number) => void;
   runCalculation: () => Promise<void>;
   saveResult: (result: CalculationResult) => void;
   clearResults: () => void;
@@ -149,11 +391,53 @@ export const useCalculationStore = create<CalculationState>((set, get) => ({
       error: null,
     }),
 
+  prefillFromElement: (element) => {
+    const module = calcModuleForIfcType(element.type);
+    if (!module) return null;
+    const inputs = mergeWithDefaults(module, calcInputsFromElement(element));
+    set({
+      activeModule: module,
+      currentInputs: inputs,
+      currentResults: null,
+      error: null,
+    });
+    return module;
+  },
+
   setInput: (key, value) => {
     set({ currentInputs: { ...get().currentInputs, [key]: value } });
   },
 
   setInputs: (inputs) => set({ currentInputs: inputs }),
+
+  applyGoverningLoad: (target, designLoad) => {
+    const w = roundLoad(designLoad);
+    const base = { ...DEFAULT_INPUTS[target] };
+    if (target === 'beam') {
+      set({
+        activeModule: 'beam',
+        currentInputs: { ...base, dead_load: w, imposed_load: 0 },
+        currentResults: null,
+        error: null,
+      });
+      return;
+    }
+    if (target === 'slab') {
+      set({
+        activeModule: 'slab',
+        currentInputs: { ...base, dead_load: w, live_load: 0 },
+        currentResults: null,
+        error: null,
+      });
+      return;
+    }
+    set({
+      activeModule: 'foundation',
+      currentInputs: { ...base, column_load: w },
+      currentResults: null,
+      error: null,
+    });
+  },
 
   runCalculation: async () => {
     const { activeModule, currentInputs } = get();
@@ -164,6 +448,8 @@ export const useCalculationStore = create<CalculationState>((set, get) => ({
       let result: CalculationResult;
 
       switch (activeModule) {
+        case 'loadCombinations':
+          throw new Error('Use Generate Combinations in the Load Combinations tab');
         case 'beam':
           result = await calculationAPI.calculateBeam(inputs as unknown as BeamInputs);
           break;
@@ -182,19 +468,59 @@ export const useCalculationStore = create<CalculationState>((set, get) => ({
         case 'wind':
           result = await calculationAPI.calculateWind(inputs as unknown as WindInputs);
           break;
+        case 'bearing':
+          result = await calculationAPI.calculateBearing(inputs);
+          break;
+        case 'materials':
+          result = await calculationAPI.recommendMaterial(inputs);
+          break;
         case 'road': {
-          const submodule = (inputs.road_submodule as RoadSubmodule) ?? 'pavement';
-          result =
-            submodule === 'drainage'
-              ? await calculationAPI.calculateDrainage(inputs as unknown as DrainageInputs)
-              : await calculationAPI.calculatePavement(inputs as unknown as PavementInputs);
+          const submodule = (inputs.road_submodule as string) ?? 'pavement';
+          if (submodule === 'drainage') {
+            result = await calculationAPI.calculateDrainage(inputs as unknown as DrainageInputs);
+          } else if (submodule === 'geometric_design') {
+            result = await calculationAPI.calculateGeometricDesign(inputs as unknown as Record<string, unknown>);
+          } else if (submodule === 'traffic_load') {
+            result = await calculationAPI.calculateTrafficLoad(inputs as unknown as Record<string, unknown>);
+          } else {
+            result = await calculationAPI.calculatePavement(inputs as unknown as PavementInputs);
+          }
+          break;
+        }
+        case 'wash': {
+          const submodule = (inputs.wash_submodule as string) ?? 'water_demand';
+          if (submodule === 'pipe_network') {
+            result = await calculationAPI.calculateWashPipeNetwork(inputs);
+          } else if (submodule === 'sewer_design') {
+            result = await calculationAPI.calculateWashSewerDesign(inputs);
+          } else if (submodule === 'borehole') {
+            result = await calculationAPI.calculateWashBorehole(inputs);
+          } else if (submodule === 'treatment_plant') {
+            result = await calculationAPI.calculateWashTreatmentPlant(inputs);
+          } else {
+            result = await calculationAPI.calculateWashWaterDemand(inputs);
+          }
+          break;
+        }
+        case 'geo': {
+          const submodule = (inputs.geo_submodule as string) ?? 'bearing_capacity';
+          if (submodule === 'settlement') {
+            result = await calculationAPI.calculateGeoSettlement(inputs);
+          } else if (submodule === 'slope_stability') {
+            result = await calculationAPI.calculateGeoSlopeStability(inputs);
+          } else if (submodule === 'site_classification') {
+            result = await calculationAPI.calculateGeoSiteClassification(inputs);
+          } else {
+            result = await calculationAPI.calculateGeoBearingCapacity(inputs);
+          }
           break;
         }
         default:
           throw new Error(`Unknown module: ${activeModule}`);
       }
 
-      set({ currentResults: result, isCalculating: false });
+      const withPressure = await attachPressureOutputs(activeModule, result, inputs);
+      set({ currentResults: withPressure, isCalculating: false });
 
       // Persist to Electron offline SQLite when available
       if (window.electronAPI?.offlineSaveCalculation) {

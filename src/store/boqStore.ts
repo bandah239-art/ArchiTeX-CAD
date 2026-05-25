@@ -297,6 +297,10 @@ export const useBoQStore = create<BoQState>((set, get) => ({
 
   importFromBim: async (bimElements) => {
     const { projectName } = get();
+    if (!Array.isArray(bimElements)) {
+      set({ error: 'BIM import expects an array of elements, not a count or object' });
+      return;
+    }
     if (!bimElements.length) {
       set({ error: 'No BIM elements to import' });
       return;

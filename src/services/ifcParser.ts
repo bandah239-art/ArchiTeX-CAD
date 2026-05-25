@@ -20,7 +20,7 @@ import {
   mergeMeshes,
   mergeWithPropertyQuantities,
   quantitiesFromMesh,
-  type MeshBuffers,
+  type PlacedMeshBuffers,
 } from './ifcQuantities';
 
 const WASM_PATH = import.meta.env.BASE_URL + 'wasm/';
@@ -43,19 +43,44 @@ const ELEMENT_TYPE_IDS = [
 ];
 
 let sharedApi: IfcAPI | null = null;
+let initPromise: Promise<IfcAPI> | null = null;
+/** Serialize parse/load — concurrent StreamAllMeshes aborts WASM. */
+let parseChain: Promise<unknown> = Promise.resolve();
+let lastOpenedModelId: number | null = null;
+
+/** web-ifc StreamAllMeshes callbacks may return plain objects without delete(). */
+export function releaseIfcWasmObject(obj: { delete?: () => void } | null | undefined): void {
+  try {
+    if (obj && typeof obj.delete === 'function') {
+      obj.delete();
+    }
+  } catch {
+    /* already freed or unsupported in this web-ifc build */
+  }
+}
 
 export async function getIfcApi(): Promise<IfcAPI> {
   if (sharedApi) return sharedApi;
-  const api = new IfcAPI();
-  api.SetWasmPath(WASM_PATH, true);
-  await api.Init(undefined, true);
-  sharedApi = api;
-  return api;
+  if (!initPromise) {
+    initPromise = (async () => {
+      const api = new IfcAPI();
+      api.SetWasmPath(WASM_PATH, true);
+      // forceSingleThread=true — avoids worker/mt wasm path that can abort in Electron.
+      await api.Init(undefined, true);
+      sharedApi = api;
+      return api;
+    })().catch((err) => {
+      initPromise = null;
+      sharedApi = null;
+      throw err;
+    });
+  }
+  return initPromise;
 }
 
 export interface ParsedIfcElement extends IFCElement {
   expressId: number;
-  meshBuffers: MeshBuffers[];
+  meshBuffers: PlacedMeshBuffers[];
 }
 
 export interface IfcParseResult {
@@ -152,12 +177,12 @@ function resolveTypeName(api: IfcAPI, modelId: number, expressId: number): strin
   return 'IfcBuildingElementProxy';
 }
 
-function extractMeshBuffers(api: IfcAPI, modelId: number, geometryExpressId: number): MeshBuffers | null {
+function extractMeshBuffers(api: IfcAPI, modelId: number, geometryExpressId: number): PlacedMeshBuffers | null {
   try {
     const geom = api.GetGeometry(modelId, geometryExpressId);
     const positions = api.GetVertexArray(geom.GetVertexData(), geom.GetVertexDataSize());
     const indices = api.GetIndexArray(geom.GetIndexData(), geom.GetIndexDataSize());
-    geom.delete();
+    releaseIfcWasmObject(geom);
     if (positions.length < 9 || indices.length < 3) return null;
     return { positions, indices };
   } catch {
@@ -176,22 +201,39 @@ function updateGlobalBounds(
 }
 
 export async function parseIfcBuffer(buffer: ArrayBuffer): Promise<IfcParseResult> {
-  const api = await getIfcApi();
-  const modelId = api.OpenModel(new Uint8Array(buffer));
+  const task = parseChain.then(() => parseIfcBufferInner(buffer));
+  parseChain = task.then(
+    () => undefined,
+    () => undefined,
+  );
+  return task;
+}
 
-  const meshByExpressId = new Map<number, MeshBuffers[]>();
+async function parseIfcBufferInner(buffer: ArrayBuffer): Promise<IfcParseResult> {
+  const api = await getIfcApi();
+  if (lastOpenedModelId !== null) {
+    closeIfcModel(api, lastOpenedModelId);
+    lastOpenedModelId = null;
+  }
+  const modelId = api.OpenModel(new Uint8Array(buffer));
+  lastOpenedModelId = modelId;
+
+  const meshByExpressId = new Map<number, PlacedMeshBuffers[]>();
   let triangleCount = 0;
 
   api.StreamAllMeshes(modelId, (flatMesh) => {
     const expressId = flatMesh.expressID;
     const geoms = flatMesh.geometries;
-    const buffers: MeshBuffers[] = [];
+    const buffers: PlacedMeshBuffers[] = [];
 
     for (let g = 0; g < geoms.size(); g++) {
       const placed = geoms.get(g);
       const mesh = extractMeshBuffers(api, modelId, placed.geometryExpressID);
       if (mesh) {
-        buffers.push(mesh);
+        buffers.push({
+          ...mesh,
+          matrix: Array.from(placed.flatTransformation),
+        });
         triangleCount += mesh.indices.length / 3;
       }
     }
@@ -200,7 +242,7 @@ export async function parseIfcBuffer(buffer: ArrayBuffer): Promise<IfcParseResul
       const existing = meshByExpressId.get(expressId) ?? [];
       meshByExpressId.set(expressId, [...existing, ...buffers]);
     }
-    flatMesh.delete();
+    releaseIfcWasmObject(flatMesh);
   });
 
   const elementByExpressId = new Map<number, ParsedIfcElement>();
@@ -288,6 +330,7 @@ export async function parseIfcBuffer(buffer: ArrayBuffer): Promise<IfcParseResul
 export function closeIfcModel(api: IfcAPI, modelId: number): void {
   try {
     api.CloseModel(modelId);
+    if (lastOpenedModelId === modelId) lastOpenedModelId = null;
   } catch {
     /* ignore */
   }

@@ -2,7 +2,15 @@ import { create } from 'zustand';
 import type { IFCElement, ModelStats } from '../types/ifc';
 import { loadIFC } from '../services/fileService';
 import { closeIfcModel, getIfcApi, type ParsedIfcElement } from '../services/ifcParser';
-import { disposeIfcModel } from '../services/ifcMeshXeokit';
+import {
+  disposeIfcModel,
+  entityIdFromExpressId,
+  exportElementMeshPayload,
+  placedMeshesToPayload,
+  type ServerMeshPayload,
+} from '../services/ifcMeshXeokit';
+import type { PlacedMeshBuffers } from '../services/ifcQuantities';
+import { useViewerStore } from './viewerStore';
 
 interface IfcModelState {
   path: string | null;
@@ -24,6 +32,8 @@ interface IfcModelState {
   setElementMaps: (elementByEntityId: Map<string, ParsedIfcElement>) => void;
   getElementByEntityId: (entityId: string) => IFCElement | null;
   getBoqElements: () => IFCElement[];
+  exportMeshByEntityId: (entityId: string) => ServerMeshPayload | null;
+  exportMergedModelMesh: (excludeEntityIds?: string[]) => ServerMeshPayload | null;
   clear: () => void;
 }
 
@@ -89,6 +99,23 @@ export const useIfcModelStore = create<IfcModelState>((set, get) => ({
       .map(({ meshBuffers: _m, expressId: _e, ...rest }) => rest);
   },
 
+  exportMeshByEntityId: (entityId) => {
+    const el = get().elementByEntityId.get(entityId);
+    if (!el) return null;
+    return exportElementMeshPayload(el);
+  },
+
+  exportMergedModelMesh: (excludeEntityIds = []) => {
+    const excluded = new Set(excludeEntityIds);
+    const meshes: PlacedMeshBuffers[] = [];
+    for (const el of get().elements) {
+      const entityId = entityIdFromExpressId(el.expressId);
+      if (excluded.has(entityId) || !el.meshBuffers.length) continue;
+      meshes.push(...el.meshBuffers);
+    }
+    return placedMeshesToPayload(meshes);
+  },
+
   clear: () => {
     const id = get().openModelId;
     if (id !== null) {
@@ -105,3 +132,58 @@ export const useIfcModelStore = create<IfcModelState>((set, get) => ({
     });
   },
 }));
+
+function uniqueEntityIds(ids: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const id of ids) {
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
+/** Collect entity ids from current selection + box-select results (normalized). */
+export function collectTargetEntityIds(): string[] {
+  const { selectedElement, boxSelectResults, resolvedBoxSelection } = useViewerStore.getState();
+  const ids: string[] = [];
+  if (selectedElement) ids.push(entityIdFromExpressId(selectedElement.id));
+  if (boxSelectResults.length) {
+    ids.push(...boxSelectResults);
+  } else if (resolvedBoxSelection.length) {
+    for (const el of resolvedBoxSelection) {
+      ids.push(entityIdFromExpressId(el.id));
+    }
+  }
+  return uniqueEntityIds(ids);
+}
+
+function requireMeshPayload(entityId: string, label: string): ServerMeshPayload {
+  const mesh = useIfcModelStore.getState().exportMeshByEntityId(entityId);
+  if (!mesh?.vertices.length || !mesh.faces.length) {
+    throw new Error(`${label} has no exportable mesh geometry`);
+  }
+  return mesh;
+}
+
+/** Resolve two meshes for boolean / clash / intersection server ops. */
+export function resolveTwoMeshPayloads(): { mesh_a: ServerMeshPayload; mesh_b: ServerMeshPayload } {
+  const entityIds = collectTargetEntityIds();
+  if (entityIds.length < 2) {
+    throw new Error('Select two elements (pick one, then box-select or pick another)');
+  }
+  return {
+    mesh_a: requireMeshPayload(entityIds[0], 'First element'),
+    mesh_b: requireMeshPayload(entityIds[1], 'Second element'),
+  };
+}
+
+/** Selected element mesh, or first box-select result. */
+export function resolvePrimaryMeshPayload(): ServerMeshPayload {
+  const entityIds = collectTargetEntityIds();
+  if (!entityIds.length) {
+    throw new Error('Select an element first');
+  }
+  return requireMeshPayload(entityIds[0], 'Selected element');
+}

@@ -49,18 +49,44 @@ def autocad_bridge_status() -> dict[str, Any]:
     }
 
 
-def export_dwg_geometry(dwg_path: str) -> dict[str, Any]:
-    """Invoke native bridge when built; otherwise return guidance."""
+def export_dwg_geometry(
+    dwg_path: str,
+    elements: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Invoke native bridge when built; otherwise DXF plan fallback from BIM elements."""
+    from bim.plan_export import export_plan_dxf_payload
+
     status = autocad_bridge_status()
+    path_lower = (dwg_path or "").lower()
+
+    if elements:
+        return export_plan_dxf_payload(elements)
+
+    if path_lower.endswith(".ifc") and os.path.isfile(dwg_path):
+        try:
+            from bim.ifc_geometry import parse_ifc_file
+
+            parsed = parse_ifc_file(dwg_path)
+            if parsed.get("elements"):
+                out = export_plan_dxf_payload(parsed["elements"])
+                out["ifc_path"] = dwg_path
+                return out
+        except Exception as exc:
+            return {"status": "error", "error": f"IFC plan export failed: {exc}"}
+
     if not status["bridge_built"]:
         return {
             "status": "unavailable",
-            "error": "AutoCAD bridge not built",
+            "error": "AutoCAD bridge not built. Load an IFC model and export again for plan DXF fallback.",
             "bridge": status,
-            "fallback": "Use IFC import or Python geometry_extensions API",
+            "fallback": "Pass elements[] or an .ifc path for DXF plan export",
         }
-    if not os.path.isfile(dwg_path):
-        return {"status": "error", "error": f"DWG not found: {dwg_path}"}
+    if not dwg_path or not os.path.isfile(dwg_path):
+        return {
+            "status": "error",
+            "error": f"File not found: {dwg_path or '(empty path)'}",
+            "hint": "Open an IFC model in the viewer, or provide a .dwg file path",
+        }
 
     try:
         proc = subprocess.run(

@@ -5,6 +5,11 @@ export interface MeshBuffers {
   indices: Uint32Array;
 }
 
+/** Mesh geometry with optional IFC placement matrix (column-major 4×4). */
+export interface PlacedMeshBuffers extends MeshBuffers {
+  matrix?: number[];
+}
+
 export interface ElementQuantities {
   volume: number;
   surfaceArea: number;

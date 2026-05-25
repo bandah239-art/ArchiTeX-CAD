@@ -4,20 +4,32 @@ import { SlabCalculator } from './modules/SlabCalculator';
 import { ColumnCalculator } from './modules/ColumnCalculator';
 import { FoundationCalculator } from './modules/FoundationCalculator';
 import { LoadCalculator } from './modules/LoadCalculator';
+import { LoadCombinations } from './modules/LoadCombinations';
 import { RoadCalculator } from './modules/RoadCalculator';
 import { WindCalculator } from './modules/WindCalculator';
-import { ResultsDisplay } from './ResultsDisplay';
+import { WashCalculator } from './modules/WashCalculator';
+import { GeoCalculator } from './modules/GeoCalculator';
+import { BearingCalculator } from './modules/BearingCalculator';
+import { MaterialSelector } from './modules/MaterialSelector';
+import { ResultsDisplay, PressureBearingSection } from './ResultsDisplay';
+import { PressurePanel } from './pressure/PressurePanel';
 import { ReportExporter } from './ReportExporter';
 import type { CalculationModule } from '../../types/calculations';
 
 const MODULES: { id: CalculationModule; label: string }[] = [
+  { id: 'loadCombinations', label: 'Load Combos' },
   { id: 'beam', label: 'Beam' },
   { id: 'slab', label: 'Slab' },
   { id: 'column', label: 'Column' },
   { id: 'foundation', label: 'Foundation' },
   { id: 'loads', label: 'Loads' },
   { id: 'wind', label: 'Wind' },
+  { id: 'bearing', label: 'Bearing' },
+  { id: 'materials', label: 'Materials' },
   { id: 'road', label: 'Road' },
+  { id: 'wash', label: 'WASH' },
+  { id: 'geo', label: 'GEO' },
+  { id: 'pressure', label: 'Pressure' },
 ];
 
 export function CalculatorPanel() {
@@ -39,6 +51,8 @@ export function CalculatorPanel() {
     };
 
     switch (activeModule) {
+      case 'loadCombinations':
+        return <LoadCombinations />;
       case 'beam':
         return <BeamCalculator {...props} />;
       case 'slab':
@@ -51,8 +65,18 @@ export function CalculatorPanel() {
         return <LoadCalculator {...props} />;
       case 'wind':
         return <WindCalculator {...props} />;
+      case 'bearing':
+        return <BearingCalculator {...props} />;
+      case 'materials':
+        return <MaterialSelector {...props} />;
       case 'road':
         return <RoadCalculator {...props} />;
+      case 'wash':
+        return <WashCalculator {...props} />;
+      case 'geo':
+        return <GeoCalculator {...props} />;
+      case 'pressure':
+        return <PressurePanel />;
       default:
         return null;
     }
@@ -84,33 +108,85 @@ export function CalculatorPanel() {
       <div className="flex-1 overflow-y-auto p-4">
         {renderModule()}
 
-        <button
-          onClick={() => runCalculation()}
-          disabled={isCalculating}
-          className="w-full mt-4 py-2 bg-infra-highlight hover:bg-infra-highlight/80 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded transition-colors"
-        >
-          {isCalculating ? 'Calculating...' : 'CALCULATE'}
-        </button>
-
-        {error && (
-          <div className="mt-3 p-3 bg-red-900/30 border border-red-700/50 rounded text-xs text-red-300">
-            {error}
-          </div>
-        )}
-
-        {currentResults?.steps?.length ? (
+        {activeModule !== 'loadCombinations' && activeModule !== 'pressure' && (
           <>
-            <div className="mt-6 border-t border-infra-accent/30 pt-4">
-              <h3 className="text-xs font-semibold text-gray-400 uppercase mb-3">Results</h3>
-              <ResultsDisplay result={currentResults} />
-            </div>
-            <ReportExporter result={currentResults} />
+            <button
+              onClick={() => runCalculation()}
+              disabled={isCalculating}
+              className="w-full mt-4 py-2 bg-infra-highlight hover:bg-infra-highlight/80 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded transition-colors"
+            >
+              {isCalculating ? 'Calculating...' : 'CALCULATE'}
+            </button>
+
+            {error && (
+              <div className="mt-3 p-3 bg-red-900/30 border border-red-700/50 rounded text-xs text-red-300">
+                {error}
+              </div>
+            )}
+
+            {currentResults?.steps?.length ? (
+              <>
+                <div className="mt-6 border-t border-infra-accent/30 pt-4">
+                  <h3 className="text-xs font-semibold text-gray-400 uppercase mb-3">Results</h3>
+                  <ResultsDisplay result={currentResults} reviewKeyPrefix={activeModule} />
+                  {currentResults.pressure_bearing && (
+                    <PressureBearingSection
+                      title="Foundation bearing pressure"
+                      bearing={currentResults.pressure_bearing}
+                    />
+                  )}
+                  {currentResults.pressure_pavement && (
+                    <PressureBearingSection
+                      title="Pavement layer pressure"
+                      bearing={currentResults.pressure_pavement}
+                    />
+                  )}
+                  {currentResults.pressure_wind && (
+                    <PressureBearingSection
+                      title="Wind pressure distribution"
+                      bearing={currentResults.pressure_wind}
+                    />
+                  )}
+                  {currentResults.pressure_bridge && (
+                    <PressureBearingSection
+                      title="Bridge hydrostatic / hydrodynamic"
+                      bearing={currentResults.pressure_bridge}
+                    />
+                  )}
+                  {currentResults.pressure_lateral && (
+                    <PressureBearingSection
+                      title="Lateral earth pressure"
+                      bearing={currentResults.pressure_lateral}
+                    />
+                  )}
+                  {currentResults.pressure_boussinesq && (
+                    <PressureBearingSection
+                      title="Boussinesq stress in soil"
+                      bearing={currentResults.pressure_boussinesq}
+                    />
+                  )}
+                  {currentResults.pressure_consolidation && (
+                    <PressureBearingSection
+                      title="Consolidation / effective stress"
+                      bearing={currentResults.pressure_consolidation}
+                    />
+                  )}
+                  {currentResults.pressure_pipe && (
+                    <PressureBearingSection title="Pipe / node pressure" bearing={currentResults.pressure_pipe} />
+                  )}
+                  {currentResults.pressure_tank && (
+                    <PressureBearingSection title="Tank pressure" bearing={currentResults.pressure_tank} />
+                  )}
+                </div>
+                <ReportExporter result={currentResults} />
+              </>
+            ) : currentResults?.status === 'received' ? (
+              <div className="mt-3 p-3 bg-infra-accent/20 border border-infra-accent/40 rounded text-xs text-gray-300">
+                Inputs received by server — full calculation results coming soon.
+              </div>
+            ) : null}
           </>
-        ) : currentResults?.status === 'received' ? (
-          <div className="mt-3 p-3 bg-infra-accent/20 border border-infra-accent/40 rounded text-xs text-gray-300">
-            Inputs received by server — full calculation results coming soon.
-          </div>
-        ) : null}
+        )}
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 import { SceneModel, type Viewer } from '@xeokit/xeokit-sdk';
 import type { IFCElement, ModelStats } from '../types/ifc';
+import type { PlacedMeshBuffers } from './ifcQuantities';
 import {
   closeIfcModel,
   getIfcApi,
@@ -7,11 +8,23 @@ import {
   type ParsedIfcElement,
 } from './ifcParser';
 
+export interface ServerMeshPayload {
+  vertices: number[];
+  faces: number[];
+}
+
 /** IFC Z-up → xeokit Y-up (rotate -90° about X). */
 const IFC_TO_XEOKIT = [
   1, 0, 0, 0,
   0, 0, 1, 0,
   0, -1, 0, 0,
+  0, 0, 0, 1,
+];
+
+const IDENTITY_MAT4 = [
+  1, 0, 0, 0,
+  0, 1, 0, 0,
+  0, 0, 1, 0,
   0, 0, 0, 1,
 ];
 
@@ -44,6 +57,10 @@ function ifcTypeColor(type: string): [number, number, number] {
   return palette[type] ?? [0.6, 0.62, 0.65];
 }
 
+function geometrySignature(buf: PlacedMeshBuffers): string {
+  return `${buf.positions.length}:${buf.indices.length}:${buf.positions[0]}:${buf.indices[0]}`;
+}
+
 export interface IfcXeokitLoadResult {
   stats: ModelStats;
   elements: ParsedIfcElement[];
@@ -51,6 +68,10 @@ export interface IfcXeokitLoadResult {
   modelId: number;
 }
 
+/**
+ * Load IFC into xeokit using mesh data from parseIfcBuffer only.
+ * Do NOT call StreamAllMeshes again here — a second pass aborts web-ifc WASM.
+ */
 export async function loadIfcIntoXeokit(
   viewer: Viewer,
   buffer: ArrayBuffer,
@@ -63,7 +84,6 @@ export async function loadIfcIntoXeokit(
   if (existing) existing.destroy();
 
   const parsed = await parseIfcBuffer(buffer);
-  const api = await getIfcApi();
   const elementByEntityId = new Map<string, ParsedIfcElement>();
 
   const sceneModel = new SceneModel(viewer.scene, {
@@ -73,42 +93,36 @@ export async function loadIfcIntoXeokit(
     edges: true,
   });
 
-  const geometryCache = new Map<number, string>();
+  const geometryCache = new Map<string, string>();
   let meshIndex = 0;
   let processed = 0;
-  const totalMeshes = parsed.elements.reduce((n, el) => n + el.meshBuffers.length, 0) || 1;
+  const totalMeshes =
+    parsed.elements.reduce((n, el) => n + el.meshBuffers.length, 0) || 1;
 
-  api.StreamAllMeshes(parsed.modelId, (flatMesh) => {
-    const expressId = flatMesh.expressID;
-    const element = parsed.elementByExpressId.get(expressId);
-    const entityId = `ifc-${expressId}`;
+  for (const element of parsed.elements) {
+    if (!element.meshBuffers.length) continue;
+
+    const entityId = entityIdFromExpressId(element.expressId);
     const meshIds: string[] = [];
-    const color = ifcTypeColor(element?.type ?? 'IfcBuildingElementProxy');
+    const color = ifcTypeColor(element.type);
 
-    const geoms = flatMesh.geometries;
-    for (let g = 0; g < geoms.size(); g++) {
-      const placed = geoms.get(g);
-      const geomExpressId = placed.geometryExpressID;
-      let geometryId = geometryCache.get(geomExpressId);
+    for (const mbuf of element.meshBuffers) {
+      const sig = geometrySignature(mbuf);
+      let geometryId = geometryCache.get(sig);
 
       if (!geometryId) {
-        const geom = api.GetGeometry(parsed.modelId, geomExpressId);
-        const positions = api.GetVertexArray(geom.GetVertexData(), geom.GetVertexDataSize());
-        const indices = api.GetIndexArray(geom.GetIndexData(), geom.GetIndexDataSize());
-        geom.delete();
-
-        geometryId = `geom-${geomExpressId}`;
-        geometryCache.set(geomExpressId, geometryId);
+        geometryId = `geom-${meshIndex}`;
+        geometryCache.set(sig, geometryId);
         sceneModel.createGeometry({
           id: geometryId,
           primitive: 'triangles',
-          positions: Array.from(positions),
-          indices: Array.from(indices),
+          positions: Array.from(mbuf.positions),
+          indices: Array.from(mbuf.indices),
         } as unknown as Parameters<SceneModel['createGeometry']>[0]);
       }
 
       const meshId = `mesh-${meshIndex++}`;
-      const matrix = multiplyMat4(IFC_TO_XEOKIT, placed.flatTransformation);
+      const matrix = multiplyMat4(IFC_TO_XEOKIT, mbuf.matrix ?? IDENTITY_MAT4);
 
       sceneModel.createMesh({
         id: meshId,
@@ -118,6 +132,7 @@ export async function loadIfcIntoXeokit(
         color,
         opacity: 1,
       } as unknown as Parameters<SceneModel['createMesh']>[0]);
+
       meshIds.push(meshId);
       processed++;
       options?.onProgress?.(Math.min(99, (processed / totalMeshes) * 100));
@@ -129,11 +144,9 @@ export async function loadIfcIntoXeokit(
         meshIds,
         isObject: true,
       });
-      if (element) elementByEntityId.set(entityId, element);
+      elementByEntityId.set(entityId, element);
     }
-
-    flatMesh.delete();
-  });
+  }
 
   sceneModel.finalize();
   viewer.cameraFlight.flyTo(sceneModel);
@@ -171,4 +184,66 @@ export function ifcElementFromEntity(
 export async function disposeIfcModel(modelId: number): Promise<void> {
   const api = await getIfcApi();
   closeIfcModel(api, modelId);
+}
+
+function transformVertex(matrix: number[], x: number, y: number, z: number): [number, number, number] {
+  return [
+    matrix[0] * x + matrix[4] * y + matrix[8] * z + matrix[12],
+    matrix[1] * x + matrix[5] * y + matrix[9] * z + matrix[13],
+    matrix[2] * x + matrix[6] * y + matrix[10] * z + matrix[14],
+  ];
+}
+
+/** Merge placed IFC meshes into flat { vertices, faces } for server geometry ops (xeokit Y-up). */
+export function placedMeshesToPayload(meshes: PlacedMeshBuffers[]): ServerMeshPayload | null {
+  if (!meshes.length) return null;
+
+  const vertices: number[] = [];
+  const faces: number[] = [];
+  let vertexOffset = 0;
+
+  for (const mesh of meshes) {
+    const placement = mesh.matrix ?? IDENTITY_MAT4;
+    const world = multiplyMat4(IFC_TO_XEOKIT, placement);
+
+    for (let i = 0; i < mesh.positions.length; i += 3) {
+      const [x, y, z] = transformVertex(
+        world,
+        mesh.positions[i],
+        mesh.positions[i + 1],
+        mesh.positions[i + 2],
+      );
+      vertices.push(x, y, z);
+    }
+
+    for (let i = 0; i < mesh.indices.length; i++) {
+      faces.push(mesh.indices[i] + vertexOffset);
+    }
+    vertexOffset += mesh.positions.length / 3;
+  }
+
+  if (!vertices.length || !faces.length) return null;
+  return { vertices, faces };
+}
+
+export function exportElementMeshPayload(element: ParsedIfcElement): ServerMeshPayload | null {
+  return placedMeshesToPayload(element.meshBuffers);
+}
+
+export function entityIdFromExpressId(expressId: number | string): string {
+  const str = String(expressId);
+  return str.startsWith('ifc-') ? str : `ifc-${str}`;
+}
+
+/** User-facing message for web-ifc / Emscripten aborts. */
+export function formatIfcLoadError(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err);
+  if (/aborted/i.test(msg)) {
+    return (
+      'IFC geometry engine crashed (WebAssembly Aborted). ' +
+      'This is often caused by loading the same model twice in WASM or missing wasm files. ' +
+      'Restart the app and try again.'
+    );
+  }
+  return msg || 'Failed to load IFC model';
 }

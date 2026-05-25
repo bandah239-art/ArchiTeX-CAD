@@ -8,3 +8,9 @@ numpy>=1.24.0
 scipy>=1.11.0
 optuna>=3.5.0
 openseespy>=3.2.0; platform_system != "Windows"
+Anthropic
+Pillow
+
+# Optional extras (not required for npm run electron:dev):
+#   pip install -r python/requirements-wntr.txt   # EPANET pipe network (needs MSVC on Windows)
+#   pip install -r python/requirements-geo.txt    # GDAL stack (needs OSGeo4W on Windows)

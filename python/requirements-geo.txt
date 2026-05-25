@@ -1,0 +1,12 @@
+# Optional — requires GDAL on the machine (OSGeo4W on Windows).
+# Fiona cannot build from source without GDAL_CONFIG or GDAL_VERSION set.
+#
+# Windows (PowerShell, after OSGeo4W install):
+#   $env:GDAL_VERSION = "3.8.0"   # match your OSGeo4W GDAL version
+#   py -3 -m pip install -r python/requirements-geo.txt
+#
+# Prefer binary wheels; use Python 3.11–3.12 if cp314 wheels are unavailable.
+
+rasterio>=1.3.0
+pyproj>=3.6.0
+fiona>=1.9.0

@@ -78,10 +78,10 @@ def calculate_foundation(inputs: dict[str, Any]) -> dict[str, Any]:
         f"B = {round_value(b, 1)} m; L = {round_value(l, 1)} m", "m", "Foundation design", "info"))
 
     # Step 5
-    w_actual = b * l * df * gamma_conc
+    w_actual = b * l * (d_conc / 1000) * gamma_conc
     steps.append(_step(5, "Actual Self-Weight",
-        "W_actual = B·L·D_f·25",
-        f"W = {round_value(b,1)}×{round_value(l,1)}×{df}×25",
+        "W_actual = B·L·(d_conc/1000)·25",
+        f"W = {round_value(b,1)}×{round_value(l,1)}×({d_conc}/1000)×25",
         f"W_actual = {round_value(w_actual, 1)} kN", "kN", "Foundation design", "info"))
 
     # Step 6
@@ -180,7 +180,8 @@ def calculate_foundation(inputs: dict[str, Any]) -> dict[str, Any]:
         u1 = 2 * (b_col + h_col) + 2 * math.pi * (2 * d)
         beta = 1.15
         v_ed = beta * n_col * 1000 / (u1 * d)
-        v_rd_c = 0.18 / GAMMA_C * (100 * 0.0013 * fck) ** (1 / 3) * 1000
+        k_shear = min(2.0, 1.0 + math.sqrt(200.0 / d))
+        v_rd_c = 0.18 / GAMMA_C * k_shear * (100 * 0.0013 * fck) ** (1 / 3)
         punch_ok = v_ed <= v_rd_c
         if not punch_ok:
             status = "fail"
@@ -196,7 +197,9 @@ def calculate_foundation(inputs: dict[str, Any]) -> dict[str, Any]:
     lx_crit = max(lx - d / 1000, 0.1)
     v_ed_force = q_max * lx_crit * l
     v_ed = v_ed_force * 1000 / (l * 1000 * d)
-    v_rd_c = 0.18 / GAMMA_C * (100 * as_design / (1000 * d) * fck) ** (1 / 3) * 1000
+    k_shear = min(2.0, 1.0 + math.sqrt(200.0 / d))
+    rho_l = min(0.02, as_design / (1000 * d))
+    v_rd_c = 0.18 / GAMMA_C * k_shear * (100 * rho_l * fck) ** (1 / 3)
     oneway_ok = v_ed <= v_rd_c
     if not oneway_ok:
         status = "fail"
@@ -204,7 +207,7 @@ def calculate_foundation(inputs: dict[str, Any]) -> dict[str, Any]:
     steps.append(_step(17, "One-Way Shear Check",
         "VEd = q_max·(lx - d)·L; vEd = VEd/(L·d)",
         f"VEd = {round_value(v_ed_force, 1)} kN",
-        f"vEd = {round_value(v_ed, 3)} N/mm² {'✓' if oneway_ok else '✗'}", "N/mm²", "Eurocode 2: Clause 6.2", "pass" if oneway_ok else "fail"))
+        f"vEd = {round_value(v_ed, 3)} {'✓' if oneway_ok else '✗'} (vRd,c = {round_value(v_rd_c, 3)})", "N/mm²", "Eurocode 2: Clause 6.2", "pass" if oneway_ok else "fail"))
 
     ftype_label = {"pad": "Pad Foundation", "strip": "Strip Foundation", "raft": "Raft Foundation"}.get(ftype, "Pad Foundation")
 

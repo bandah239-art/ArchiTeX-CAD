@@ -7,20 +7,33 @@ import crypto from 'crypto';
 import { app } from 'electron';
 
 const require = createRequire(import.meta.url);
-const Database = require('better-sqlite3');
 
 let db = null;
+let dbError = null;
+
+function loadDatabase() {
+  if (db || dbError) return db;
+  try {
+    const Database = require('better-sqlite3');
+    db = new Database(getDbPath());
+    initSchema(db);
+  } catch (err) {
+    dbError = err;
+    console.warn('[Offline] SQLite unavailable:', err.message);
+  }
+  return db;
+}
 
 function getDbPath() {
   return path.join(app.getPath('userData'), 'infra-offline.db');
 }
 
 function getDb() {
-  if (!db) {
-    db = new Database(getDbPath());
-    initSchema(db);
+  const database = loadDatabase();
+  if (!database) {
+    throw new Error(dbError?.message ?? 'Offline database unavailable');
   }
-  return db;
+  return database;
 }
 
 function initSchema(database) {
@@ -69,21 +82,35 @@ export function recordChange(table, recordId, operation, data) {
 }
 
 export function getUnsyncedCount() {
-  const row = getDb().prepare('SELECT COUNT(*) as n FROM sync_queue WHERE synced = 0').get();
-  return row?.n ?? 0;
+  try {
+    const row = getDb().prepare('SELECT COUNT(*) as n FROM sync_queue WHERE synced = 0').get();
+    return row?.n ?? 0;
+  } catch {
+    return 0;
+  }
 }
 
 export function getSyncStatus() {
-  const database = getDb();
-  const pending = database.prepare('SELECT COUNT(*) as n FROM sync_queue WHERE synced = 0').get();
-  const projects = database.prepare('SELECT COUNT(*) as n FROM projects').get();
-  const calcs = database.prepare('SELECT COUNT(*) as n FROM calculations').get();
-  return {
-    db_path: getDbPath(),
-    pending: pending?.n ?? 0,
-    projects: projects?.n ?? 0,
-    calculations: calcs?.n ?? 0,
-  };
+  try {
+    const database = getDb();
+    const pending = database.prepare('SELECT COUNT(*) as n FROM sync_queue WHERE synced = 0').get();
+    const projects = database.prepare('SELECT COUNT(*) as n FROM projects').get();
+    const calcs = database.prepare('SELECT COUNT(*) as n FROM calculations').get();
+    return {
+      db_path: getDbPath(),
+      pending: pending?.n ?? 0,
+      projects: projects?.n ?? 0,
+      calculations: calcs?.n ?? 0,
+    };
+  } catch (err) {
+    return {
+      db_path: getDbPath(),
+      pending: 0,
+      projects: 0,
+      calculations: 0,
+      error: err instanceof Error ? err.message : 'Offline DB unavailable',
+    };
+  }
 }
 
 export async function syncToServer(apiBase, authToken = '') {
@@ -123,7 +150,7 @@ export async function syncToServer(apiBase, authToken = '') {
     try {
       const payload = change.payload ?? change;
       if (payload?.name || payload?.project_id) {
-        saveProjectLocal(payload.id ?? change.id, payload);
+        saveProjectLocal(payload.id ?? change.id, payload, false);
         pulled++;
       }
     } catch {
@@ -138,14 +165,16 @@ export async function syncToServer(apiBase, authToken = '') {
   };
 }
 
-export function saveProjectLocal(id, data) {
+export function saveProjectLocal(id, data, record = true) {
   const database = getDb();
   database
     .prepare(
       `INSERT OR REPLACE INTO projects (id, name, data, updated_at) VALUES (?, ?, ?, ?)`
     )
     .run(id ?? crypto.randomUUID(), data.name ?? 'Project', JSON.stringify(data), Date.now());
-  recordChange('projects', id, 'UPDATE', data);
+  if (record) {
+    recordChange('projects', id, 'UPDATE', data);
+  }
 }
 
 export function loadProjectsLocal() {

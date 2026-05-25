@@ -13,6 +13,24 @@ export default defineConfig({
   base: './',
   server: {
     port: 5173,
+    // OneDrive / cloud-sync folders fire rapid file watchers → HMR storms.
+    watch: {
+      awaitWriteFinish: {
+        stabilityThreshold: 400,
+        pollInterval: 100,
+      },
+      ignored: [
+        '**/node_modules/**',
+        '**/.git/**',
+        '**/.cursor/**',
+        '**/agent-transcripts/**',
+        '**/python/**',
+        '**/*.db',
+        '**/*.sqlite',
+        '**/dist/**',
+        '**/dist-electron/**',
+      ],
+    },
   },
   optimizeDeps: {
     exclude: ['web-ifc'],

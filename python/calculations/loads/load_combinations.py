@@ -1,123 +1,216 @@
-"""Load combinations per Eurocode 0 and ACI 318."""
+"""Load combinations generator — EC0, ACI 318, BS 8110 (production response)."""
+
+from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any
 
 from calculations.utils.formatters import round_value
 
+UNIT_DEFAULT = "kN/m"
 
-def _step(n, title, formula, sub, result, unit="", ref="", status="info"):
+
+def _norm_code(code: str) -> str:
+    c = (code or "EC0").upper().replace(" ", "").replace("-", "")
+    if c in ("EC0", "EC", "EUROCODE", "EN1990"):
+        return "EC0"
+    if c in ("ACI318", "ACI"):
+        return "ACI318"
+    if c in ("BS8110", "BS"):
+        return "BS8110"
+    raise ValueError(f"Unsupported design code: {code}. Use EC0, ACI318, or BS8110.")
+
+
+def _substitution(expr: str, gk: float, qk: float, wk: float, ek: float) -> str:
+    return (
+        expr.replace("Gk", f"({gk})")
+        .replace("Qk", f"({qk})")
+        .replace("Wk", f"({wk})")
+        .replace("Ek", f"({ek})")
+        .replace("D", f"({gk})")
+        .replace("L", f"({qk})")
+        .replace("W", f"({wk})")
+        .replace("E", f"({ek})")
+    )
+
+
+def _combo(
+    combo_number: int | str,
+    expression: str,
+    result: float,
+    unit: str,
+    reference: str,
+    gk: float,
+    qk: float,
+    wk: float,
+    ek: float,
+    governing: bool = False,
+) -> dict[str, Any]:
     return {
-        "step_number": n, "title": title, "formula": formula,
-        "substitution": sub, "result": result, "unit": unit,
-        "reference": ref, "status": status,
+        "combo_number": combo_number,
+        "expression": expression,
+        "substitution": _substitution(expression, gk, qk, wk, ek),
+        "result": round_value(result, 4),
+        "unit": unit,
+        "reference": reference,
+        "governing": governing,
+    }
+
+
+def _mark_governing(combos: list[dict[str, Any]]) -> dict[str, Any]:
+    if not combos:
+        raise ValueError("No combinations generated")
+    best = max(combos, key=lambda c: c["result"])
+    for c in combos:
+        c["governing"] = c is best
+    return best
+
+
+def _ec0_combinations(gk: float, qk: float, wk: float, ek: float, unit: str) -> tuple[list, list]:
+    uls_defs = [
+        (1, "1.35·Gk + 1.50·Qk", 1.35 * gk + 1.50 * qk, "EC0 Table A1.2(B) — Combo 1"),
+        (2, "1.35·Gk + 1.50·Qk + 0.90·Wk", 1.35 * gk + 1.50 * qk + 0.90 * wk, "EC0 Table A1.2(B) — Combo 2"),
+        (3, "1.35·Gk + 1.05·Qk + 1.50·Wk", 1.35 * gk + 1.05 * qk + 1.50 * wk, "EC0 Table A1.2(B) — Combo 3"),
+        (4, "1.00·Gk + 1.50·Wk", 1.00 * gk + 1.50 * wk, "EC0 Table A1.2(B) — Combo 4"),
+        (5, "1.00·Gk + 1.00·Ek + 0.30·Qk", 1.00 * gk + 1.00 * ek + 0.30 * qk, "EC0 Table A1.2(B) — Combo 5"),
+    ]
+    uls = [_combo(n, e, r, unit, ref, gk, qk, wk, ek) for n, e, r, ref in uls_defs]
+    _mark_governing(uls)
+
+    sls_defs = [
+        ("characteristic", "1.0·Gk + 1.0·Qk + 0.6·Wk", 1.0 * gk + 1.0 * qk + 0.6 * wk, "EC0 — Characteristic"),
+        ("frequent", "1.0·Gk + 0.5·Qk + 0.2·Wk", 1.0 * gk + 0.5 * qk + 0.2 * wk, "EC0 — Frequent"),
+        ("quasi-permanent", "1.0·Gk + 0.3·Qk", 1.0 * gk + 0.3 * qk, "EC0 — Quasi-permanent"),
+    ]
+    sls = [_combo(n, e, r, unit, ref, gk, qk, wk, ek) for n, e, r, ref in sls_defs]
+    _mark_governing(sls)
+    return uls, sls
+
+
+def _aci_combinations(gk: float, qk: float, wk: float, ek: float, unit: str) -> tuple[list, list]:
+    uls_defs = [
+        (1, "1.4·D", 1.4 * gk, "ACI 318-19 §5.3 — Combo 1"),
+        (2, "1.2·D + 1.6·L", 1.2 * gk + 1.6 * qk, "ACI 318-19 §5.3 — Combo 2"),
+        (3, "1.2·D + 1.6·W + 1.0·L", 1.2 * gk + 1.6 * wk + 1.0 * qk, "ACI 318-19 §5.3 — Combo 3"),
+        (4, "0.9·D + 1.6·W", 0.9 * gk + 1.6 * wk, "ACI 318-19 §5.3 — Combo 4"),
+        (5, "1.2·D + 1.0·E + 1.0·L", 1.2 * gk + 1.0 * ek + 1.0 * qk, "ACI 318-19 §5.3 — Combo 5"),
+    ]
+    uls = [_combo(n, e, r, unit, ref, gk, qk, wk, ek) for n, e, r, ref in uls_defs]
+    _mark_governing(uls)
+    return uls, []
+
+
+def _bs_combinations(gk: float, qk: float, wk: float, ek: float, unit: str) -> tuple[list, list]:
+    _ = ek
+    uls_defs = [
+        (1, "1.4·Gk + 1.6·Qk", 1.4 * gk + 1.6 * qk, "BS 8110 Table 2.1 — Combo 1"),
+        (2, "1.2·Gk + 1.2·Qk + 1.2·Wk", 1.2 * gk + 1.2 * qk + 1.2 * wk, "BS 8110 Table 2.1 — Combo 2"),
+        (3, "1.0·Gk + 1.4·Wk", 1.0 * gk + 1.4 * wk, "BS 8110 Table 2.1 — Combo 3"),
+    ]
+    uls = [_combo(n, e, r, unit, ref, gk, qk, wk, ek) for n, e, r, ref in uls_defs]
+    _mark_governing(uls)
+    return uls, []
+
+
+def generate_load_combinations(payload: dict[str, Any]) -> dict[str, Any]:
+    gk = float(payload.get("gk", payload.get("dead_load_g", 0)))
+    qk = float(payload.get("qk", payload.get("imposed_load_q", 0)))
+    wk = float(payload.get("wk", payload.get("wind_load_w", 0)))
+    ek = float(payload.get("ek", payload.get("seismic_load", 0)))
+    code = _norm_code(str(payload.get("code", payload.get("design_code", "EC0"))))
+    unit = str(payload.get("unit", UNIT_DEFAULT))
+
+    if code == "EC0":
+        uls, sls = _ec0_combinations(gk, qk, wk, ek, unit)
+    elif code == "ACI318":
+        uls, sls = _aci_combinations(gk, qk, wk, ek, unit)
+    else:
+        uls, sls = _bs_combinations(gk, qk, wk, ek, unit)
+
+    gov_uls = next(c for c in uls if c["governing"])
+    gov_sls = next((c for c in sls if c["governing"]), None)
+
+    governing_uls = {
+        "value": gov_uls["result"],
+        "expression": gov_uls["expression"],
+        "combo": gov_uls["combo_number"],
+    }
+    governing_sls = (
+        {
+            "value": gov_sls["result"],
+            "expression": gov_sls["expression"],
+            "combo": gov_sls["combo_number"],
+        }
+        if gov_sls
+        else None
+    )
+
+    design = round_value(gov_uls["result"], 4)
+
+    return {
+        "code": code,
+        "inputs": {"gk": gk, "qk": qk, "wk": wk, "ek": ek},
+        "unit": unit,
+        "uls_combinations": uls,
+        "sls_combinations": sls,
+        "governing_uls": governing_uls,
+        "governing_sls": governing_sls,
+        "feed_to_calculators": {
+            "beam_design_load": design,
+            "slab_design_load": design,
+            "column_design_load": design,
+            "foundation_design_load": design,
+        },
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 
 def calculate_loads(inputs: dict[str, Any]) -> dict[str, Any]:
-    gk = inputs.get("dead_load_g", inputs.get("dead_load", 0))
-    qk = inputs.get("imposed_load_q", inputs.get("imposed_load", 0))
-    wk = inputs.get("wind_load_w", inputs.get("wind_load", 0))
-    sk = inputs.get("snow_load_s", 0)
-    code = inputs.get("design_code", "eurocode")
-    psi0, psi1, psi2 = 0.7, 0.5, 0.3
-    xi = 0.85
+    """Legacy /calculate/loads response (steps format) — uses production generator."""
+    payload = {
+        "gk": inputs.get("dead_load_g", inputs.get("dead_load", 0)),
+        "qk": inputs.get("imposed_load_q", inputs.get("imposed_load", 0)),
+        "wk": inputs.get("wind_load_w", inputs.get("wind_load", 0)),
+        "ek": 0.0,
+        "code": "ACI318" if inputs.get("design_code") == "aci318" else "EC0",
+        "unit": "kN/m" if inputs.get("load_type", "udl") == "udl" else "kN/m²",
+    }
+    gen = generate_load_combinations(payload)
+    gov = gen["governing_uls"]
+    sls_rows = gen.get("sls_combinations") or []
+    sls_char = next((s for s in sls_rows if s["combo_number"] == "characteristic"), None)
+    sls_freq = next((s for s in sls_rows if s["combo_number"] == "frequent"), None)
+    sls_qp = next((s for s in sls_rows if s["combo_number"] == "quasi-permanent"), None)
 
-    steps: list[dict] = []
-    unit = "kN/m" if inputs.get("load_type", "udl") == "udl" else "kN/m²"
-
-    steps.append(_step(1, "Characteristic Loads",
-        "Gk, Qk, Wk, Sk",
-        f"Gk={gk}, Qk={qk}, Wk={wk}, Sk={sk}",
-        f"Gk={gk} {unit}; Qk={qk} {unit}; Wk={wk} {unit}", unit, "Eurocode 0 / ACI 318", "info"))
-
-    if code == "aci318":
-        combos = {
-            "Combo 1 (1.4D)": 1.4 * gk,
-            "Combo 2 (1.2D+1.6L)": 1.2 * gk + 1.6 * qk,
-            "Combo 3 (1.2D+1.6S+max(L,0.5W)": 1.2 * gk + 1.6 * sk + max(qk, 0.5 * wk),
-            "Combo 4 (1.2D+1.0W+L+0.5S)": 1.2 * gk + 1.0 * wk + qk + 0.5 * sk,
-            "Combo 5 (0.9D+1.0W)": 0.9 * gk + 1.0 * wk,
+    steps = [
+        {
+            "step_number": 1,
+            "title": "Load combination generator",
+            "formula": gov["expression"],
+            "substitution": next(
+                (c["substitution"] for c in gen["uls_combinations"] if c["governing"]),
+                "",
+            ),
+            "result": f"{gov['value']} {gen['unit']}",
+            "unit": gen["unit"],
+            "reference": gen["code"],
+            "status": "pass",
         }
-        ref = "ACI 318-19"
-    else:
-        c1 = 1.35 * gk + 1.50 * qk
-        c2 = 1.35 * gk + 1.50 * wk + 1.05 * qk
-        c3 = 1.00 * gk + 1.50 * wk
-        c4 = 1.35 * gk + 1.50 * qk + 0.90 * wk
-        c_610a = 1.35 * gk + 1.50 * psi0 * qk
-        c_610b = xi * 1.35 * gk + 1.50 * qk
-        combos = {
-            "Combo 1 (Gravity dominant)": c1,
-            "Combo 2 (Wind unfavourable)": c2,
-            "Combo 3 (Wind favourable)": c3,
-            "Combo 4 (Imposed + wind)": c4,
-            "Combo 5 (Eq 6.10a)": c_610a,
-            "Combo 6 (Eq 6.10b)": c_610b,
-        }
-        ref = "Eurocode 0: Eq. 6.10"
-
-    steps.append(_step(2, "ULS Fundamental Combinations",
-        "EN 1990 Eq. 6.10 combinations" if code != "aci318" else "ACI 318 strength combinations",
-        "; ".join(f"{k.split('(')[0].strip()}: {round_value(v,2)}" for k, v in list(combos.items())[:4]),
-        "See summary table below", unit, ref, "info"))
-
-    alt_governing = min(combos.get("Combo 5 (Eq 6.10a)", 999), combos.get("Combo 6 (Eq 6.10b)", 999)) if code != "aci318" else None
-    if alt_governing is not None:
-        steps.append(_step(3, "Alternative ULS Combinations",
-            "Eq 6.10a: 1.35Gk + 1.50ψ0Qk; Eq 6.10b: ξ·1.35Gk + 1.50Qk",
-            f"ψ0={psi0}, ξ={xi}",
-            f"Governing alternative = {round_value(alt_governing, 2)} {unit}", unit, "Eurocode 0: Eq. 6.10a/b", "info"))
-
-    sls_char = gk + qk
-    sls_freq = gk + psi1 * qk
-    sls_qp = gk + psi2 * qk
-
-    steps.append(_step(4, "SLS Characteristic Combination",
-        "NSls = Gk + Qk", f"Gk + Qk = {gk} + {qk}",
-        f"NSls = {round_value(sls_char, 2)} {unit}", unit, "Eurocode 0: Eq. 6.14b", "info"))
-
-    steps.append(_step(5, "SLS Frequent Combination",
-        "NSls,freq = Gk + ψ1·Qk", f"ψ1={psi1}",
-        f"NSls,freq = {round_value(sls_freq, 2)} {unit}", unit, "Eurocode 0: Eq. 6.16b", "info"))
-
-    steps.append(_step(6, "SLS Quasi-Permanent Combination",
-        "NSls,qp = Gk + ψ2·Qk", f"ψ2={psi2}",
-        f"NSls,qp = {round_value(sls_qp, 2)} {unit}", unit, "Eurocode 0: Eq. 6.16c", "info"))
-
-    governing_name = max(combos, key=combos.get)
-    governing_val = combos[governing_name]
-
-    steps.append(_step(7, "Governing ULS Design Load",
-        "wEd = max(all ULS combinations)",
-        f"Governing: {governing_name}",
-        f"wEd = {round_value(governing_val, 2)} {unit} ← {governing_name} governs ✓", unit, ref, "pass"))
-
-    combo_lines = [f"{name}: {round_value(val, 2)} {unit}" for name, val in combos.items()]
-    steps.append(_step(8, "Summary Table",
-        "All combinations tabulated",
-        "; ".join(combo_lines[:4]),
-        f"Governing ULS = {round_value(governing_val, 2)} {unit}", unit, ref, "info"))
+    ]
 
     return {
         "status": "pass",
         "summary": {
-            "dead_load": gk,
-            "imposed_load": qk,
-            "wind_load": wk,
-            "snow_load": sk,
-            "governing_uls_kn": round_value(governing_val, 2),
-            "governing_combination": governing_name,
-            "sls_characteristic": round_value(sls_char, 2),
-            "sls_frequent": round_value(sls_freq, 2),
-            "sls_quasi_permanent": round_value(sls_qp, 2),
-            "combo_1_gravity": round_value(combos.get("Combo 1 (Gravity dominant)", combos.get("Combo 1 (1.4D)", 0)), 2),
-            "combo_2_wind_unfav": round_value(combos.get("Combo 2 (Wind unfavourable)", combos.get("Combo 2 (1.2D+1.6L)", 0)), 2),
-            "combo_3_wind_fav": round_value(combos.get("Combo 3 (Wind favourable)", combos.get("Combo 3 (1.2D+1.6S+max(L,0.5W)", 0)), 2),
+            "governing_uls_kn": gov["value"],
+            "governing_combination": f"Combo {gov['combo']}",
+            "sls_characteristic": sls_char["result"] if sls_char else 0,
+            "sls_frequent": sls_freq["result"] if sls_freq else 0,
+            "sls_quasi_permanent": sls_qp["result"] if sls_qp else 0,
             "load_analysis": "COMPLETE ✓",
         },
         "steps": steps,
         "warnings": [],
         "errors": [],
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": gen["timestamp"],
+        "load_combinations": gen,
     }

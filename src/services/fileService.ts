@@ -34,5 +34,27 @@ export async function openIFCFile(): Promise<string | null> {
   if (window.electronAPI) {
     return window.electronAPI.openFileDialog();
   }
-  return null;
+
+  // Browser fallback: use a hidden file input to let the user pick an IFC file
+  return new Promise<string | null>((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.ifc';
+    input.style.display = 'none';
+    input.addEventListener('change', () => {
+      const file = input.files?.[0];
+      if (file) {
+        resolve(URL.createObjectURL(file));
+      } else {
+        resolve(null);
+      }
+      input.remove();
+    });
+    input.addEventListener('cancel', () => {
+      resolve(null);
+      input.remove();
+    });
+    document.body.appendChild(input);
+    input.click();
+  });
 }

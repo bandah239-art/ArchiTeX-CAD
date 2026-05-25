@@ -1,4 +1,5 @@
-import type { CalculationResult } from '../types/calculations';
+import type { CalculationResult, CalculationStep } from '../types/calculations';
+import { useEngineerReviewStore } from '../store/engineerReviewStore';
 
 export async function exportToPDF(result: CalculationResult): Promise<void> {
   const savePath = window.electronAPI
@@ -24,15 +25,20 @@ export async function exportToExcel(result: CalculationResult): Promise<void> {
 }
 
 function generateCSV(result: CalculationResult): string {
-  const lines = ['Step,Title,Formula,Substitution,Result,Reference'];
+  const lines = ['Step,Title,Formula,Substitution,Platform Result,Effective Result,Review Status,Override Reason,Reference'];
   for (const step of result.steps) {
+    const platform = step.platform_result ?? step.result;
+    const effective = step.engineer_override ?? platform;
     lines.push(
       [
         step.step_number,
         `"${step.title}"`,
         `"${step.formula}"`,
         `"${step.substitution}"`,
-        `"${step.result}"`,
+        `"${platform}"`,
+        `"${effective}"`,
+        `"${step.review_status ?? 'pending'}"`,
+        `"${step.override_reason ?? ''}"`,
         `"${step.reference}"`,
       ].join(',')
     );
@@ -40,24 +46,39 @@ function generateCSV(result: CalculationResult): string {
   return lines.join('\n');
 }
 
-function downloadAsHTML(result: CalculationResult, filename = 'calculation-report.html'): void {
-  const stepsHtml = result.steps
-    .map(
-      (s) => `
+function stepHtml(step: CalculationStep, reviewKey: string, stepNum: number): string {
+  const { stepReviews } = useEngineerReviewStore.getState();
+  const stored = stepReviews[`${reviewKey}:${stepNum}`];
+  const platform = step.platform_result ?? step.result;
+  const overridden = stored?.status === 'overridden';
+  const effective =
+    overridden && stored?.overrideValue
+      ? `${stored.overrideValue}${step.unit ? ` ${step.unit}` : ''}`
+      : platform;
+  return `
     <div style="border:1px solid #ddd;padding:15px;margin:10px 0;border-radius:4px;">
-      <h3>Step ${s.step_number}: ${s.title}</h3>
-      <p style="font-family:monospace;color:#0f3460;">${s.formula}</p>
-      <p>${s.substitution}</p>
-      <p><strong>${s.result}</strong></p>
-      <p style="font-size:12px;color:#666;">Ref: ${s.reference}</p>
-    </div>`
-    )
-    .join('');
+      <h3>Step ${step.step_number}: ${step.title}</h3>
+      <p style="font-family:monospace;color:#0f3460;">${step.formula}</p>
+      <p>${step.substitution}</p>
+      <p><strong>${effective}</strong></p>
+      ${overridden ? `<p style="color:#b45309;">Platform: ${platform}<br/>Reason: ${stored?.overrideReason ?? '—'}</p>` : ''}
+      ${stored?.status === 'flagged' ? `<p style="color:#dc2626;">Flagged: ${stored.flagNote}</p>` : ''}
+      <p style="font-size:12px;color:#666;">Ref: ${step.reference}</p>
+    </div>`;
+}
+
+function downloadAsHTML(result: CalculationResult, filename = 'calculation-report.html'): void {
+  const { engineerName, registrationNumber } = useEngineerReviewStore.getState();
+  const reviewer = [engineerName, registrationNumber].filter(Boolean).join(' — ');
+  const stepsHtml = result.steps.map((s) => stepHtml(s, 'calc', s.step_number)).join('');
+  const review = result.review_summary;
 
   const html = `<!DOCTYPE html><html><head><title>INFRAFRICA Report</title></head>
 <body style="font-family:Arial,sans-serif;margin:40px;">
 <h1>INFRAFRICA Calculation Report</h1>
 <p>Status: <strong>${result.status.toUpperCase()}</strong></p>
+${reviewer ? `<p>Reviewed by: <strong>${reviewer}</strong></p>` : ''}
+${review ? `<p>Review summary: accepted ${review.accepted ?? 0}, overridden ${review.overridden ?? 0}, flagged ${review.flagged ?? 0}, pending ${review.pending ?? 0}</p>` : ''}
 <h2>Summary</h2>
 <pre>${JSON.stringify(result.summary, null, 2)}</pre>
 <h2>Steps</h2>${stepsHtml}

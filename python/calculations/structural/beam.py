@@ -245,8 +245,7 @@ def calculate_beam(inputs: dict[str, Any]) -> dict[str, Any]:
     v_ed = ved_n / (b * d)
     k_shear = min(2.0, 1 + math.sqrt(200 / d))
     rho_l = as_req / (b * d)
-    v_rd_c = CRD_C * k_shear * (100 * rho_l * fck) ** (1 / 3) * 1000  # N/mm² → check in MPa scale
-    v_rd_c_mpa = v_rd_c / 1000 * 1000  # Convert to comparable units
+    v_rd_c_mpa = CRD_C * k_shear * (100 * rho_l * fck) ** (1 / 3)  # N/mm² (MPa)
     v_rd_c_kn = v_rd_c_mpa * b * d / 1000
 
     shear_links_required = v_ed > v_rd_c_mpa

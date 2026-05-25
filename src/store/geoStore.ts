@@ -285,7 +285,12 @@ export const useGeoStore = create<GeoState>((set, get) => ({
         grid_size: 64,
         cell_size_m: 30,
       });
-      set({ floodResult: result.summary as Record<string, unknown>, isFloodSimulating: false });
+      const summary = result.summary as Record<string, unknown>;
+      const floodGrid = (result as unknown as Record<string, unknown>).flood_grid;
+      set({
+        floodResult: floodGrid ? { ...summary, flood_grid: floodGrid } : summary,
+        isFloodSimulating: false,
+      });
     } catch (err) {
       set({
         error: err instanceof Error ? err.message : 'Flood simulation failed',

@@ -100,6 +100,14 @@ export const geoAPI = {
   cacheStatus: () => fetch(`${API_BASE}/geo/cache/status`).then((r) => r.json()),
 
   clearCache: () => post<{ cleared: number }>('/geo/cache/clear', {}),
+
+  terrain: (payload: GeoSitePayload) => post<Record<string, unknown>>('/geo/terrain', payload),
+
+  soil: (payload: GeoSitePayload) => post<Record<string, unknown>>('/geo/soil', payload),
+
+  climate: (payload: GeoSitePayload) => post<Record<string, unknown>>('/geo/climate', payload),
+
+  seismic: (payload: GeoSitePayload) => post<Record<string, unknown>>('/geo/seismic', payload),
 };
 
 export const aiAPI = {

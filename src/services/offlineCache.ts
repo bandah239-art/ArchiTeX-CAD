@@ -18,12 +18,17 @@ export async function cachedFetch<T>(
 }
 
 export function saveProjectMetaLocal(meta: Record<string, unknown>) {
-  localStorage.setItem('infra_last_project', JSON.stringify(meta));
-  fetch(apiUrl('/cache/project'), {
+  try {
+    localStorage.setItem('infra_last_project', JSON.stringify(meta));
+  } catch {
+    /* quota / private mode */
+  }
+  // Fire-and-forget; never blocks UI or throws on dashboard load.
+  void fetch(apiUrl('/cache/project'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(meta),
-  }).catch(() => null);
+  }).catch(() => undefined);
 }
 
 export function loadProjectMetaLocal(): Record<string, unknown> | null {

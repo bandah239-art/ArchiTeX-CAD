@@ -75,6 +75,9 @@ def simulate_flood_inundation(inputs: dict[str, Any]) -> dict[str, Any]:
     flood_mask = hand < depth_threshold
 
     flooded_m2 = float(np.sum(flood_mask)) * cell_m * cell_m
+    flood_depths = np.where(flood_mask, depth_threshold, 0.0)
+    extent = size * cell_m
+    origin = -extent / 2
 
     return {
         "status": "pass",
@@ -85,6 +88,13 @@ def simulate_flood_inundation(inputs: dict[str, Any]) -> dict[str, Any]:
             "flooded_area_ha": round(flooded_m2 / 10000, 3),
             "max_flood_depth_m": round(depth_threshold, 2),
             "method": "D8 routing + HAND approximation",
+        },
+        "flood_grid": {
+            "size": size,
+            "cell_size_m": cell_m,
+            "origin_x": origin,
+            "origin_z": origin,
+            "depths": flood_depths.tolist(),
         },
         "steps": [
             {

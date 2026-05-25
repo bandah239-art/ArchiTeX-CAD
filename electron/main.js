@@ -18,6 +18,37 @@ import {
 } from './offline-sync.js';
 
 const API_BASE = process.env.VITE_API_BASE ?? 'http://127.0.0.1:8000';
+const PYTHON_EXTERNAL = process.env.INFRA_PYTHON_EXTERNAL === '1';
+
+// Prevent crash when concurrently closes stdout/stderr (common in electron:dev).
+function ignorePipeErrors(stream) {
+  stream?.on?.('error', (err) => {
+    if (err?.code === 'EPIPE') return;
+  });
+}
+ignorePipeErrors(process.stdout);
+ignorePipeErrors(process.stderr);
+
+process.on('uncaughtException', (err) => {
+  if (err?.code === 'EPIPE') return;
+  console.error('Uncaught exception:', err);
+});
+
+function safeLog(...args) {
+  try {
+    console.log(...args);
+  } catch (err) {
+    if (err?.code !== 'EPIPE') throw err;
+  }
+}
+
+function safeWarn(...args) {
+  try {
+    console.warn(...args);
+  } catch (err) {
+    if (err?.code !== 'EPIPE') throw err;
+  }
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -46,7 +77,7 @@ function getPythonScriptPath() {
 
 function checkServerHealth(port) {
   return new Promise((resolve) => {
-    const req = http.get(`http://localhost:${port}/health`, (res) => {
+    const req = http.get(`http://127.0.0.1:${port}/health`, (res) => {
       resolve(res.statusCode === 200);
     });
     req.on('error', () => resolve(false));
@@ -62,7 +93,7 @@ function waitForServer(port, maxAttempts = 30, interval = 1000) {
     let attempts = 0;
 
     const check = () => {
-      const req = http.get(`http://localhost:${port}/health`, (res) => {
+      const req = http.get(`http://127.0.0.1:${port}/health`, (res) => {
         if (res.statusCode === 200) {
           resolve(true);
         } else {
@@ -98,30 +129,30 @@ function getPythonPipArgs() {
 
 function ensurePythonDependencies() {
   return new Promise((resolve) => {
-    if (!isDev) {
+    if (!isDev || PYTHON_EXTERNAL) {
       resolve();
       return;
     }
 
     const pythonDir = getPythonScriptPath();
     const { cmd, args } = getPythonPipArgs();
-    console.log('[Python] Checking dependencies...');
+    safeLog('[Python] Checking dependencies...');
 
     const proc = spawn(cmd, args, {
       cwd: pythonDir,
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: 'inherit',
       shell: process.platform === 'win32',
     });
 
     proc.on('close', (code) => {
       if (code !== 0) {
-        console.warn(`[Python] Dependency install exited with code ${code}`);
+        safeWarn(`[Python] Dependency install exited with code ${code}`);
       }
       resolve();
     });
 
     proc.on('error', (err) => {
-      console.warn('[Python] Dependency install failed:', err.message);
+      safeWarn('[Python] Dependency install failed:', err.message);
       resolve();
     });
   });
@@ -130,7 +161,7 @@ function ensurePythonDependencies() {
 function spawnPythonServer() {
   checkServerHealth(PYTHON_PORT).then((alreadyRunning) => {
     if (alreadyRunning) {
-      console.log('Python server already running on port', PYTHON_PORT);
+      safeLog('Python server already running on port', PYTHON_PORT);
       return;
     }
 
@@ -145,18 +176,18 @@ function spawnPythonServer() {
 
     pythonProcess.stdout?.on('data', (data) => {
       const message = data.toString().trim();
-      console.log(`[Python] ${message}`);
+      safeLog(`[Python] ${message}`);
       if (mainWindow) {
         mainWindow.webContents.send('python-server-log', message);
       }
     });
 
     pythonProcess.stderr?.on('data', (data) => {
-      console.error(`[Python Error] ${data.toString().trim()}`);
+      safeWarn(`[Python Error] ${data.toString().trim()}`);
     });
 
     pythonProcess.on('close', (code) => {
-      console.log(`Python server exited with code ${code}`);
+      safeLog(`Python server exited with code ${code}`);
       pythonProcess = null;
       if (mainWindow) {
         mainWindow.webContents.send('python-server-status', { running: false, code });
@@ -173,23 +204,37 @@ function killPythonServer() {
 }
 
 async function getDevServerUrl() {
-  for (const port of [5173, 5174, 5175]) {
-    try {
-      const ok = await new Promise((resolve) => {
-        const req = http.get(`http://localhost:${port}`, (res) => {
-          resolve(res.statusCode === 200);
+  const ports = [5173, 5174, 5175];
+  const maxAttempts = 45;
+  const delay = 1000;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    safeLog(`[Electron] Checking dev server ports (attempt ${attempt}/${maxAttempts})...`);
+    for (const port of ports) {
+      try {
+        const ok = await new Promise((resolve) => {
+          const req = http.get(`http://localhost:${port}`, (res) => {
+            resolve(res.statusCode === 200);
+          });
+          req.on('error', () => resolve(false));
+          req.setTimeout(800, () => {
+            req.destroy();
+            resolve(false);
+          });
         });
-        req.on('error', () => resolve(false));
-        req.setTimeout(1000, () => {
-          req.destroy();
-          resolve(false);
-        });
-      });
-      if (ok) return `http://localhost:${port}`;
-    } catch {
-      // try next port
+        if (ok) {
+          safeLog(`[Electron] Found active dev server on port ${port}`);
+          return `http://localhost:${port}`;
+        }
+      } catch {
+        // try next port
+      }
+    }
+    if (attempt < maxAttempts) {
+      await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
+  safeLog('[Electron] No active dev server found, falling back to default.');
   return 'http://localhost:5173';
 }
 
@@ -199,7 +244,6 @@ function createWindow() {
   const preloadPath = fs.existsSync(preloadCjs) ? preloadCjs : preloadJs;
 
   // #region agent log
-  fetch('http://127.0.0.1:7820/ingest/7d513013-2365-472f-b514-5c535ee848a3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9f3587'},body:JSON.stringify({sessionId:'9f3587',location:'electron/main.js:createWindow',message:'preload path resolved',data:{preloadPath,existsCjs:fs.existsSync(preloadCjs),existsJs:fs.existsSync(preloadJs)},timestamp:Date.now(),hypothesisId:'A-B-C'})}).catch(()=>{});
   // #endregion
 
   mainWindow = new BrowserWindow({
@@ -270,7 +314,7 @@ ipcMain.handle('get-app-version', () => app.getVersion());
 
 ipcMain.handle('python-server-status', async () => {
   return new Promise((resolve) => {
-    const req = http.get(`http://localhost:${PYTHON_PORT}/health`, (res) => {
+    const req = http.get(`http://127.0.0.1:${PYTHON_PORT}/health`, (res) => {
       let data = '';
       res.on('data', (chunk) => { data += chunk; });
       res.on('end', () => {
@@ -310,7 +354,7 @@ app.whenReady().then(async () => {
         responseHeaders: {
           ...details.responseHeaders,
           'Content-Security-Policy': [
-            "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.openstreetmap.org;",
+            "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' blob: http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.openstreetmap.org; font-src 'self' data:; worker-src 'self' blob:;",
           ],
         },
       });
@@ -323,7 +367,7 @@ app.whenReady().then(async () => {
     spawnPythonServer();
   } else {
     const ok = await checkServerHealth(PYTHON_PORT);
-    console.log(
+    safeLog(
       ok
         ? `Using external Python server on port ${PYTHON_PORT}`
         : `Warning: INFRA_PYTHON_EXTERNAL set but no server on port ${PYTHON_PORT}`
@@ -331,11 +375,11 @@ app.whenReady().then(async () => {
   }
 
   try {
-    await waitForServer(PYTHON_PORT);
-    console.log('Python calculation server is ready');
+    await waitForServer(PYTHON_PORT, PYTHON_EXTERNAL ? 60 : 30);
+    safeLog('Python calculation server is ready');
     createWindow();
   } catch (err) {
-    console.error('Failed to start Python server:', err.message);
+    safeWarn('Failed to start Python server:', err.message);
     createWindow();
   }
 

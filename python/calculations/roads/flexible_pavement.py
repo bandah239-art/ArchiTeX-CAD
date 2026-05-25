@@ -72,7 +72,7 @@ def _design_layers(sn: float, m: float) -> tuple[int, int, int]:
     remaining = max(sn - sn1, 0.5)
     # Solve equal base/subbase thickness to consume remaining SN
     coeff = (a2 + a3) * m / 25.4
-    d_base_mm = remaining / coeff * 25.4
+    d_base_mm = remaining / coeff
     d2 = max(150, int(round(d_base_mm * 0.55 / 25) * 25))
     d3 = max(150, int(round(d_base_mm * 0.45 / 25) * 25))
     # Cap at SATCC typical maximums for secondary roads

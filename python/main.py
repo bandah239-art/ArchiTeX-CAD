@@ -8,10 +8,35 @@ from calculations.structural.beam import calculate_beam
 from calculations.structural.slab import calculate_slab
 from calculations.structural.column import calculate_column
 from calculations.structural.foundation import calculate_foundation
-from calculations.loads.load_combinations import calculate_loads
+from calculations.structural.bearings import calculate_bearing
+from data.african_conditions import apply_local_adjustments
+from calculations.loads.load_combinations import calculate_loads, generate_load_combinations
+from calculations.core.engineer_control import wrap_calculation_result
+from calculations.pressure.foundation_bearing import calculate_foundation_bearing
+from calculations.pressure.lateral_earth import calculate_lateral_earth
+from calculations.pressure.wind_distribution import calculate_wind_distribution
+from calculations.pressure.boussinesq import calculate_boussinesq
+from calculations.pressure.bridge_hydrostatic import calculate_bridge_hydrostatic
+from calculations.pressure.bridge_hydrodynamic import calculate_bridge_hydrodynamic
+from calculations.pressure.bridge_foundation import calculate_bridge_foundation
+from calculations.pressure.pavement_pressure import calculate_pavement_pressure
+from calculations.pressure.pipe_pressure import calculate_pipe_pressure
+from calculations.pressure.tank_pressure import calculate_tank_pressure
+from calculations.pressure.consolidation import calculate_consolidation
 from calculations.loads.wind_loads import calculate_wind_loads
-from calculations.civil.pavement import calculate_pavement
-from calculations.civil.drainage import calculate_drainage
+from calculations.roads.flexible_pavement import calculate_pavement
+from calculations.roads.hydrology import calculate_drainage
+from calculations.roads.geometric_design import calculate_geometric_design
+from calculations.roads.traffic_load import calculate_traffic_load
+from calculations.materials.selector import recommend_material
+from data.african_conditions import apply_local_adjustments
+
+from vision.image_processor import process_image
+from vision.structure_analyser import analyse_structure
+from vision.multi_image_analyser import analyse_multi_image
+from vision.cad_generator import CADGenerator
+from vision.report_generator import generate_markdown_report
+
 from boq.quantity_extractor import extract_quantities
 from boq.boq_compiler import compile_boq
 from boq.excel_generator import generate_boq_excel_bytes
@@ -23,6 +48,7 @@ from geo.terrain_analyser import analyse_terrain
 from geo.soil_intelligence import analyse_soil
 from geo.climate_intelligence import analyse_climate
 from geo.seismic_intelligence import analyse_seismic
+from geo.site_report import generate_site_report
 from bim.ifc_to_boq import extract_from_bim
 from bim.ifc_geometry import parse_ifc_file, parse_ifc_bytes, HAS_IFCOPENSHELL
 from bim.ifc_export import export_ifc_from_elements
@@ -70,7 +96,13 @@ from sync.mobile_sync import list_sync_items, receive_sync_item
 from mobile.quick_calculators import concrete_mix, quick_beam_check, rebar_weight
 from calculations.wash.water_demand import calculate_water_demand
 from calculations.wash.borehole import calculate_borehole
-from calculations.wash.sewerage import calculate_sewerage
+from calculations.wash.sewer_design import calculate_sewer_design
+from calculations.wash.pipe_network import analyze_pipe_network
+from calculations.wash.treatment_plant import calculate_treatment_plant
+from calculations.geo.bearing_capacity import calculate_bearing_capacity
+from calculations.geo.settlement import calculate_settlement
+from calculations.geo.slope_stability import calculate_slope_stability
+from calculations.geo.site_classification import calculate_site_classification
 from calculations.energy.solar_pv import calculate_solar_pv
 from calculations.energy.battery_storage import calculate_battery
 from collaboration.room_manager import handle_message, join_room, leave_room, room_status
@@ -120,6 +152,7 @@ class BeamInputs(BaseModel):
     support_condition: str = "simply_supported"
     exposure_class: str = "XC1"
     design_code: str = "Eurocode2"
+    country: str = "Zambia"
 
 
 class SlabInputs(BaseModel):
@@ -132,6 +165,7 @@ class SlabInputs(BaseModel):
     fck: float = Field(..., gt=0, description="Concrete grade MPa")
     fyk: float = Field(..., gt=0, description="Steel grade MPa")
     support_condition: str = "simply_supported"
+    country: str = "Zambia"
 
 
 class ColumnInputs(BaseModel):
@@ -144,6 +178,7 @@ class ColumnInputs(BaseModel):
     fck: float = Field(..., gt=0, description="Concrete grade MPa")
     fyk: float = Field(..., gt=0, description="Steel grade MPa")
     le_factor: float = Field(1.0, gt=0, description="Effective length factor")
+    country: str = "Zambia"
 
 
 class FoundationInputs(BaseModel):
@@ -161,6 +196,8 @@ class FoundationInputs(BaseModel):
     fyk: float = Field(500, gt=0, description="Steel grade MPa")
     column_width: float = Field(300, gt=0, description="Column width mm")
     column_depth: float = Field(300, gt=0, description="Column depth mm")
+    exposure_class: str = "XC1"
+    country: str = "Zambia"
 
 
 class LoadInputs(BaseModel):
@@ -173,27 +210,55 @@ class LoadInputs(BaseModel):
     structure_class: str = Field("ordinary")
 
 
+class LoadCombinationsInput(BaseModel):
+    gk: float = Field(..., ge=0, description="Permanent load Gk")
+    qk: float = Field(..., ge=0, description="Variable load Qk")
+    wk: float = Field(0, ge=0, description="Wind load Wk")
+    ek: float = Field(0, ge=0, description="Seismic load Ek")
+    code: str = Field("EC0", description="EC0 | ACI318 | BS8110")
+    unit: str = Field("kN/m", description="Result unit")
+
+
 class PavementInputs(BaseModel):
     road_class: str = Field("secondary", pattern="^(trunk|primary|secondary|feeder)$")
     traffic_count: float = Field(..., gt=0, description="AADT vehicles/day")
-    heavy_vehicle_pct: float = Field(12, ge=0, le=100, description="Heavy vehicle %")
-    design_life: float = Field(20, gt=0, description="Design life years")
-    cbr_subgrade: float = Field(..., gt=0, description="Subgrade CBR %")
+    heavy_vehicle_pct: float = Field(12.0, ge=0, le=100)
+    design_life: int = Field(20, gt=0)
+    cbr_subgrade: float = Field(6.0, gt=0)
     subbase_material: str = Field("natural_gravel")
     base_material: str = Field("crushed_stone")
-    climate_zone: str = Field("semi_arid", pattern="^(wet|dry|semi_arid)$")
+    climate_zone: str = Field("semi_arid")
     country: str = Field("Zambia")
 
 
 class DrainageInputs(BaseModel):
     catchment_area: float = Field(..., gt=0, description="Catchment area ha")
     rainfall_intensity: float = Field(0, ge=0, description="Rainfall intensity mm/hr")
-    runoff_coefficient: float = Field(0.85, ge=0, le=1)
-    pipe_gradient: float = Field(1.5, gt=0, description="Pipe gradient %")
-    pipe_material: str = Field("concrete", pattern="^(concrete|hdpe|corrugated_steel)$")
-    pipe_length: float = Field(100, gt=0, description="Pipe length m")
+    runoff_coefficient: float = Field(0.6, gt=0, le=1.0)
+    pipe_gradient: float = Field(1.5, gt=0, description="Gradient in %")
+    pipe_material: str = Field("concrete")
+    pipe_length: float = Field(100.0, gt=0)
     country: str = Field("Zambia")
     region: str = Field("")
+
+
+class GeometricDesignInputs(BaseModel):
+    design_speed_kmh: float = 80
+    radius_m: float = 300
+    max_superelevation_pct: float = 8.0
+    side_friction_factor: float = 0.14
+
+
+class TrafficLoadInputs(BaseModel):
+    aadt: float = 1000
+    growth_rate_pct: float = 4.0
+    design_life_yrs: float = 20
+    truck_pct: float = 10.0
+    bus_pct: float = 5.0
+    vdf_truck: float = 3.0
+    vdf_bus: float = 1.2
+    directional_split: float = 0.5
+    lane_factor: float = 1.0
 
 
 class ExtractQuantitiesInput(BaseModel):
@@ -319,7 +384,8 @@ class TransformPointInput(BaseModel):
 
 
 class DwgExportInput(BaseModel):
-    path: str
+    path: str = ""
+    elements: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class ScheduleBuildInput(BaseModel):
@@ -327,6 +393,48 @@ class ScheduleBuildInput(BaseModel):
     duration_weeks: int = 52
     elements: list[dict[str, Any]] = Field(default_factory=list)
 
+
+class BearingInputs(BaseModel):
+    bearing_type: str = Field("elastomeric", pattern="^(pad|elastomeric|pot|roller)$")
+    vertical_load: float = Field(800, gt=0)
+    horizontal_load: float = Field(40, ge=0)
+    rotation: float = Field(0.01, ge=0)
+    span: float = Field(15, gt=0)
+    material: str = Field("concrete", pattern="^(concrete|steel|masonry)$")
+    fck: float = Field(30, gt=0)
+    bearing_width: float = Field(300, gt=0)
+    column_width: float = Field(200, gt=0)
+    pad_thickness: float = Field(20, gt=0)
+    sigma_allow: float = Field(10.0, gt=0)
+    horizontal_movement_mm: float = Field(40.0, ge=0)
+    layer_thickness_mm: float = Field(10.0, ge=0)
+    weight_steel: float = 1.0
+    weight_cost: float = 1.5
+    weight_deflection: float = 0.1
+    max_iterations: int = Field(200, ge=10, le=1000)
+
+
+class MaterialSelectorInputs(BaseModel):
+    structure_type: str = Field("beam", pattern="^(beam|column|slab|wall|foundation|bridge|roof|truss)$")
+    span: float = Field(5.0, gt=0)
+    load: float = Field(10.0, gt=0)
+    exposure: str = Field("internal", pattern="^(internal|external|aggressive|marine)$")
+    budget: str = Field("medium", pattern="^(low|medium|high)$")
+    availability: str = Field("Zambia")
+
+class VisionImageInput(BaseModel):
+    image_base64: str
+    image_source: str = "mobile"
+    gps_latitude: float | None = None
+    gps_longitude: float | None = None
+    structure_hint: str | None = None
+    country_code: str = "ZM"
+    project_id: str | None = None
+
+class VisionMultiImageInput(BaseModel):
+    images: list[str]
+    metadata: dict = {}
+    geo_context: dict = {}
 
 class OptimizerInput(BaseModel):
     floor_area_m2: float = Field(400, gt=0)
@@ -591,14 +699,65 @@ class BoreholeInput(BaseModel):
     country: str = "Zambia"
 
 
-class SewerageInput(BaseModel):
+class SewerDesignInput(BaseModel):
     population: int = 500
     lpcd: float = 80
-    return_factor: float = 0.8
+    infiltration_pct: float = 20
     peak_factor: float = 2.5
-    system_type: str = "septic"
-    country: str = "Zambia"
+    material: str = "pvc"
 
+class PipeNetworkInput(BaseModel):
+    nodes: list[dict[str, Any]] = Field(default_factory=list)
+    pipes: list[dict[str, Any]] = Field(default_factory=list)
+
+class TreatmentPlantInput(BaseModel):
+    flow_rate_m3h: float = 100
+    floc_detention_min: float = 30
+    velocity_gradient_g: float = 40
+    surface_overflow_rate_mh: float = 1.5
+    sed_detention_hr: float = 3
+    filter_type: str = "rapid"
+    filtration_rate_mh: float = 10
+    chlorine_contact_min: float = 30
+    chlorine_residual_mgl: float = 0.5
+
+class GeoBearingCapacityInput(BaseModel):
+    soil_type: str = "sandy"
+    foundation_width_m: float = 2.0
+    foundation_length_m: float = 2.0
+    foundation_depth_m: float = 1.2
+    fos: float = 3.0
+    use_custom_soil: bool = False
+    cohesion_kpa: float = 0
+    friction_angle_deg: float = 30
+    unit_weight_knm3: float = 18
+
+class GeoSettlementInput(BaseModel):
+    applied_pressure_kpa: float = 150.0
+    foundation_width_m: float = 2.0
+    poissons_ratio: float = 0.3
+    elastic_modulus_kpa: float = 20000.0
+    shape_factor_is: float = 1.0
+    calc_consolidation: bool = True
+    compression_index_cc: float = 0.3
+    clay_layer_thickness_m: float = 5.0
+    initial_void_ratio_e0: float = 0.8
+    initial_effective_stress_kpa: float = 50.0
+    stress_increase_kpa: float = 75.0
+    allowable_settlement_mm: float = 25.0
+
+class GeoSlopeStabilityInput(BaseModel):
+    slices: list[dict[str, Any]] = Field(default_factory=list)
+
+class GeoSiteClassificationInput(BaseModel):
+    spt_n: float = 15
+    energy_ratio: float = 60
+    borehole_diam_mm: float = 100
+    sampler_type: str = "standard"
+    rod_length_m: float = 5.0
+    effective_stress_kpa: float = 50.0
+    pga_g: float = 0.15
+    magnitude: float = 7.5
 
 class SolarPvInput(BaseModel):
     daily_load_kwh: float = 15
@@ -679,13 +838,74 @@ class IfcExportInput(BaseModel):
 def health():
     return {"status": "ok"}
 
+@app.post("/wash/water-demand")
+def wash_water_demand_endpoint(inputs: WashDemandInput):
+    try:
+        return wrap_calculation_result(calculate_water_demand(inputs.model_dump()))
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/wash/pipe-network")
+def wash_pipe_network_endpoint(inputs: PipeNetworkInput):
+    try:
+        return wrap_calculation_result(analyze_pipe_network(inputs.model_dump()))
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/wash/sewer-design")
+def wash_sewer_design_endpoint(inputs: SewerDesignInput):
+    try:
+        return wrap_calculation_result(calculate_sewer_design(inputs.model_dump()))
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/wash/borehole")
+def wash_borehole_endpoint(inputs: BoreholeInput):
+    try:
+        return wrap_calculation_result(calculate_borehole(inputs.model_dump()))
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/wash/treatment-plant")
+def wash_treatment_plant_endpoint(inputs: TreatmentPlantInput):
+    try:
+        return wrap_calculation_result(calculate_treatment_plant(inputs.model_dump()))
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/geo/bearing-capacity")
+def geo_bearing_capacity_endpoint(inputs: GeoBearingCapacityInput):
+    try:
+        return wrap_calculation_result(calculate_bearing_capacity(inputs.model_dump()))
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/geo/settlement")
+def geo_settlement_endpoint(inputs: GeoSettlementInput):
+    try:
+        return wrap_calculation_result(calculate_settlement(inputs.model_dump()))
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/geo/slope-stability")
+def geo_slope_stability_endpoint(inputs: GeoSlopeStabilityInput):
+    try:
+        return wrap_calculation_result(calculate_slope_stability(inputs.model_dump()))
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/geo/site-classification")
+def geo_site_classification_endpoint(inputs: GeoSiteClassificationInput):
+    try:
+        return wrap_calculation_result(calculate_site_classification(inputs.model_dump()))
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/calculate/beam")
 def calculate_beam_endpoint(inputs: BeamInputs):
     try:
-        payload = inputs.model_dump()
-        payload["imposed_load"] = payload.pop("live_load")
-        return calculate_beam(payload)
+        data = apply_local_adjustments(inputs.country, inputs.model_dump())
+        return wrap_calculation_result(calculate_beam(data))
     except (ValueError, KeyError) as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -693,7 +913,8 @@ def calculate_beam_endpoint(inputs: BeamInputs):
 @app.post("/calculate/slab")
 def calculate_slab_endpoint(inputs: SlabInputs):
     try:
-        return calculate_slab(inputs.model_dump())
+        data = apply_local_adjustments(inputs.country, inputs.model_dump())
+        return wrap_calculation_result(calculate_slab(data))
     except (ValueError, KeyError) as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -701,7 +922,8 @@ def calculate_slab_endpoint(inputs: SlabInputs):
 @app.post("/calculate/column")
 def calculate_column_endpoint(inputs: ColumnInputs):
     try:
-        return calculate_column(inputs.model_dump())
+        data = apply_local_adjustments(inputs.country, inputs.model_dump())
+        return wrap_calculation_result(calculate_column(data))
     except (ValueError, KeyError) as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -709,9 +931,77 @@ def calculate_column_endpoint(inputs: ColumnInputs):
 @app.post("/calculate/foundation")
 def calculate_foundation_endpoint(inputs: FoundationInputs):
     try:
-        return calculate_foundation(inputs.model_dump())
+        data = apply_local_adjustments(inputs.country, inputs.model_dump())
+        result = wrap_calculation_result(calculate_foundation(data))
+        try:
+            bearing = calculate_foundation_bearing(
+                {
+                    "N": inputs.column_load,
+                    "Mx": inputs.moment_x,
+                    "My": inputs.moment_y,
+                    "B": inputs.foundation_width,
+                    "L": inputs.foundation_length,
+                    "bearing_method": "structural_linear",
+                }
+            )
+            result["pressure_bearing"] = bearing
+        except Exception:
+            pass
+        return result
     except (ValueError, KeyError) as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/calculate/bearing")
+def calculate_bearing_endpoint(inputs: BearingInputs):
+    try:
+        return wrap_calculation_result(calculate_bearing(inputs.model_dump()))
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/materials/recommend")
+def materials_recommend_endpoint(inputs: MaterialSelectorInputs):
+    try:
+        return recommend_material(inputs.model_dump())
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/vision/process-image")
+def vision_process_image(inputs: VisionImageInput):
+    try:
+        return process_image(inputs.model_dump())
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/vision/analyse")
+async def vision_analyse(inputs: dict):
+    try:
+        return await analyse_structure(inputs.get("image_base64", ""), inputs.get("metadata", {}), inputs.get("geo_context", {}))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/vision/analyse-multi")
+async def vision_analyse_multi(inputs: VisionMultiImageInput):
+    try:
+        return await analyse_multi_image(inputs.images, inputs.metadata, inputs.geo_context)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/vision/generate-cad")
+def vision_generate_cad(inputs: dict):
+    try:
+        generator = CADGenerator()
+        svg = generator.generate(inputs)
+        return {"svg": svg}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/vision/generate-report")
+def vision_generate_report(inputs: dict):
+    try:
+        report = generate_markdown_report(inputs)
+        return {"report": report}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/calculate/loads")
@@ -722,10 +1012,108 @@ def calculate_loads_endpoint(inputs: LoadInputs):
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@app.post("/calculate/load-combinations")
+def calculate_load_combinations_endpoint(inputs: LoadCombinationsInput):
+    try:
+        raw = generate_load_combinations(inputs.model_dump())
+        steps = [
+            {
+                "step_number": i + 1,
+                "title": f"ULS Combo {c['combo_number']}",
+                "formula": c["expression"],
+                "substitution": c["substitution"],
+                "result": f"{c['result']} {c['unit']}",
+                "unit": c["unit"],
+                "reference": c["reference"],
+                "status": "pass" if c.get("governing") else "info",
+            }
+            for i, c in enumerate(raw.get("uls_combinations", []))
+        ]
+        wrapped = {
+            "status": "pass",
+            "summary": raw.get("governing_uls", {}),
+            "steps": steps,
+            "warnings": [],
+            "errors": [],
+            "timestamp": raw.get("timestamp", ""),
+            "load_combinations": raw,
+        }
+        return wrap_calculation_result(wrapped)
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+class PressurePayload(BaseModel):
+    """Flexible payload for pressure modules."""
+    model_config = {"extra": "allow"}
+
+
+def _pressure_endpoint(fn, inputs: PressurePayload):
+    try:
+        return wrap_calculation_result(fn(inputs.model_dump()))
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/pressure/foundation-bearing")
+def pressure_foundation_bearing(inputs: PressurePayload):
+    return _pressure_endpoint(calculate_foundation_bearing, inputs)
+
+
+@app.post("/pressure/lateral-earth")
+def pressure_lateral_earth(inputs: PressurePayload):
+    return _pressure_endpoint(calculate_lateral_earth, inputs)
+
+
+@app.post("/pressure/wind-distribution")
+def pressure_wind_distribution(inputs: PressurePayload):
+    return _pressure_endpoint(calculate_wind_distribution, inputs)
+
+
+@app.post("/pressure/boussinesq")
+def pressure_boussinesq(inputs: PressurePayload):
+    return _pressure_endpoint(calculate_boussinesq, inputs)
+
+
+@app.post("/pressure/consolidation")
+def pressure_consolidation(inputs: PressurePayload):
+    return _pressure_endpoint(calculate_consolidation, inputs)
+
+
+@app.post("/pressure/bridge-hydrostatic")
+def pressure_bridge_hydrostatic(inputs: PressurePayload):
+    return _pressure_endpoint(calculate_bridge_hydrostatic, inputs)
+
+
+@app.post("/pressure/bridge-hydrodynamic")
+def pressure_bridge_hydrodynamic(inputs: PressurePayload):
+    return _pressure_endpoint(calculate_bridge_hydrodynamic, inputs)
+
+
+@app.post("/pressure/bridge-foundation")
+def pressure_bridge_foundation(inputs: PressurePayload):
+    return _pressure_endpoint(calculate_bridge_foundation, inputs)
+
+
+@app.post("/pressure/pavement-pressure")
+def pressure_pavement(inputs: PressurePayload):
+    return _pressure_endpoint(calculate_pavement_pressure, inputs)
+
+
+@app.post("/pressure/pipe-pressure")
+def pressure_pipe(inputs: PressurePayload):
+    return _pressure_endpoint(calculate_pipe_pressure, inputs)
+
+
+@app.post("/pressure/tank-pressure")
+def pressure_tank(inputs: PressurePayload):
+    return _pressure_endpoint(calculate_tank_pressure, inputs)
+
+
 @app.post("/calculate/wind")
 def calculate_wind_endpoint(inputs: WindInputs):
     try:
-        return calculate_wind_loads(inputs.model_dump())
+        return wrap_calculation_result(calculate_wind_loads(inputs.model_dump()))
     except (ValueError, KeyError) as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -765,15 +1153,28 @@ def bim_export_ifc(inputs: IfcExportInput):
 @app.post("/calculate/road/pavement")
 def calculate_pavement_endpoint(inputs: PavementInputs):
     try:
-        return calculate_pavement(inputs.model_dump())
+        return wrap_calculation_result(calculate_pavement(inputs.model_dump()))
     except (ValueError, KeyError) as e:
         raise HTTPException(status_code=400, detail=str(e))
-
 
 @app.post("/calculate/road/drainage")
 def calculate_drainage_endpoint(inputs: DrainageInputs):
     try:
-        return calculate_drainage(inputs.model_dump())
+        return wrap_calculation_result(calculate_drainage(inputs.model_dump()))
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/roads/geometric-design")
+def calculate_geometric_design_endpoint(inputs: GeometricDesignInputs):
+    try:
+        return wrap_calculation_result(calculate_geometric_design(inputs.model_dump()))
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/roads/traffic-load")
+def calculate_traffic_load_endpoint(inputs: TrafficLoadInputs):
+    try:
+        return wrap_calculation_result(calculate_traffic_load(inputs.model_dump()))
     except (ValueError, KeyError) as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -973,7 +1374,7 @@ def geometry_region_boolean(inputs: RegionBooleanInput):
 
 @app.post("/geometry/autocad/export-dwg")
 def geometry_autocad_export(inputs: DwgExportInput):
-    return export_dwg_geometry(inputs.path)
+    return export_dwg_geometry(inputs.path, inputs.elements or None)
 
 
 @app.get("/geometry/autocad/status")

@@ -63,4 +63,32 @@ export const geometryExtensionsAPI = {
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   },
+
+  async exportDwg(payload: {
+    path?: string;
+    elements?: Record<string, unknown>[];
+  }): Promise<Record<string, unknown>> {
+    const res = await fetch(`${API}/geometry/autocad/export-dwg`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        path: payload.path ?? '',
+        elements: payload.elements ?? [],
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      const detail = err.detail;
+      throw new Error(
+        typeof detail === 'string' ? detail : JSON.stringify(detail ?? err),
+      );
+    }
+    return res.json();
+  },
+
+  async autocadStatus(): Promise<Record<string, unknown>> {
+    const res = await fetch(`${API}/geometry/autocad/status`);
+    if (!res.ok) throw new Error('AutoCAD bridge status unavailable');
+    return res.json();
+  },
 };

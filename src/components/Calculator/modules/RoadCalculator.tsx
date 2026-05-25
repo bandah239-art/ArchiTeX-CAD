@@ -3,7 +3,9 @@ import type { RoadSubmodule } from '../../../types/calculations';
 
 const ROAD_SUBMODULES: { id: RoadSubmodule; label: string }[] = [
   { id: 'pavement', label: 'Pavement Design' },
-  { id: 'drainage', label: 'Drainage' },
+  { id: 'drainage', label: 'Hydrology / Drainage' },
+  { id: 'geometric_design', label: 'Geometric Design' },
+  { id: 'traffic_load', label: 'Traffic Load (ESAL)' },
 ];
 
 const ROAD_CLASSES = [
@@ -61,8 +63,38 @@ export function RoadCalculator({ inputs, onInputChange }: CalculatorFormProps) {
         ))}
       </div>
 
-      {submodule === 'pavement' ? <PavementForm inputs={inputs} onInputChange={onInputChange} /> : <DrainageForm inputs={inputs} onInputChange={onInputChange} />}
+      {submodule === 'pavement' && <PavementForm inputs={inputs} onInputChange={onInputChange} />}
+      {submodule === 'drainage' && <DrainageForm inputs={inputs} onInputChange={onInputChange} />}
+      {submodule === 'geometric_design' && <GeometricDesignForm inputs={inputs} onInputChange={onInputChange} />}
+      {submodule === 'traffic_load' && <TrafficLoadForm inputs={inputs} onInputChange={onInputChange} />}
     </div>
+  );
+}
+
+function GeometricDesignForm({ inputs, onInputChange }: CalculatorFormProps) {
+  return (
+    <>
+      <NumField label="Design Speed (km/h)" value={inputs.design_speed_kmh ?? 80} onChange={(v) => onInputChange('design_speed_kmh', v)} />
+      <NumField label="Curve Radius, R (m)" value={inputs.radius_m ?? 300} onChange={(v) => onInputChange('radius_m', v)} />
+      <NumField label="Max Super-elevation (%)" value={inputs.max_superelevation_pct ?? 8.0} onChange={(v) => onInputChange('max_superelevation_pct', v)} />
+      <NumField label="Side Friction Factor (f)" value={inputs.side_friction_factor ?? 0.14} onChange={(v) => onInputChange('side_friction_factor', v)} />
+    </>
+  );
+}
+
+function TrafficLoadForm({ inputs, onInputChange }: CalculatorFormProps) {
+  return (
+    <>
+      <NumField label="AADT (vehicles/day)" value={inputs.aadt ?? 1000} onChange={(v) => onInputChange('aadt', v)} />
+      <NumField label="Growth Rate (%)" value={inputs.growth_rate_pct ?? 4.0} onChange={(v) => onInputChange('growth_rate_pct', v)} />
+      <NumField label="Design Life (years)" value={inputs.design_life_yrs ?? 20} onChange={(v) => onInputChange('design_life_yrs', v)} />
+      <NumField label="Heavy Trucks (%)" value={inputs.truck_pct ?? 10.0} onChange={(v) => onInputChange('truck_pct', v)} />
+      <NumField label="Buses (%)" value={inputs.bus_pct ?? 5.0} onChange={(v) => onInputChange('bus_pct', v)} />
+      <NumField label="VDF Truck" value={inputs.vdf_truck ?? 3.0} onChange={(v) => onInputChange('vdf_truck', v)} />
+      <NumField label="VDF Bus" value={inputs.vdf_bus ?? 1.2} onChange={(v) => onInputChange('vdf_bus', v)} />
+      <NumField label="Directional Split" value={inputs.directional_split ?? 0.5} onChange={(v) => onInputChange('directional_split', v)} />
+      <NumField label="Lane Factor" value={inputs.lane_factor ?? 1.0} onChange={(v) => onInputChange('lane_factor', v)} />
+    </>
   );
 }
 

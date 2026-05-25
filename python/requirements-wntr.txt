@@ -1,0 +1,6 @@
+# Optional WNTR / EPANET hydraulic solver.
+# Windows: requires Microsoft C++ Build Tools (Visual Studio Build Tools).
+# Python 3.14: may need to build from source — use Python 3.11–3.12 for easiest install.
+# Core app works without this; pipe network uses a Python fallback.
+
+wntr>=1.2.0

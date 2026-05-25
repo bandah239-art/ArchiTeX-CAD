@@ -52,4 +52,24 @@ export const bimGeometryAPI = {
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   },
+
+  async planTakeoff(path: string): Promise<Record<string, unknown>> {
+    const res = await fetch(`${API_BASE}/bim/plan-takeoff`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  async intersectionVolume(payload: Record<string, unknown>): Promise<Record<string, unknown>> {
+    const res = await fetch(`${API_BASE}/bim/geometry/intersection-volume`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
 };

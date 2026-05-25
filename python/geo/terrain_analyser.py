@@ -41,32 +41,99 @@ def _aspect_label(dz_dx: float, dz_dy: float, latitude: float) -> str:
     return f"{label}-facing"
 
 
+def _contour_lines_from_grid(
+    values: list[list[float]],
+    origin_x: float,
+    origin_z: float,
+    cell_m: float,
+    levels: int = 5,
+) -> list[dict[str, Any]]:
+    flat = [v for row in values for v in row]
+    if not flat:
+        return []
+    vmin = min(flat)
+    vmax = max(flat)
+    if vmax - vmin < 0.01:
+        return []
+
+    rows = len(values)
+    cols = len(values[0]) if rows else 0
+    lines: list[dict[str, Any]] = []
+
+    for li in range(1, levels + 1):
+        level = vmin + (vmax - vmin) * li / (levels + 1)
+        segments: list[list[float]] = []
+
+        for r in range(rows):
+            row_pts: list[list[float]] = []
+            for c in range(cols - 1):
+                v0 = values[r][c]
+                v1 = values[r][c + 1]
+                if (v0 - level) * (v1 - level) >= 0:
+                    continue
+                t = (level - v0) / (v1 - v0) if abs(v1 - v0) > 1e-9 else 0.5
+                x = origin_x + (c + t) * cell_m
+                z = origin_z + r * cell_m
+                row_pts.append([round(x, 2), round(z, 2)])
+            for i in range(0, len(row_pts) - 1, 2):
+                segments.extend(row_pts[i : i + 2])
+
+        for c in range(cols):
+            col_pts: list[list[float]] = []
+            for r in range(rows - 1):
+                v0 = values[r][c]
+                v1 = values[r + 1][c]
+                if (v0 - level) * (v1 - level) >= 0:
+                    continue
+                t = (level - v0) / (v1 - v0) if abs(v1 - v0) > 1e-9 else 0.5
+                x = origin_x + c * cell_m
+                z = origin_z + (r + t) * cell_m
+                col_pts.append([round(x, 2), round(z, 2)])
+            for i in range(0, len(col_pts) - 1, 2):
+                segments.extend(col_pts[i : i + 2])
+
+        if len(segments) >= 2:
+            lines.append({"elevation_m": round(level, 1), "points": segments})
+
+    return lines
+
+
 def analyse_terrain(payload: dict[str, Any]) -> dict[str, Any]:
     lat = float(payload["latitude"])
     lon = float(payload["longitude"])
     platform_area = float(payload.get("platform_area_m2", 400))
 
     steps: list[dict] = []
-    elevations: list[float] = []
     grid_size = 5
     spacing = 0.001  # ~111m
+    side_m = math.sqrt(max(platform_area, 100))
+    half = side_m / 2
+    cell_m = side_m / max(grid_size - 1, 1)
+
+    grid_values: list[list[float]] = []
+    elevations: list[float] = []
 
     for i in range(grid_size):
+        row: list[float] = []
         for j in range(grid_size):
             glat = lat + (i - grid_size // 2) * spacing
             glon = lon + (j - grid_size // 2) * spacing
             url = f"https://api.opentopodata.org/v1/srtm30m?locations={glat},{glon}"
             data = fetch_json(url)
+            elev = LUSAKA_FALLBACK["elevation_m"]
             if data and data.get("results"):
-                elev = data["results"][0].get("elevation")
-                if elev is not None:
-                    elevations.append(float(elev))
+                raw = data["results"][0].get("elevation")
+                if raw is not None:
+                    elev = float(raw)
+            row.append(elev)
+            elevations.append(elev)
+        grid_values.append(row)
 
     if elevations:
         elevation = sum(elevations) / len(elevations)
         dz_dx = (max(elevations) - min(elevations)) / (grid_size * spacing * 111000)
         dz_dy = dz_dx * 0.8
-        slope_deg = math.degrees(math.atan(math.sqrt(dz_dx ** 2 + dz_dy ** 2)))
+        slope_deg = math.degrees(math.atan(math.sqrt(dz_dx**2 + dz_dy**2)))
         aspect = _aspect_label(dz_dx, dz_dy, lat)
         source = "SRTM via OpenTopoData"
     else:
@@ -86,6 +153,10 @@ def analyse_terrain(payload: dict[str, Any]) -> dict[str, Any]:
     access_score = 7.5
     buildability = round(slope_score * 0.4 + drainage_score * 0.3 + access_score * 0.3, 1)
 
+    origin_x = -half
+    origin_z = -half
+    contour_lines = _contour_lines_from_grid(grid_values, origin_x, origin_z, cell_m)
+
     steps.append({"step": 1, "title": "Elevation Grid", "result": f"Mean elevation = {elevation:.0f} m", "source": source})
     steps.append({"step": 2, "title": "Slope", "result": f"{slope_deg:.1f}° — {slope_class}", "source": "SRTM analysis"})
     steps.append({"step": 3, "title": "Aspect", "result": aspect, "source": "Terrain gradient"})
@@ -96,6 +167,7 @@ def analyse_terrain(payload: dict[str, Any]) -> dict[str, Any]:
     return {
         "status": "complete",
         "elevation_m": round(elevation, 0),
+        "mean_slope_pct": round(math.tan(math.radians(slope_deg)) * 100, 1),
         "slope_deg": round(slope_deg, 1),
         "slope_classification": slope_class,
         "aspect": aspect,
@@ -104,5 +176,14 @@ def analyse_terrain(payload: dict[str, Any]) -> dict[str, Any]:
         "drainage_direction": aspect.split("-")[0] + "ward",
         "buildability_score": buildability,
         "in_drainage_path": slope_deg < 1,
+        "elevation_grid": {
+            "rows": grid_size,
+            "cols": grid_size,
+            "cell_size_m": round(cell_m, 2),
+            "origin_x": round(origin_x, 2),
+            "origin_z": round(origin_z, 2),
+            "values": grid_values,
+        },
+        "contour_lines": contour_lines,
         "steps": steps,
     }

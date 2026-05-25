@@ -9,6 +9,7 @@ import type {
   WindInputs,
   CalculationResult,
 } from '../types/calculations';
+import type { LoadCombinationsResult } from '../types/loadCombinations';
 
 import { API_BASE } from './apiConfig';
 
@@ -81,14 +82,36 @@ export const calculationAPI = {
   calculateLoads: (inputs: LoadInputs): Promise<CalculationResult> =>
     post('/calculate/loads', inputs),
 
+  calculateLoadCombinations: (inputs: {
+    gk: number;
+    qk: number;
+    wk: number;
+    ek: number;
+    code: string;
+    unit?: string;
+  }): Promise<LoadCombinationsResult> =>
+    post('/calculate/load-combinations', inputs),
+
   calculatePavement: (inputs: PavementInputs): Promise<CalculationResult> =>
     post('/calculate/road/pavement', inputs),
 
   calculateDrainage: (inputs: DrainageInputs): Promise<CalculationResult> =>
     post('/calculate/road/drainage', inputs),
 
+  calculateGeometricDesign: (inputs: Record<string, unknown>): Promise<CalculationResult> =>
+    post('/roads/geometric-design', inputs),
+
+  calculateTrafficLoad: (inputs: Record<string, unknown>): Promise<CalculationResult> =>
+    post('/roads/traffic-load', inputs),
+
   calculateWind: (inputs: WindInputs): Promise<CalculationResult> =>
     post('/calculate/wind', inputs),
+
+  calculateBearing: (inputs: Record<string, unknown>): Promise<CalculationResult> =>
+    post('/calculate/bearing', inputs),
+
+  recommendMaterial: (inputs: Record<string, unknown>): Promise<CalculationResult> =>
+    post('/materials/recommend', inputs),
 
   calculateCarbon: (inputs: Record<string, unknown>): Promise<CalculationResult> =>
     post('/calculate/carbon', inputs),
@@ -98,6 +121,33 @@ export const calculationAPI = {
 
   simulateFlood: (inputs: Record<string, unknown>): Promise<CalculationResult> =>
     post('/simulate/flood', inputs),
+
+  calculateWashWaterDemand: (inputs: Record<string, unknown>): Promise<CalculationResult> =>
+    post('/wash/water-demand', inputs),
+
+  calculateWashPipeNetwork: (inputs: Record<string, unknown>): Promise<CalculationResult> =>
+    post('/wash/pipe-network', inputs),
+
+  calculateWashSewerDesign: (inputs: Record<string, unknown>): Promise<CalculationResult> =>
+    post('/wash/sewer-design', inputs),
+
+  calculateWashBorehole: (inputs: Record<string, unknown>): Promise<CalculationResult> =>
+    post('/wash/borehole', inputs),
+
+  calculateWashTreatmentPlant: (inputs: Record<string, unknown>): Promise<CalculationResult> =>
+    post('/wash/treatment-plant', inputs),
+
+  calculateGeoBearingCapacity: (inputs: Record<string, unknown>): Promise<CalculationResult> =>
+    post('/geo/bearing-capacity', inputs),
+
+  calculateGeoSettlement: (inputs: Record<string, unknown>): Promise<CalculationResult> =>
+    post('/geo/settlement', inputs),
+
+  calculateGeoSlopeStability: (inputs: Record<string, unknown>): Promise<CalculationResult> =>
+    post('/geo/slope-stability', inputs),
+
+  calculateGeoSiteClassification: (inputs: Record<string, unknown>): Promise<CalculationResult> =>
+    post('/geo/site-classification', inputs),
 
   checkHealth: async (): Promise<boolean> => {
     try {
