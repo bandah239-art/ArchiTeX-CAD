@@ -12,6 +12,7 @@ from calculations.structural.bearings import calculate_bearing
 from data.african_conditions import apply_local_adjustments
 from calculations.loads.load_combinations import calculate_loads, generate_load_combinations
 from calculations.core.engineer_control import wrap_calculation_result
+from calculations.core.calculation_db import save_review, save_reviews_batch, load_reviews
 from calculations.pressure.foundation_bearing import calculate_foundation_bearing
 from calculations.pressure.lateral_earth import calculate_lateral_earth
 from calculations.pressure.wind_distribution import calculate_wind_distribution
@@ -1007,7 +1008,7 @@ def vision_generate_report(inputs: dict):
 @app.post("/calculate/loads")
 def calculate_loads_endpoint(inputs: LoadInputs):
     try:
-        return calculate_loads(inputs.model_dump())
+        return wrap_calculation_result(calculate_loads(inputs.model_dump()))
     except (ValueError, KeyError) as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -1041,6 +1042,34 @@ def calculate_load_combinations_endpoint(inputs: LoadCombinationsInput):
         return wrap_calculation_result(wrapped)
     except (ValueError, KeyError) as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+class ReviewInput(BaseModel):
+    calc_module: str
+    step_key: str
+    status: str
+    override_value: str = ""
+    override_reason: str = ""
+    flag_note: str = ""
+    engineer_name: str = ""
+    registration_no: str = ""
+    project_id: str = "default"
+
+class ReviewBatchInput(BaseModel):
+    project_id: str = "default"
+    reviews: list[dict[str, Any]]
+
+@app.post("/reviews/save")
+def reviews_save_endpoint(inputs: ReviewInput):
+    return save_review(**inputs.model_dump())
+
+@app.post("/reviews/save-batch")
+def reviews_save_batch_endpoint(inputs: ReviewBatchInput):
+    return save_reviews_batch(inputs.reviews, inputs.project_id)
+
+@app.get("/reviews/load")
+def reviews_load_endpoint(calc_module: str | None = None, project_id: str = "default"):
+    return load_reviews(calc_module, project_id)
 
 
 class PressurePayload(BaseModel):
@@ -1121,7 +1150,7 @@ def calculate_wind_endpoint(inputs: WindInputs):
 @app.post("/calculate/carbon")
 def calculate_carbon_endpoint(inputs: CarbonInputs):
     try:
-        return calculate_construction_carbon(inputs.model_dump())
+        return wrap_calculation_result(calculate_construction_carbon(inputs.model_dump()))
     except (ValueError, KeyError) as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -1129,7 +1158,7 @@ def calculate_carbon_endpoint(inputs: CarbonInputs):
 @app.post("/calculate/carbon/credits")
 def calculate_carbon_credits_endpoint(inputs: CarbonCreditInputs):
     try:
-        return calculate_carbon_credits(inputs.model_dump())
+        return wrap_calculation_result(calculate_carbon_credits(inputs.model_dump()))
     except (ValueError, KeyError) as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -1498,7 +1527,7 @@ def re_optimise_use(inputs: LandUseInput):
 @app.post("/real-estate/mortgage")
 def re_mortgage(inputs: MortgageInput):
     try:
-        return calculate_mortgage(inputs.model_dump())
+        return wrap_calculation_result(calculate_mortgage(inputs.model_dump()))
     except (ValueError, KeyError) as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -1664,7 +1693,7 @@ def sync_items():
 @app.post("/calculate/wash/demand")
 def wash_demand(inputs: WashDemandInput):
     try:
-        return calculate_water_demand(inputs.model_dump())
+        return wrap_calculation_result(calculate_water_demand(inputs.model_dump()))
     except (ValueError, KeyError) as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -1672,15 +1701,15 @@ def wash_demand(inputs: WashDemandInput):
 @app.post("/calculate/wash/borehole")
 def wash_borehole(inputs: BoreholeInput):
     try:
-        return calculate_borehole(inputs.model_dump())
+        return wrap_calculation_result(calculate_borehole(inputs.model_dump()))
     except (ValueError, KeyError) as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.post("/calculate/wash/sewerage")
-def wash_sewerage(inputs: SewerageInput):
+def wash_sewerage(inputs: SewerDesignInput):
     try:
-        return calculate_sewerage(inputs.model_dump())
+        return wrap_calculation_result(calculate_sewer_design(inputs.model_dump()))
     except (ValueError, KeyError) as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -1688,7 +1717,7 @@ def wash_sewerage(inputs: SewerageInput):
 @app.post("/calculate/energy/solar")
 def energy_solar(inputs: SolarPvInput):
     try:
-        return calculate_solar_pv(inputs.model_dump())
+        return wrap_calculation_result(calculate_solar_pv(inputs.model_dump()))
     except (ValueError, KeyError) as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -1696,7 +1725,7 @@ def energy_solar(inputs: SolarPvInput):
 @app.post("/calculate/energy/battery")
 def energy_battery(inputs: BatteryInput):
     try:
-        return calculate_battery(inputs.model_dump())
+        return wrap_calculation_result(calculate_battery(inputs.model_dump()))
     except (ValueError, KeyError) as e:
         raise HTTPException(status_code=400, detail=str(e))
 

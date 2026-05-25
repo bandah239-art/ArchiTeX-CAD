@@ -146,7 +146,8 @@ export type CalculationModule =
   | 'road'
   | 'wash'
   | 'geo'
-  | 'pressure';
+  | 'pressure'
+  | 'tank';
 
 export type RoadSubmodule = 'pavement' | 'drainage' | 'geometric_design' | 'traffic_load';
 

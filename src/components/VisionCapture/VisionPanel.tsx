@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
-import { Camera, Upload, Play, FileText, PenTool } from 'lucide-react';
-import { visionAPI } from '../../services/visionAPI';
+import { IconCamera, IconFileText, IconPenTool, IconPlay, IconUpload } from './VisionIcons';
+import { visionAPI, type VisionAnalysisResult } from '../../services/visionAPI';
 
 export function VisionPanel() {
   const [images, setImages] = useState<string[]>([]);
   const [hint, setHint] = useState('');
   const [country, setCountry] = useState('ZM');
   const [isAnalysing, setIsAnalysing] = useState(false);
-  const [analysis, setAnalysis] = useState<any>(null);
+  const [analysis, setAnalysis] = useState<VisionAnalysisResult | null>(null);
   const [svgData, setSvgData] = useState<string>('');
   const [report, setReport] = useState<string>('');
 
@@ -87,7 +87,7 @@ export function VisionPanel() {
       <div className="w-1/3 border-r border-gray-800 flex flex-col">
         <div className="p-4 border-b border-gray-800 bg-gray-900 flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <Camera className="w-5 h-5 text-infra-highlight" />
+            <IconCamera className="w-5 h-5 text-infra-highlight" />
             <h2 className="font-semibold text-gray-200">Vision Engine</h2>
           </div>
         </div>
@@ -103,7 +103,7 @@ export function VisionPanel() {
               id="image-upload" 
             />
             <label htmlFor="image-upload" className="cursor-pointer flex flex-col items-center">
-              <Upload className="w-8 h-8 text-gray-400 mb-2" />
+              <IconUpload className="w-8 h-8 text-gray-400 mb-2" />
               <span className="text-sm font-medium text-gray-300">Drop photos or click to upload</span>
               <span className="text-xs text-gray-500 mt-1">Up to 8 images (Max 20MB)</span>
             </label>
@@ -156,7 +156,7 @@ export function VisionPanel() {
               <span className="animate-pulse">Analysing...</span>
             ) : (
               <>
-                <Play className="w-4 h-4" />
+                <IconPlay className="w-4 h-4" />
                 <span>Analyse Structure</span>
               </>
             )}
@@ -168,11 +168,11 @@ export function VisionPanel() {
       <div className="w-2/3 flex flex-col bg-gray-950">
         <div className="p-4 border-b border-gray-800 bg-gray-900 flex space-x-4">
           <div className="flex items-center space-x-2 text-infra-highlight">
-            <PenTool className="w-4 h-4" />
+            <IconPenTool className="w-4 h-4" />
             <span className="font-medium text-sm">CAD Drawing</span>
           </div>
           <div className="flex items-center space-x-2 text-gray-400">
-            <FileText className="w-4 h-4" />
+            <IconFileText className="w-4 h-4" />
             <span className="font-medium text-sm">Report</span>
           </div>
         </div>
@@ -187,7 +187,7 @@ export function VisionPanel() {
 
           {!analysis && !isAnalysing && (
             <div className="flex-1 flex flex-col items-center justify-center text-gray-500">
-              <Camera className="w-16 h-16 mb-4 opacity-20" />
+              <IconCamera className="w-16 h-16 mb-4 opacity-20" />
               <p>Upload an image to generate CAD and analysis report</p>
             </div>
           )}

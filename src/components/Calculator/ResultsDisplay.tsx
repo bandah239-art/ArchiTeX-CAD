@@ -9,6 +9,8 @@ interface ResultsDisplayProps {
   result: CalculationResult;
   pressureDiagram?: PressureDiagramData | null;
   reviewKeyPrefix?: string;
+  /** When true, diagram is shown elsewhere (e.g. Pressure tab header). */
+  hideDiagram?: boolean;
 }
 
 type ReviewAction = 'accepted' | 'overridden' | 'flagged' | 'pending';
@@ -46,7 +48,12 @@ function parsePlatformNumber(result: string): string {
   return m ? m[0].replace(/,/g, '') : '';
 }
 
-export function ResultsDisplay({ result, pressureDiagram, reviewKeyPrefix = 'calc' }: ResultsDisplayProps) {
+export function ResultsDisplay({
+  result,
+  pressureDiagram,
+  reviewKeyPrefix = 'calc',
+  hideDiagram = false,
+}: ResultsDisplayProps) {
   const {
     engineerName,
     registrationNumber,
@@ -214,7 +221,7 @@ export function ResultsDisplay({ result, pressureDiagram, reviewKeyPrefix = 'cal
         )}
       </div>
 
-      {diagram && (
+      {diagram && !hideDiagram && (
         <div>
           <h3 className="text-xs font-semibold text-gray-400 uppercase mb-2">Pressure diagram</h3>
           <PressureDiagram data={diagram} />
@@ -246,11 +253,19 @@ export function ResultsDisplay({ result, pressureDiagram, reviewKeyPrefix = 'cal
             {result.status}
           </span>
         </div>
-        {Object.entries(result.summary ?? {}).map(([key, value]) => (
+        {Object.entries(result.summary ?? {})
+          .filter(([key]) => key !== 'depth_table')
+          .map(([key, value]) => (
           <div key={key} className="flex justify-between text-xs mt-1">
             <span className="text-gray-500">{key.replace(/_/g, ' ')}</span>
             <span className="text-gray-200">
-              {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+              {typeof value === 'object' && value !== null
+                ? Array.isArray(value)
+                  ? `[${(value as unknown[]).length} items]`
+                  : Object.entries(value as Record<string, unknown>)
+                      .map(([k, v]) => `${k}: ${v}`)
+                      .join(' · ')
+                : String(value)}
             </span>
           </div>
         ))}

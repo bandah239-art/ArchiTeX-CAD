@@ -1,15 +1,33 @@
 import { useState } from 'react';
 import { calculationAPI } from '../../../services/calculationAPI';
 import { useCalculationStore } from '../../../store/calculationStore';
-import { exportToPDF } from '../../../services/exportService';
-import type { LoadCombinationCode, LoadCombinationRow, LoadCombinationsResult } from '../../../types/loadCombinations';
+import type {
+  LoadCombinationCode,
+  LoadCombinationRow,
+  LoadCombinationsResult,
+} from '../../../types/loadCombinations';
 import type { CalculationResult } from '../../../types/calculations';
+import { ResultsDisplay } from '../ResultsDisplay';
+import { ReportExporter } from '../ReportExporter';
 
 const CODES: { id: LoadCombinationCode; label: string }[] = [
   { id: 'EC0', label: 'EC0' },
   { id: 'ACI318', label: 'ACI 318' },
   { id: 'BS8110', label: 'BS 8110' },
 ];
+
+function rowToStep(n: number, group: string, c: LoadCombinationRow) {
+  return {
+    step_number: n,
+    title: `${group} ${c.combo_number}${c.governing ? ' ★ GOVERNING' : ''}`,
+    formula: c.expression,
+    substitution: c.substitution,
+    result: `${c.result} ${c.unit}`,
+    unit: c.unit,
+    reference: c.reference,
+    status: (c.governing ? 'pass' : 'info') as 'pass' | 'info',
+  };
+}
 
 function toReportResult(data: LoadCombinationsResult): CalculationResult {
   const steps = [
@@ -22,45 +40,13 @@ function toReportResult(data: LoadCombinationsResult): CalculationResult {
       governing_uls: data.governing_uls.value,
       governing_sls: data.governing_sls?.value ?? '—',
       code: data.code,
+      unit: data.unit,
     },
     steps,
     warnings: [],
     errors: [],
     timestamp: data.timestamp,
   };
-}
-
-function rowToStep(n: number, group: string, c: LoadCombinationRow) {
-  return {
-    step_number: n,
-    title: `${group} ${c.combo_number}${c.governing ? ' ★ GOVERNING' : ''}`,
-    formula: c.expression,
-    substitution: c.substitution,
-    result: `${c.result} ${c.unit}`,
-    unit: c.unit,
-    reference: c.reference,
-    status: c.governing ? ('pass' as const) : ('info' as const),
-  };
-}
-
-function ComboCard({ row }: { row: LoadCombinationRow }) {
-  return (
-    <div
-      className={`rounded border px-3 py-2 text-xs ${
-        row.governing
-          ? 'border-emerald-500/60 bg-emerald-950/40 text-emerald-100'
-          : 'border-infra-accent/25 bg-infra-darker/40 text-gray-300'
-      }`}
-    >
-      {row.governing && (
-        <div className="text-[10px] font-bold uppercase tracking-wide text-emerald-400 mb-1">★ Governing</div>
-      )}
-      <div className="font-mono text-[11px]">
-        {row.expression} = <span className="text-white font-semibold">{row.result}</span> {row.unit}
-      </div>
-      <div className="text-[10px] text-gray-500 mt-1">{row.reference}</div>
-    </div>
-  );
 }
 
 export function LoadCombinations() {
@@ -96,6 +82,7 @@ export function LoadCombinations() {
   };
 
   const designLoad = result?.feed_to_calculators.beam_design_load;
+  const reportResult = result ? toReportResult(result) : null;
 
   return (
     <div className="space-y-4">
@@ -138,35 +125,25 @@ export function LoadCombinations() {
         <div className="p-2 text-xs text-red-300 bg-red-900/30 border border-red-700/40 rounded">{error}</div>
       )}
 
-      {result && (
+      {result && reportResult && (
         <>
-          <section>
-            <h4 className="text-[10px] font-semibold text-gray-500 uppercase mb-2">ULS Combinations</h4>
-            <div className="space-y-2">
-              {result.uls_combinations.map((row) => (
-                <ComboCard key={`uls-${row.combo_number}`} row={row} />
-              ))}
-            </div>
-          </section>
-
-          {result.sls_combinations.length > 0 && (
-            <section>
-              <h4 className="text-[10px] font-semibold text-gray-500 uppercase mb-2">SLS Combinations</h4>
-              <div className="space-y-2">
-                {result.sls_combinations.map((row) => (
-                  <ComboCard key={`sls-${row.combo_number}`} row={row} />
-                ))}
-              </div>
-            </section>
-          )}
-
-          <div className="text-[10px] text-gray-500 border-t border-infra-accent/20 pt-2">
-            Governing ULS: <span className="text-emerald-400 font-semibold">{result.governing_uls.value} kN/m</span>
+          <div className="text-[10px] text-gray-500 border border-infra-accent/20 rounded px-3 py-2 bg-infra-darker/40">
+            Governing ULS:{' '}
+            <span className="text-emerald-400 font-semibold">{result.governing_uls.value} kN/m</span>
             {' · '}
             {result.governing_uls.expression}
+            {result.governing_sls && (
+              <>
+                {' · '}
+                SLS: <span className="text-blue-300">{result.governing_sls.value} kN/m</span>
+              </>
+            )}
           </div>
 
-          <div className="flex flex-col gap-1.5">
+          <ResultsDisplay result={reportResult} reviewKeyPrefix="loadCombinations" />
+
+          <div className="flex flex-col gap-1.5 border-t border-infra-accent/20 pt-3">
+            <span className="text-[10px] uppercase text-gray-500 tracking-wide">Feed to calculators</span>
             <button
               type="button"
               disabled={!designLoad}
@@ -193,13 +170,7 @@ export function LoadCombinations() {
             </button>
           </div>
 
-          <button
-            type="button"
-            onClick={() => void exportToPDF(toReportResult(result))}
-            className="w-full py-2 text-xs border border-infra-accent/50 hover:bg-infra-accent/20 rounded"
-          >
-            Export PDF
-          </button>
+          <ReportExporter result={reportResult} />
         </>
       )}
     </div>

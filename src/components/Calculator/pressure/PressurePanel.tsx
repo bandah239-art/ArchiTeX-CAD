@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { pressureAPI, type PressureModule, type PressureResult } from '../../../services/pressureAPI';
 import { ResultsDisplay } from '../ResultsDisplay';
 import { PressureDiagram } from './PressureDiagram';
+import { PRESSURE_DIAGRAM_PLACEHOLDERS } from './pressureDiagramPlaceholders';
 
 const MODULES: { id: PressureModule; label: string }[] = [
   { id: 'foundation-bearing', label: 'Foundation bearing' },
@@ -109,6 +110,9 @@ export function PressurePanel() {
     }
   };
 
+  const diagramData =
+    result?.pressure_diagram_data ?? PRESSURE_DIAGRAM_PLACEHOLDERS[moduleId] ?? null;
+
   return (
     <div className="space-y-3">
       <p className="text-[10px] text-gray-500">
@@ -132,6 +136,20 @@ export function PressurePanel() {
 
       <PressureInputForm moduleId={moduleId} inputs={inputs} onChange={setField} />
 
+      <div className="rounded-lg border border-infra-accent/30 bg-infra-darker/40 p-3">
+        <h3 className="text-xs font-semibold text-gray-400 uppercase mb-2">Pressure diagram</h3>
+        {diagramData ? (
+          <PressureDiagram data={diagramData} />
+        ) : (
+          <p className="text-xs text-gray-500 py-6 text-center">Select a module to preview diagram type</p>
+        )}
+        {!result && diagramData && (
+          <p className="text-[10px] text-gray-500 mt-2 text-center">
+            Schematic preview — run CALCULATE PRESSURE for project values
+          </p>
+        )}
+      </div>
+
       <button
         type="button"
         onClick={() => void calculate()}
@@ -145,7 +163,14 @@ export function PressurePanel() {
         <div className="p-2 text-xs text-red-300 bg-red-900/30 border border-red-700/50 rounded">{error}</div>
       )}
 
-      {result && <ResultsDisplay result={result} reviewKeyPrefix={`pressure-${moduleId}`} />}
+      {result && (
+        <ResultsDisplay
+          result={result}
+          reviewKeyPrefix={`pressure-${moduleId}`}
+          hideDiagram
+          pressureDiagram={diagramData ?? undefined}
+        />
+      )}
     </div>
   );
 }

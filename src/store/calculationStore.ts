@@ -15,6 +15,7 @@ import type {
 import type { IFCElement } from '../types/ifc';
 import { calculationAPI } from '../services/calculationAPI';
 import { pressureAPI } from '../services/pressureAPI';
+import { buildTankPressureInputsFromTreatment } from '../services/treatmentPlantTankInputs';
 import { calcInputsFromElement, calcModuleForIfcType } from '../services/selectionBridge';
 
 const DEFAULT_INPUTS: Record<CalculationModule, Record<string, unknown>> = {
@@ -100,6 +101,14 @@ const DEFAULT_INPUTS: Record<CalculationModule, Record<string, unknown>> = {
     budget: 'medium',
     availability: 'Zambia',
   },
+  tank: {
+    height: 6,
+    radius: 4,
+    gamma_w: 9.81,
+    wind_force: 120,
+    mu: 0.5,
+    tank_weight: 800,
+  },
   loads: {
     dead_load_g: 20,
     imposed_load_q: 15,
@@ -177,6 +186,8 @@ const DEFAULT_INPUTS: Record<CalculationModule, Record<string, unknown>> = {
     filtration_rate_mh: 10,
     chlorine_contact_min: 30,
     chlorine_residual_mgl: 0.5,
+    tank_wind_force_kn: 80,
+    tank_friction_mu: 0.5,
   },
   geo: {
     geo_submodule: 'bearing_capacity' as any,
@@ -273,64 +284,54 @@ async function attachPressureOutputs(
         warnings: [...(hydro.warnings ?? []), ...(hydroDyn.warnings ?? [])],
       };
     }
+    if (module === 'foundation') {
+      out.pressure_boussinesq = await pressureAPI.boussinesq({
+        q: inputs.soil_bearing ?? 150,
+        B: inputs.foundation_width ?? 1.2,
+        L: inputs.foundation_length ?? 1.0,
+        z: (inputs.foundation_depth as number) ?? 1.2,
+        use_2_1: true,
+      });
+    }
     if (module === 'geo') {
-      const sub = (inputs.geo_submodule as string) ?? 'bearing_capacity';
-      const soil = geoSoil(inputs);
-      if (sub === 'slope_stability' || sub === 'site_classification') {
+      const geoSub = (inputs.geo_submodule as string) ?? 'bearing_capacity';
+      if (geoSub === 'retaining_wall') {
         out.pressure_lateral = await pressureAPI.lateralEarth({
-          phi: soil.phi,
-          c: soil.c,
-          gamma: soil.gamma,
-          H: soil.H,
-          q: 0,
+          phi: inputs.friction_angle ?? 30,
+          c: inputs.cohesion ?? 0,
+          gamma: inputs.soil_unit_weight ?? 18,
+          H: inputs.wall_height ?? 5,
+          q: inputs.surcharge ?? 0,
         });
       }
-      if (sub === 'settlement') {
-        const applied = Number(inputs.applied_pressure_kpa ?? 150);
-        const delta = Number(inputs.stress_increase_kpa ?? applied);
+      if (geoSub === 'settlement') {
         out.pressure_consolidation = await pressureAPI.consolidation({
-          delta_sigma: delta,
-          water_table_depth: 99,
-          layers: [{ gamma: soil.gamma, thickness: Number(inputs.clay_layer_thickness_m ?? 5) }],
-        });
-        out.pressure_boussinesq = await pressureAPI.boussinesq({
-          q: applied,
-          B: soil.B,
-          L: soil.L,
-          z: 0.5,
-          use_2_1: true,
-        });
-      }
-      if (sub === 'bearing_capacity') {
-        out.pressure_boussinesq = await pressureAPI.boussinesq({
-          q: Number(inputs.applied_pressure_kpa ?? 150),
-          B: soil.B,
-          L: soil.L,
-          z: Number(inputs.foundation_depth_m ?? 1.2),
-          use_2_1: true,
+          delta_sigma: inputs.stress_increase_kpa ?? 75,
+          water_table_depth: inputs.water_table_depth ?? 1.5,
+          OCR: inputs.ocr ?? 1.0,
+          layer_gamma: inputs.soil_unit_weight ?? 18,
+          layer_thickness: 5,
         });
       }
     }
     if (module === 'wash') {
-      const sub = (inputs.wash_submodule as string) ?? 'water_demand';
-      if (sub === 'pipe_network') {
+      const washSub = (inputs.wash_submodule as string) ?? 'water_demand';
+      if (washSub === 'pipe_network') {
         out.pressure_pipe = await pressureAPI.pipe({
-          P_node: Number(inputs.node_pressure_kpa ?? 320),
-          diameter_mm: Number(inputs.diameter_mm ?? 200),
-          wall_mm: Number(inputs.wall_mm ?? 10),
-          material: String(inputs.pipe_material ?? 'HDPE'),
+          P_node: inputs.node_pressure_kpa ?? 300,
+          diameter_mm: inputs.pipe_diameter_mm ?? 200,
+          wall_mm: inputs.pipe_wall_thickness_mm ?? 10,
+          material: inputs.pipe_material ?? 'HDPE',
         });
       }
-      if (sub === 'treatment_plant') {
-        out.pressure_tank = await pressureAPI.tank({
-          height: Number(inputs.tank_height_m ?? 6),
-          radius: Number(inputs.tank_radius_m ?? 4),
-          gamma_w: 9.81,
-          wind_force: 80,
-          mu: 0.5,
-          tank_weight: 500,
-        });
+      if (washSub === 'treatment_plant') {
+        out.pressure_tank = await pressureAPI.tank(
+          buildTankPressureInputsFromTreatment(inputs, (result.summary ?? {}) as Record<string, unknown>)
+        );
       }
+    }
+    if (module === 'tank') {
+      out.pressure_tank = await pressureAPI.tank(inputs as any);
     }
   } catch {
     /* supplementary pressure — must not fail parent calculation */
@@ -513,6 +514,10 @@ export const useCalculationStore = create<CalculationState>((set, get) => ({
           } else {
             result = await calculationAPI.calculateGeoBearingCapacity(inputs);
           }
+          break;
+        }
+        case 'tank': {
+          result = await pressureAPI.tank(inputs as any) as any;
           break;
         }
         default:

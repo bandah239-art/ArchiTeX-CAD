@@ -1,4 +1,4 @@
-import { type CalculatorFormProps } from '../../../types/calculations';
+import type { CalculatorFormProps } from '../CalculatorTypes';
 import { NumField, SelectField } from '../FormElements';
 
 const BEARING_TYPES = [

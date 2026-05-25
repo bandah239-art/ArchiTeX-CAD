@@ -10,6 +10,7 @@ import { WindCalculator } from './modules/WindCalculator';
 import { WashCalculator } from './modules/WashCalculator';
 import { GeoCalculator } from './modules/GeoCalculator';
 import { BearingCalculator } from './modules/BearingCalculator';
+import { TankCalculator } from './modules/TankCalculator';
 import { MaterialSelector } from './modules/MaterialSelector';
 import { ResultsDisplay, PressureBearingSection } from './ResultsDisplay';
 import { PressurePanel } from './pressure/PressurePanel';
@@ -30,6 +31,7 @@ const MODULES: { id: CalculationModule; label: string }[] = [
   { id: 'wash', label: 'WASH' },
   { id: 'geo', label: 'GEO' },
   { id: 'pressure', label: 'Pressure' },
+  { id: 'tank', label: 'Tank' },
 ];
 
 export function CalculatorPanel() {
@@ -77,6 +79,8 @@ export function CalculatorPanel() {
         return <GeoCalculator {...props} />;
       case 'pressure':
         return <PressurePanel />;
+      case 'tank':
+        return <TankCalculator {...props} />;
       default:
         return null;
     }

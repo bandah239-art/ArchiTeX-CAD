@@ -142,6 +142,9 @@ function BoreholeForm({ inputs, onInputChange }: CalculatorFormProps) {
 function TreatmentPlantForm({ inputs, onInputChange }: CalculatorFormProps) {
   return (
     <>
+      <p className="text-[10px] text-gray-500 -mb-1">
+        After calculate, clearwell tank pressure is auto-linked from sedimentation sizing (override below if needed).
+      </p>
       <NumField label="Flow Rate (m³/hr)" value={inputs.flow_rate_m3h ?? 100} onChange={(v) => onInputChange('flow_rate_m3h', v)} />
       <NumField label="Flocculation Detention (min)" value={inputs.floc_detention_min ?? 30} onChange={(v) => onInputChange('floc_detention_min', v)} />
       <NumField label="Velocity Gradient (G, s⁻¹)" value={inputs.velocity_gradient_g ?? 40} onChange={(v) => onInputChange('velocity_gradient_g', v)} />
@@ -151,6 +154,11 @@ function TreatmentPlantForm({ inputs, onInputChange }: CalculatorFormProps) {
       <NumField label="Filtration Rate (m/h)" value={inputs.filtration_rate_mh ?? 10} onChange={(v) => onInputChange('filtration_rate_mh', v)} />
       <NumField label="Chlorine Contact (min)" value={inputs.chlorine_contact_min ?? 30} onChange={(v) => onInputChange('chlorine_contact_min', v)} />
       <NumField label="Chlorine Residual (mg/L)" value={inputs.chlorine_residual_mgl ?? 0.5} onChange={(v) => onInputChange('chlorine_residual_mgl', v)} />
+      <h4 className="text-xs font-semibold text-infra-highlight mt-3 mb-1">Clearwell tank (pressure check)</h4>
+      <NumField label="Tank height H (m) — optional" value={inputs.tank_height_m ?? 0} onChange={(v) => onInputChange('tank_height_m', v)} />
+      <NumField label="Tank radius r (m) — optional" value={inputs.tank_radius_m ?? 0} onChange={(v) => onInputChange('tank_radius_m', v)} />
+      <NumField label="Wind force on tank (kN)" value={inputs.tank_wind_force_kn ?? 80} onChange={(v) => onInputChange('tank_wind_force_kn', v)} />
+      <NumField label="Tank weight W (kN) — optional" value={inputs.tank_weight_kn ?? 0} onChange={(v) => onInputChange('tank_weight_kn', v)} />
     </>
   );
 }
