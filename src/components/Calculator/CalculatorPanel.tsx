@@ -18,9 +18,17 @@ import { FEACalculator } from './modules/FEACalculator';
 import { EnergyCalculator } from './modules/EnergyCalculator';
 import { MicrogridCalculator } from './modules/MicrogridCalculator';
 import { TransmissionCalculator } from './modules/TransmissionCalculator';
+import { HydroCalculator } from './modules/HydroCalculator';
+import { BiogasCalculator } from './modules/BiogasCalculator';
+import { WindWakeCalculator } from './modules/WindWakeCalculator';
+import { GridFaultCalculator } from './modules/GridFaultCalculator';
 import { WaterTowerCalculator } from './modules/WaterTowerCalculator';
 import { PipeNetworkCalculator } from './modules/PipeNetworkCalculator';
 import { DewatsCalculator } from './modules/DewatsCalculator';
+import { WTPCalculator } from './modules/WTPCalculator';
+import { StormwaterCalculator } from './modules/StormwaterCalculator';
+import { LandfillCalculator } from './modules/LandfillCalculator';
+import { IrrigationCalculator } from './modules/IrrigationCalculator';
 import { ResultsDisplay, PressureBearingSection } from './ResultsDisplay';
 import { PressurePanel } from './pressure/PressurePanel';
 import { ReportExporter } from './ReportExporter';
@@ -47,9 +55,17 @@ const MODULES: { id: CalculationModule; label: string }[] = [
   { id: 'energy_bess', label: 'Solar & BESS' },
   { id: 'energy_microgrid', label: 'Microgrid Cables' },
   { id: 'energy_transmission', label: 'Sag-Tension' },
+  { id: 'energy_hydro', label: 'Micro-Hydro Power' },
+  { id: 'energy_biogas', label: 'Biogas Digester' },
+  { id: 'energy_wind_wake', label: 'Wind Farm Wake' },
+  { id: 'energy_grid_fault', label: 'Grid Faults' },
   { id: 'wash_water_tower', label: 'Water Tower & Pump' },
   { id: 'wash_epanet', label: 'Pipe Network (EPANET)' },
   { id: 'wash_dewats', label: 'DEWATS Wastewater' },
+  { id: 'wash_wtp', label: 'Water Treatment (WTP)' },
+  { id: 'wash_stormwater', label: 'Stormwater & Ponds' },
+  { id: 'wash_landfill', label: 'Sanitary Landfill' },
+  { id: 'wash_irrigation', label: 'Agri-Irrigation' },
 ];
 
 export function CalculatorPanel() {
@@ -111,12 +127,28 @@ export function CalculatorPanel() {
         return <MicrogridCalculator {...props} />;
       case 'energy_transmission':
         return <TransmissionCalculator {...props} />;
+      case 'energy_hydro':
+        return <HydroCalculator {...props} />;
+      case 'energy_biogas':
+        return <BiogasCalculator {...props} />;
+      case 'energy_wind_wake':
+        return <WindWakeCalculator {...props} />;
+      case 'energy_grid_fault':
+        return <GridFaultCalculator {...props} />;
       case 'wash_water_tower':
         return <WaterTowerCalculator {...props} />;
       case 'wash_epanet':
         return <PipeNetworkCalculator {...props} />;
       case 'wash_dewats':
         return <DewatsCalculator {...props} />;
+      case 'wash_wtp':
+        return <WTPCalculator {...props} />;
+      case 'wash_stormwater':
+        return <StormwaterCalculator {...props} />;
+      case 'wash_landfill':
+        return <LandfillCalculator {...props} />;
+      case 'wash_irrigation':
+        return <IrrigationCalculator {...props} />;
       default:
         return null;
     }

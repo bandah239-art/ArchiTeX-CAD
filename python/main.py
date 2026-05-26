@@ -100,12 +100,27 @@ from mobile.quick_calculators import concrete_mix, quick_beam_check, rebar_weigh
 from calculations.wash.water_demand import calculate_water_demand
 
 from calculations.energy_bess import calculate_bess, BessRequest
+from calculations.energy_bess import calculate_bess, BessRequest
 from calculations.energy_microgrid import calculate_voltage_drop, MicrogridRequest
 from calculations.energy_transmission import calculate_sag_tension, TransmissionRequest
+from calculations.energy_hydro import calculate_hydro, HydroRequest
+from calculations.energy_biogas import calculate_biogas, BiogasRequest
+from calculations.energy_wind_wake import calculate_wind_wake, WindWakeRequest
+from calculations.energy_grid_fault import calculate_grid_fault, GridFaultRequest
 
 from calculations.wash_water_tower import calculate_water_tower, WaterTowerRequest
 from calculations.wash_epanet import calculate_pipe_network, PipeNetworkRequest
 from calculations.wash_dewats import calculate_dewats, DewatsRequest
+from calculations.wash_wtp import calculate_wtp, WTPRequest
+from calculations.wash_stormwater import calculate_stormwater, StormwaterRequest
+from calculations.wash_landfill import calculate_landfill, LandfillRequest
+from calculations.wash_irrigation import calculate_irrigation, IrrigationRequest
+
+from calculations.geo_piles import calculate_piles, PilesRequest
+from calculations.geo_slope import calculate_slope, SlopeRequest
+from calculations.geo_consolidation import calculate_consolidation, ConsolidationRequest
+from calculations.geo_ground_improvement import calculate_ground_improvement, GroundImprovementRequest
+from calculations.geo_tunneling import calculate_tunneling, TunnelingRequest
 from calculations.wash.borehole import calculate_borehole
 from calculations.wash.sewer_design import calculate_sewer_design
 from calculations.wash.pipe_network import analyze_pipe_network
@@ -1992,6 +2007,34 @@ def energy_transmission_endpoint(req: TransmissionRequest):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+@app.post("/api/energy/hydro")
+def energy_hydro_endpoint(req: HydroRequest):
+    try:
+        return calculate_hydro(req)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/energy/biogas")
+def energy_biogas_endpoint(req: BiogasRequest):
+    try:
+        return calculate_biogas(req)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/energy/wind-wake")
+def energy_wind_wake_endpoint(req: WindWakeRequest):
+    try:
+        return calculate_wind_wake(req)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/energy/grid-fault")
+def energy_grid_fault_endpoint(req: GridFaultRequest):
+    try:
+        return calculate_grid_fault(req)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 @app.post("/api/wash/water-tower")
 def wash_water_tower_endpoint(req: WaterTowerRequest):
     try:
@@ -2010,6 +2053,69 @@ def wash_epanet_endpoint(req: PipeNetworkRequest):
 def wash_dewats_endpoint(req: DewatsRequest):
     try:
         return calculate_dewats(req)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/wash/wtp")
+def wash_wtp_endpoint(req: WTPRequest):
+    try:
+        return calculate_wtp(req)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/wash/stormwater")
+def wash_stormwater_endpoint(req: StormwaterRequest):
+    try:
+        return calculate_stormwater(req)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/wash/landfill")
+def wash_landfill_endpoint(req: LandfillRequest):
+    try:
+        return calculate_landfill(req)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/wash/irrigation")
+def wash_irrigation_endpoint(req: IrrigationRequest):
+    try:
+        return calculate_irrigation(req)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/geo/piles")
+def geo_piles_endpoint(req: PilesRequest):
+    try:
+        return calculate_piles(req)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/geo/slope")
+def geo_slope_endpoint(req: SlopeRequest):
+    try:
+        return calculate_slope(req)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/geo/consolidation")
+def geo_consolidation_endpoint(req: ConsolidationRequest):
+    try:
+        return calculate_consolidation(req)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/geo/ground-improvement")
+def geo_ground_improvement_endpoint(req: GroundImprovementRequest):
+    try:
+        return calculate_ground_improvement(req)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/geo/tunneling")
+def geo_tunneling_endpoint(req: TunnelingRequest):
+    try:
+        return calculate_tunneling(req)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

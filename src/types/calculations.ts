@@ -174,9 +174,22 @@ export type CalculationModule =
   | 'energy_bess'
   | 'energy_microgrid'
   | 'energy_transmission'
+  | 'energy_hydro'
+  | 'energy_biogas'
+  | 'energy_wind_wake'
+  | 'energy_grid_fault'
   | 'wash_water_tower'
   | 'wash_epanet'
-  | 'wash_dewats';
+  | 'wash_dewats'
+  | 'wash_wtp'
+  | 'wash_stormwater'
+  | 'wash_landfill'
+  | 'wash_irrigation'
+  | 'geo_piles'
+  | 'geo_slope'
+  | 'geo_consolidation'
+  | 'geo_ground_improvement'
+  | 'geo_tunneling';
 
 export type RoadSubmodule = 'pavement' | 'drainage' | 'geometric_design' | 'traffic_load';
 
