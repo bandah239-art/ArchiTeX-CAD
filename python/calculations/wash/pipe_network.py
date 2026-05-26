@@ -6,6 +6,7 @@ import logging
 import math
 
 from calculations.utils.formatters import round_value
+from geo.elevation_api import fetch_elevation
 
 logger = logging.getLogger(__name__)
 
@@ -95,12 +96,22 @@ def analyze_pipe_network(inputs: dict[str, Any]) -> dict[str, Any]:
         node_results = []
         for n in nodes:
             nid = str(n.get("id"))
-            # Dummy pressure for now since no EPANET
-            pressure_kpa = 300.0
+            lat = n.get("lat")
+            lon = n.get("lon")
+            elev = 0.0
+            if lat is not None and lon is not None:
+                elev = fetch_elevation(float(lat), float(lon))
+                
+            # Dummy pressure calculation based on elevation
+            # Assume a source at 1250m elevation providing static head
+            static_head = max(1250.0 - elev, 0)
+            pressure_kpa = static_head * 9.81
+            
             node_results.append({
                 "id": nid,
-                "pressure_kpa": pressure_kpa,
-                "head_m": 30.0
+                "elevation_m": elev,
+                "pressure_kpa": round_value(pressure_kpa, 1),
+                "head_m": round_value(static_head, 1)
             })
 
         return {

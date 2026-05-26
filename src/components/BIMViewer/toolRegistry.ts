@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { RibbonTab } from '../../types/tools';
 import type { ToolDef, ToolIconKey } from '../../types/toolRegistry';
 import { EXTENDED_TOOLS, EXTRA_RIBBON_TABS } from './toolRegistryExtended';
+import { CAD_TOOLS } from './toolRegistryCad';
 
 export type { ToolDef, ToolIconKey };
 
@@ -131,6 +132,7 @@ export const TOOL_REGISTRY: ToolDef[] = [
   { id: 'modOrthoLock', actionId: 'mod.orthoLock', labelKey: 'tools.orthoLock', icon: 'text', text: '⊥', group: 'tools.modifiers', tab: 'draw', row: 'modifier', activeWhen: 'orthoLock' },
 
   ...EXTENDED_TOOLS,
+  ...CAD_TOOLS,
 ];
 
 export function toolsForTab(tab: RibbonTab, row: 'primary' | 'modifier'): ToolDef[] {

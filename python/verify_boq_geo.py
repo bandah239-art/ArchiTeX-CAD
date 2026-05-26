@@ -84,7 +84,7 @@ def run_boq_test():
     }))
 
     boq = compile_boq({
-        "project_name": "InfraAfrica Demo",
+        "project_name": "ARCHITEX-CAD Demo",
         "client": "Test Client",
         "country_code": "ZM",
         "contractor_overhead": 15,

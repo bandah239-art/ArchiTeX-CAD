@@ -252,7 +252,7 @@ function createWindow() {
     minWidth: MIN_WIDTH,
     minHeight: MIN_HEIGHT,
     show: false,
-    title: 'INFRAFRICA',
+    title: 'ARCHITEX-CAD',
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,

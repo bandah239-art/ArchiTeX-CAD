@@ -13,15 +13,13 @@ import { useToolActions } from '../../hooks/useToolActions';
 import { collectTargetEntityIds } from '../../store/ifcModelStore';
 
 function ToolDivider() {
-  return <div className="w-px h-7 bg-infra-accent/40 mx-1 flex-shrink-0" />;
+  return <div className="w-px h-9 bg-infra-accent/40 mx-1.5 flex-shrink-0" />;
 }
 
 function ToolGroup({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="flex items-center gap-0.5 px-1 flex-shrink-0">
-      <span className="text-[9px] uppercase tracking-wider text-gray-500 mr-1 hidden xl:inline select-none whitespace-nowrap">
-        {label}
-      </span>
+    <div className="flex items-center gap-1 px-1.5 flex-shrink-0">
+      <span className="tool-ribbon-group-label">{label}</span>
       {children}
     </div>
   );
@@ -29,10 +27,10 @@ function ToolGroup({ label, children }: { label: string; children: ReactNode }) 
 
 function renderIcon(tool: ToolDef) {
   if (tool.icon === 'text' && tool.text) {
-    return <span className="text-[10px] font-bold">{tool.text}</span>;
+    return <span className="text-sm font-bold">{tool.text}</span>;
   }
   const IconFn = ToolIcons[tool.icon as keyof typeof ToolIcons];
-  return IconFn ? <IconFn size={15} /> : null;
+  return IconFn ? <IconFn size={20} /> : null;
 }
 
 function ToolButton({
@@ -57,10 +55,8 @@ function ToolButton({
       title={tip}
       aria-label={label}
       className={[
-        'flex items-center justify-center w-8 h-8 rounded border transition-colors flex-shrink-0',
-        active
-          ? 'bg-emerald-900/50 border-emerald-500/60 text-emerald-300'
-          : 'bg-infra-darker/60 border-infra-accent/30 text-gray-300 hover:bg-infra-accent/40 hover:text-white',
+        'tool-ribbon-btn',
+        active ? 'tool-ribbon-btn-active' : 'tool-ribbon-btn-idle',
         disabled ? 'opacity-40 cursor-not-allowed' : '',
       ].join(' ')}
     >
@@ -78,8 +74,8 @@ function ModifierInputs() {
   if (activeTab !== 'draw') return null;
 
   return (
-    <div className="flex items-center gap-2 ml-2 pl-2 border-l border-infra-accent/30 flex-shrink-0">
-      <label className="flex items-center gap-1 text-[10px] text-gray-400">
+    <div className="flex items-center gap-3 ml-2 pl-3 border-l border-infra-accent/30 flex-shrink-0">
+      <label className="flex items-center gap-2 text-sm text-gray-300">
         {t('tools.wallHeight')}
         <input
           type="number"
@@ -88,10 +84,10 @@ function ModifierInputs() {
           step={0.1}
           value={modifiers.wallHeight}
           onChange={(e) => setModifiers({ wallHeight: Number(e.target.value) })}
-          className="w-12 px-1 py-0.5 text-[10px] bg-infra-dark border border-infra-accent/40 rounded text-white"
+          className="w-16 px-2 py-1.5 text-sm bg-infra-dark border border-infra-accent/40 rounded-lg text-white"
         />
       </label>
-      <label className="flex items-center gap-1 text-[10px] text-gray-400">
+      <label className="flex items-center gap-2 text-sm text-gray-300">
         {t('tools.wallThickness')}
         <input
           type="number"
@@ -100,10 +96,10 @@ function ModifierInputs() {
           step={0.05}
           value={modifiers.wallThickness}
           onChange={(e) => setModifiers({ wallThickness: Number(e.target.value) })}
-          className="w-12 px-1 py-0.5 text-[10px] bg-infra-dark border border-infra-accent/40 rounded text-white"
+          className="w-16 px-2 py-1.5 text-sm bg-infra-dark border border-infra-accent/40 rounded-lg text-white"
         />
       </label>
-      <label className="flex items-center gap-1 text-[10px] text-gray-400">
+      <label className="flex items-center gap-2 text-sm text-gray-300">
         Floor Y
         <input
           type="number"
@@ -115,10 +111,10 @@ function ModifierInputs() {
               viewerControls.syncSketchWorkspace();
             }
           }}
-          className="w-14 px-1 py-0.5 text-[10px] bg-infra-dark border border-infra-accent/40 rounded text-white"
+          className="w-20 px-2 py-1.5 text-sm bg-infra-dark border border-infra-accent/40 rounded-lg text-white"
         />
       </label>
-      <label className="flex items-center gap-1 text-[10px] text-gray-400">
+      <label className="flex items-center gap-2 text-sm text-gray-300">
         {t('tools.gridSnap')}
         <input
           type="number"
@@ -127,10 +123,10 @@ function ModifierInputs() {
           step={0.25}
           value={modifiers.gridSnap}
           onChange={(e) => setModifiers({ gridSnap: Number(e.target.value) })}
-          className="w-12 px-1 py-0.5 text-[10px] bg-infra-dark border border-infra-accent/40 rounded text-white"
+          className="w-16 px-2 py-1.5 text-sm bg-infra-dark border border-infra-accent/40 rounded-lg text-white"
         />
       </label>
-      <label className="flex items-center gap-1 text-[10px] text-gray-400">
+      <label className="flex items-center gap-2 text-sm text-gray-300">
         {t('tools.extrudeHeight')}
         <input
           type="number"
@@ -139,7 +135,7 @@ function ModifierInputs() {
           step={0.1}
           value={modifiers.extrudeHeight}
           onChange={(e) => setModifiers({ extrudeHeight: Number(e.target.value) })}
-          className="w-12 px-1 py-0.5 text-[10px] bg-infra-dark border border-infra-accent/40 rounded text-white"
+          className="w-16 px-2 py-1.5 text-sm bg-infra-dark border border-infra-accent/40 rounded-lg text-white"
         />
       </label>
     </div>
@@ -246,19 +242,16 @@ export function ViewerToolRibbon() {
   ].filter((t, i, arr) => arr.findIndex((x) => x.id === t.id) === i);
 
   return (
-    <div className="flex flex-col bg-infra-darker/95 border-b border-infra-accent/30">
-      {/* Tab strip */}
-      <div className="flex items-center h-7 px-2 gap-0.5 border-b border-infra-accent/20 overflow-x-auto">
+    <div className="tool-ribbon-shell">
+      <div className="tool-ribbon-tabs">
         {RIBBON_TABS.map((tab) => (
           <button
             key={tab.id}
             type="button"
             onClick={() => setActiveTab(tab.id)}
             className={[
-              'px-3 py-0.5 text-[10px] uppercase tracking-wide rounded-t transition-colors flex-shrink-0',
-              activeTab === tab.id
-                ? 'bg-infra-accent/50 text-white border border-b-0 border-infra-accent/60'
-                : 'text-gray-500 hover:text-gray-300 hover:bg-infra-accent/20',
+              'tool-ribbon-tab',
+              activeTab === tab.id ? 'tool-ribbon-tab-active' : 'tool-ribbon-tab-idle',
             ].join(' ')}
           >
             {t(tab.labelKey)}
@@ -266,18 +259,18 @@ export function ViewerToolRibbon() {
         ))}
       </div>
 
-      {/* Primary tool row */}
-      <div className="h-11 flex items-center px-2 overflow-x-auto scrollbar-thin gap-1">
+      <div className="tool-ribbon-row-primary">
         {renderRow(primaryTools)}
       </div>
 
-      {/* Modifier row (Blender-style) */}
-      <div className="h-9 flex items-center px-2 overflow-x-auto scrollbar-thin gap-1 bg-infra-dark/50 border-t border-infra-accent/15">
+      <div className="tool-ribbon-row-modifier">
         {renderRow(modifierTools)}
         <ModifierInputs />
-        <div className="ml-auto flex-shrink-0 text-[10px] text-gray-500 px-2 hidden md:block">
+        <div className="ml-auto flex-shrink-0 text-sm text-gray-400 px-3 hidden md:block">
           {activeTool && activeTool !== 'select' ? (
-            <span>{t('tools.activeTool')}: <span className="text-emerald-400">{activeTool}</span></span>
+            <span>
+              {t('tools.activeTool')}: <span className="text-infra-highlight font-medium">{activeTool}</span>
+            </span>
           ) : (
             <span>{t('tools.hint')}</span>
           )}

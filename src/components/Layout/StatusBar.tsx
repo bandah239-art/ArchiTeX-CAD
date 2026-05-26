@@ -25,7 +25,7 @@ export function StatusBar() {
   }, [refreshStatus]);
 
   return (
-    <footer className="h-6 flex items-center px-4 bg-infra-darker border-t border-infra-accent/30 text-xs text-gray-500 gap-4">
+    <footer className="statusbar-shell">
       <span>
         Model: {loadedModel ? loadedModel.name : 'None loaded'}
       </span>
@@ -36,22 +36,22 @@ export function StatusBar() {
         Selected: {selectedElement?.name || 'None'}
       </span>
       {!serverOk && cachedProject && (
-        <span className="text-amber-500">{t('status.offlineCache')}: {cachedProject}</span>
+        <span className="text-amber-400">{t('status.offlineCache')}: {cachedProject}</span>
       )}
       {window.electronAPI && pending > 0 && (
         <button
           type="button"
           onClick={() => pushSync()}
           disabled={isSyncing || !serverOk}
-          className="text-amber-400 hover:text-amber-300 underline disabled:opacity-40"
+          className="text-amber-400 hover:text-amber-300 underline disabled:opacity-40 text-sm"
         >
           {isSyncing ? 'Syncing…' : `Sync ${pending} offline`}
         </button>
       )}
       <span className="flex-1" />
-      <span className="flex items-center gap-1">
+      <span className="flex items-center gap-2">
         <span
-          className={`w-2 h-2 rounded-full ${serverOk ? 'bg-green-500' : 'bg-red-500'}`}
+          className={`w-2.5 h-2.5 rounded-full ${serverOk ? 'bg-green-500' : 'bg-orange-500'}`}
         />
         {serverOk ? t('status.serverOnline') : t('status.serverOffline')}
       </span>

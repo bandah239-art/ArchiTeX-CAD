@@ -18,7 +18,7 @@ def blockchain_anchor(payload: dict[str, Any]) -> dict[str, Any]:
         "engine": "simulated_ledger",
         "block_hash": block_hash,
         "timestamp": ts,
-        "chain": "infraafrica-permissioned",
+        "chain": "architex-cad-permissioned",
         "anchored": True,
     }
 

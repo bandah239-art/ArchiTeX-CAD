@@ -8,6 +8,8 @@ import type {
   DrainageInputs,
   WindInputs,
   CalculationResult,
+  SteelInputs,
+  TimberInputs,
 } from '../types/calculations';
 import type { LoadCombinationsResult } from '../types/loadCombinations';
 
@@ -79,6 +81,12 @@ export const calculationAPI = {
   calculateFoundation: (inputs: FoundationInputs): Promise<CalculationResult> =>
     post('/calculate/foundation', inputs),
 
+  calculateSteel: (inputs: SteelInputs): Promise<CalculationResult> =>
+    post('/calculate/steel', inputs),
+
+  calculateTimber: (inputs: TimberInputs): Promise<CalculationResult> =>
+    post('/calculate/timber', inputs),
+
   calculateLoads: (inputs: LoadInputs): Promise<CalculationResult> =>
     post('/calculate/loads', inputs),
 
@@ -148,6 +156,21 @@ export const calculationAPI = {
 
   calculateGeoSiteClassification: (inputs: Record<string, unknown>): Promise<CalculationResult> =>
     post('/geo/site-classification', inputs),
+
+  calculateEnergyBess: (inputs: Record<string, unknown>): Promise<CalculationResult> =>
+    post('/energy/bess', inputs),
+
+  calculateEnergyMicrogrid: (inputs: Record<string, unknown>): Promise<CalculationResult> =>
+    post('/energy/microgrid', inputs),
+
+  calculateEnergyTransmission: (inputs: Record<string, unknown>): Promise<CalculationResult> =>
+    post('/energy/transmission', inputs),
+
+  calculateWashWaterTower: (inputs: Record<string, unknown>): Promise<CalculationResult> =>
+    post('/wash/water-tower', inputs),
+
+  calculateWashDewats: (inputs: Record<string, unknown>): Promise<CalculationResult> =>
+    post('/wash/dewats', inputs),
 
   checkHealth: async (): Promise<boolean> => {
     try {

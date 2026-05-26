@@ -12,6 +12,15 @@ import { GeoCalculator } from './modules/GeoCalculator';
 import { BearingCalculator } from './modules/BearingCalculator';
 import { TankCalculator } from './modules/TankCalculator';
 import { MaterialSelector } from './modules/MaterialSelector';
+import { SteelCalculator } from './modules/SteelCalculator';
+import { TimberCalculator } from './modules/TimberCalculator';
+import { FEACalculator } from './modules/FEACalculator';
+import { EnergyCalculator } from './modules/EnergyCalculator';
+import { MicrogridCalculator } from './modules/MicrogridCalculator';
+import { TransmissionCalculator } from './modules/TransmissionCalculator';
+import { WaterTowerCalculator } from './modules/WaterTowerCalculator';
+import { PipeNetworkCalculator } from './modules/PipeNetworkCalculator';
+import { DewatsCalculator } from './modules/DewatsCalculator';
 import { ResultsDisplay, PressureBearingSection } from './ResultsDisplay';
 import { PressurePanel } from './pressure/PressurePanel';
 import { ReportExporter } from './ReportExporter';
@@ -32,6 +41,15 @@ const MODULES: { id: CalculationModule; label: string }[] = [
   { id: 'geo', label: 'GEO' },
   { id: 'pressure', label: 'Pressure' },
   { id: 'tank', label: 'Tank' },
+  { id: 'steel', label: 'Steel' },
+  { id: 'timber', label: 'Timber' },
+  { id: 'fea', label: 'FEA Mesh' },
+  { id: 'energy_bess', label: 'Solar & BESS' },
+  { id: 'energy_microgrid', label: 'Microgrid Cables' },
+  { id: 'energy_transmission', label: 'Sag-Tension' },
+  { id: 'wash_water_tower', label: 'Water Tower & Pump' },
+  { id: 'wash_epanet', label: 'Pipe Network (EPANET)' },
+  { id: 'wash_dewats', label: 'DEWATS Wastewater' },
 ];
 
 export function CalculatorPanel() {
@@ -81,6 +99,24 @@ export function CalculatorPanel() {
         return <PressurePanel />;
       case 'tank':
         return <TankCalculator {...props} />;
+      case 'steel':
+        return <SteelCalculator {...props} />;
+      case 'timber':
+        return <TimberCalculator {...props} />;
+      case 'fea':
+        return <FEACalculator />;
+      case 'energy_bess':
+        return <EnergyCalculator {...props} />;
+      case 'energy_microgrid':
+        return <MicrogridCalculator {...props} />;
+      case 'energy_transmission':
+        return <TransmissionCalculator {...props} />;
+      case 'wash_water_tower':
+        return <WaterTowerCalculator {...props} />;
+      case 'wash_epanet':
+        return <PipeNetworkCalculator {...props} />;
+      case 'wash_dewats':
+        return <DewatsCalculator {...props} />;
       default:
         return null;
     }
@@ -112,7 +148,15 @@ export function CalculatorPanel() {
       <div className="flex-1 overflow-y-auto p-4">
         {renderModule()}
 
-        {activeModule !== 'loadCombinations' && activeModule !== 'pressure' && (
+        {activeModule !== 'loadCombinations' &&
+          activeModule !== 'pressure' &&
+          ![
+            'energy_bess',
+            'energy_microgrid',
+            'energy_transmission',
+            'wash_water_tower',
+            'wash_dewats',
+          ].includes(activeModule) && (
           <>
             <button
               onClick={() => runCalculation()}

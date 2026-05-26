@@ -82,7 +82,7 @@ Reg No.: {reg}
 Date:    _________________
 Stamp:   [Professional Stamp Box]
 
-Prepared using InfraAfrica Platform
+Prepared using ARCHITEX-CAD Platform
 """
 
     return {

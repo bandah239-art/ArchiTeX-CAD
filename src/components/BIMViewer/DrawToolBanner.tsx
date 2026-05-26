@@ -3,7 +3,7 @@ import { useViewerStore } from '../../store/viewerStore';
 import { isSketchDrawTool } from '../../services/sketchGeometry';
 import type { DrawTool } from '../../types/tools';
 
-const TOOL_HINTS: Record<DrawTool, string> = {
+const TOOL_HINTS: Partial<Record<DrawTool, string>> = {
   line: 'Click start, then end point (2 clicks)',
   polyline: 'Click each vertex — double-click or Enter to finish',
   wall: 'Click wall path — double-click or Enter to finish',
@@ -13,6 +13,17 @@ const TOOL_HINTS: Record<DrawTool, string> = {
   polygon: 'Click vertices (min 3) — double-click or Enter to close',
   pipe: 'Click pipe route — double-click or Enter to finish',
   'site-boundary': 'Click site boundary (min 3) — double-click or Enter to close',
+  circle: 'Click center, then radius point (2 clicks)',
+  arc: 'Click start, point on arc, then end (3 clicks)',
+  ellipse: 'Click opposite corners of bounding box (2 clicks)',
+  hatch: 'Click enclosed boundary (min 3) — Enter to close',
+  boundary: 'Click inside region — Enter to close boundary',
+  xline: 'Click two points for infinite construction line',
+  spline: 'Click control points — Enter to finish spline',
+  point: 'Click once to place point',
+  region: 'Click closed region (min 3) — Enter to close',
+  donut: 'Click center, then outer radius (2 clicks)',
+  revcloud: 'Click cloud path — Enter to finish',
   move: 'Click a sketch or model element to move',
   rotate: 'Click a sketch or model element to rotate',
   extrude: 'Select a closed polygon sketch to extrude',
@@ -56,7 +67,7 @@ export function DrawToolBanner() {
   if (!isDrawBannerTool(activeTool)) return null;
   const drawTool = activeTool;
 
-  const hint = TOOL_HINTS[drawTool];
+  const hint = TOOL_HINTS[drawTool] ?? 'Click canvas to place geometry — Enter finish · Esc cancel';
   const metrics = isSketchDrawTool(drawTool)
     ? previewMetrics(drawTool, activePoints, previewPoint)
     : null;

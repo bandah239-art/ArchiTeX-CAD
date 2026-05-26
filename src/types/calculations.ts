@@ -100,6 +100,26 @@ export interface FoundationInputs {
   column_depth: number;
 }
 
+export interface SteelInputs {
+  length: number;
+  fy: number;
+  w: number;
+  Wpl: number;
+  Aw: number;
+}
+
+export interface TimberInputs {
+  length: number;
+  b: number;
+  h: number;
+  fm_k: number;
+  fv_k: number;
+  E0_mean: number;
+  k_mod: number;
+  w: number;
+  w_sls: number;
+}
+
 export interface LoadInputs {
   dead_load_g: number;
   imposed_load_q: number;
@@ -147,7 +167,16 @@ export type CalculationModule =
   | 'wash'
   | 'geo'
   | 'pressure'
-  | 'tank';
+  | 'tank'
+  | 'steel'
+  | 'timber'
+  | 'fea'
+  | 'energy_bess'
+  | 'energy_microgrid'
+  | 'energy_transmission'
+  | 'wash_water_tower'
+  | 'wash_epanet'
+  | 'wash_dewats';
 
 export type RoadSubmodule = 'pavement' | 'drainage' | 'geometric_design' | 'traffic_load';
 

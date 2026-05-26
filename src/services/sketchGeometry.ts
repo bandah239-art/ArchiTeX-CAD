@@ -13,6 +13,17 @@ export const MIN_POINTS: Record<SketchKind, number> = {
   polygon: 3,
   pipe: 2,
   'site-boundary': 3,
+  circle: 2,
+  arc: 3,
+  ellipse: 2,
+  hatch: 3,
+  boundary: 3,
+  xline: 2,
+  spline: 3,
+  point: 1,
+  region: 3,
+  donut: 2,
+  revcloud: 3,
 };
 
 /** Sketch tools that place geometry via clicks (not gizmo). */
@@ -26,6 +37,17 @@ export const SKETCH_DRAW_TOOLS: DrawTool[] = [
   'polygon',
   'pipe',
   'site-boundary',
+  'circle',
+  'arc',
+  'ellipse',
+  'hatch',
+  'boundary',
+  'xline',
+  'spline',
+  'point',
+  'region',
+  'donut',
+  'revcloud',
 ];
 
 export function isSketchDrawTool(tool: string | null | undefined): boolean {
@@ -40,9 +62,16 @@ export function autoFinishAfterClicks(tool: DrawTool): number | null {
   switch (tool) {
     case 'line':
     case 'rectangle':
+    case 'circle':
+    case 'ellipse':
+    case 'donut':
+    case 'xline':
       return 2;
     case 'column':
+    case 'point':
       return 1;
+    case 'arc':
+      return 3;
     default:
       return null;
   }

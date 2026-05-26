@@ -17,7 +17,18 @@ export type SketchKind =
   | 'rectangle'
   | 'polygon'
   | 'pipe'
-  | 'site-boundary';
+  | 'site-boundary'
+  | 'circle'
+  | 'arc'
+  | 'ellipse'
+  | 'hatch'
+  | 'boundary'
+  | 'xline'
+  | 'spline'
+  | 'point'
+  | 'region'
+  | 'donut'
+  | 'revcloud';
 
 export interface SketchPoint {
   x: number;
@@ -76,6 +87,10 @@ interface DrawState {
   duplicateLast: () => SketchElement | null;
   mirrorLast: () => SketchElement | null;
   arrayLast: (count?: number, spacing?: number) => SketchElement[];
+  scaleElement: (id: string, factor: number) => boolean;
+  explodeElement: (id: string) => number;
+  joinOpenPolylines: () => boolean;
+  purgeEmptySketches: () => number;
   toolToKind: (tool: DrawTool) => SketchKind | null;
 }
 
@@ -325,6 +340,77 @@ export const useDrawStore = create<DrawState>((set, get) => ({
     return copies;
   },
 
+  scaleElement: (id, factor) => {
+    const el = get().elements.find((e) => e.id === id);
+    if (!el || el.points.length === 0) return false;
+    const cx = el.points.reduce((s, p) => s + p.x, 0) / el.points.length;
+    const cz = el.points.reduce((s, p) => s + p.z, 0) / el.points.length;
+    const points = el.points.map((p) => ({
+      ...p,
+      x: cx + (p.x - cx) * factor,
+      z: cz + (p.z - cz) * factor,
+    }));
+    get().updateElementPoints(id, points);
+    return true;
+  },
+
+  explodeElement: (id) => {
+    const el = get().elements.find((e) => e.id === id);
+    if (!el || el.points.length < 2) return 0;
+    const segmentKinds: SketchKind[] = ['polyline', 'wall', 'pipe', 'line', 'xline', 'spline'];
+    if (!segmentKinds.includes(el.kind) && el.kind !== 'revcloud') return 0;
+    const { elements } = get();
+    const rest = elements.filter((e) => e.id !== id);
+    const segments: SketchElement[] = [];
+    for (let i = 0; i < el.points.length - 1; i++) {
+      segments.push({
+        id: uid(),
+        kind: 'line',
+        points: [el.points[i], el.points[i + 1]],
+        createdAt: Date.now(),
+      });
+    }
+    set({ elements: [...rest, ...segments], selectedId: null });
+    return segments.length;
+  },
+
+  joinOpenPolylines: () => {
+    const polys = get().elements.filter((e) => e.kind === 'polyline' || e.kind === 'line');
+    if (polys.length < 2) return false;
+    const a = polys[0];
+    const b = polys[1];
+    const tol = 0.05;
+    const dist = (p: SketchPoint, q: SketchPoint) => Math.hypot(p.x - q.x, p.z - q.z);
+    let merged: SketchPoint[] = [...a.points];
+    const bPts = [...b.points];
+    if (dist(merged[merged.length - 1], bPts[0]) < tol) {
+      merged = [...merged, ...bPts.slice(1)];
+    } else if (dist(merged[merged.length - 1], bPts[bPts.length - 1]) < tol) {
+      merged = [...merged, ...bPts.slice(0, -1).reverse()];
+    } else {
+      return false;
+    }
+    const joined: SketchElement = {
+      id: uid(),
+      kind: 'polyline',
+      points: merged,
+      createdAt: Date.now(),
+    };
+    set({
+      elements: get().elements.filter((e) => e.id !== a.id && e.id !== b.id).concat(joined),
+      selectedId: joined.id,
+    });
+    return true;
+  },
+
+  purgeEmptySketches: () => {
+    const before = get().elements.length;
+    set({
+      elements: get().elements.filter((e) => e.points.length >= 1),
+    });
+    return before - get().elements.length;
+  },
+
   toolToKind: (tool) => {
     const map: Partial<Record<DrawTool, SketchKind>> = {
       line: 'line',
@@ -336,6 +422,17 @@ export const useDrawStore = create<DrawState>((set, get) => ({
       polygon: 'polygon',
       pipe: 'pipe',
       'site-boundary': 'site-boundary',
+      circle: 'circle',
+      arc: 'arc',
+      ellipse: 'ellipse',
+      hatch: 'hatch',
+      boundary: 'boundary',
+      xline: 'xline',
+      spline: 'spline',
+      point: 'point',
+      region: 'region',
+      donut: 'donut',
+      revcloud: 'revcloud',
     };
     return map[tool] ?? null;
   },

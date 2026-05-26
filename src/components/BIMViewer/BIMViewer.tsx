@@ -219,6 +219,7 @@ export function BIMViewer({
       const coords = [e.clientX - rect.left, e.clientY - rect.top];
       if (processSketchClick(drawEngine, coords)) {
         e.stopPropagation();
+        e.preventDefault();
       }
     };
 

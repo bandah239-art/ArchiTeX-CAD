@@ -5,6 +5,7 @@ import { bimGeometryAPI } from '../../services/bimGeometryAPI';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import { useTranslation } from 'react-i18next';
 import { useState } from 'react';
+import { APP_NAME } from '../../constants/brand';
 
 interface TopBarProps {
   onBack: () => void;
@@ -27,7 +28,7 @@ export function TopBar({ onBack, onToggleCalculator, onToggleInspector }: TopBar
     setExporting(true);
     try {
       const payload = {
-        name: currentProject?.name ?? 'INFRAFRICA Export',
+        name: currentProject?.name ?? 'ARCHITEX-CAD Export',
         site_name: currentProject?.name ?? 'Site',
         elements: ifcElements.map((el) => ({
           type: el.type,
@@ -60,53 +61,53 @@ export function TopBar({ onBack, onToggleCalculator, onToggleInspector }: TopBar
   };
 
   return (
-    <header className="h-12 flex items-center px-4 bg-infra-darker border-b border-infra-accent/30 gap-4">
+    <header className="topbar-shell">
       <button
         onClick={onBack}
-        className="text-gray-400 hover:text-white text-sm transition-colors"
+        className="text-gray-300 hover:text-white text-base font-medium transition-colors"
       >
         ← {t('topbar.dashboard')}
       </button>
-      <div className="flex-1">
-        <span className="font-semibold text-white">
+      <div className="flex-1 min-w-0">
+        <span className="font-semibold text-white text-lg">
           {currentProject?.name || 'Untitled Project'}
         </span>
+        <span className="ml-2 text-[10px] uppercase tracking-wider text-gray-500 hidden sm:inline">
+          {APP_NAME}
+        </span>
         {currentProject?.ifcPath && (
-          <span className="ml-3 text-xs text-gray-500 truncate">
+          <span className="ml-3 text-sm text-gray-400 truncate">
             {currentProject.ifcPath}
           </span>
         )}
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-shrink-0">
         <LanguageSwitcher />
-        <button
-          onClick={openIFC}
-          className="px-3 py-1 text-xs bg-infra-accent hover:bg-infra-accent/80 rounded transition-colors"
-        >
+        <button onClick={openIFC} className="topbar-btn bg-infra-accent hover:bg-infra-accent/80 text-white">
           {t('topbar.openIfc')}
         </button>
         <button
           onClick={saveProject}
-          className="px-3 py-1 text-xs bg-infra-accent/50 hover:bg-infra-accent/70 rounded transition-colors"
+          className="topbar-btn bg-infra-accent/50 hover:bg-infra-accent/70 text-white"
         >
           {t('topbar.save')}
         </button>
         <button
           onClick={exportIfc}
           disabled={exporting}
-          className="px-3 py-1 text-xs border border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/10 rounded transition-colors disabled:opacity-40"
+          className="topbar-btn border border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/10 disabled:opacity-40"
         >
           {exporting ? '…' : t('topbar.exportIfc')}
         </button>
         <button
           onClick={onToggleInspector}
-          className="px-3 py-1 text-xs border border-infra-accent/50 hover:bg-infra-accent/20 rounded transition-colors"
+          className="topbar-btn border border-infra-accent/50 hover:bg-infra-accent/25"
         >
           {t('topbar.inspector')}
         </button>
         <button
           onClick={onToggleCalculator}
-          className="px-3 py-1 text-xs border border-infra-highlight/50 text-infra-highlight hover:bg-infra-highlight/10 rounded transition-colors"
+          className="topbar-btn border-2 border-infra-highlight/60 text-infra-highlight hover:bg-infra-highlight/15 font-semibold"
         >
           {t('topbar.calculator')}
         </button>

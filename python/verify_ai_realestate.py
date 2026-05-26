@@ -147,7 +147,7 @@ def test_geo_cache() -> None:
 
 
 if __name__ == "__main__":
-    print("InfraAfrica AI + Real Estate + BIM + Cache Verification")
+    print("ARCHITEX-CAD AI + Real Estate + BIM + Cache Verification")
     test_ai_design()
     test_plot_valuation()
     test_feasibility()

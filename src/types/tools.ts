@@ -12,6 +12,17 @@ export type DrawTool =
   | 'polygon'
   | 'pipe'
   | 'site-boundary'
+  | 'circle'
+  | 'arc'
+  | 'ellipse'
+  | 'hatch'
+  | 'boundary'
+  | 'xline'
+  | 'spline'
+  | 'point'
+  | 'region'
+  | 'donut'
+  | 'revcloud'
   | 'move'
   | 'rotate'
   | 'extrude';
@@ -51,6 +62,9 @@ export interface DrawModifiers {
   extrudeHeight: number;
   orthoLock: boolean;
   gridSnap: number;
+  offsetDistance: number;
+  filletRadius: number;
+  chamferDistance: number;
 }
 
 export const DEFAULT_DRAW_MODIFIERS: DrawModifiers = {
@@ -62,4 +76,7 @@ export const DEFAULT_DRAW_MODIFIERS: DrawModifiers = {
   extrudeHeight: 3,
   orthoLock: false,
   gridSnap: 0.5,
+  offsetDistance: 1,
+  filletRadius: 0.5,
+  chamferDistance: 0.3,
 };

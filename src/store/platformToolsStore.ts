@@ -252,6 +252,25 @@ export const usePlatformToolsStore = create<PlatformToolsState>((set, get) => ({
             finish('Boolean cut', String(r.status ?? 'Submitted'), r);
           }
           break;
+        case 'bim.booleanUnion':
+          if (!modelPath) throw new Error('Open IFC first');
+          if (collectTargetEntityIds().length < 2) {
+            finish(
+              'Boolean union',
+              'Select two elements first (pick one, then box-select or pick another)',
+            );
+            break;
+          }
+          {
+            const { mesh_a, mesh_b } = resolveTwoMeshPayloads();
+            const r = await bimGeometryAPI.booleanOperation({
+              operation: 'union',
+              mesh_a,
+              mesh_b,
+            });
+            finish('Boolean union', String(r.status ?? 'Submitted'), r);
+          }
+          break;
         case 'bim.compareModels':
           if (!modelPath) throw new Error('Open IFC first');
           {
@@ -321,7 +340,7 @@ export const usePlatformToolsStore = create<PlatformToolsState>((set, get) => ({
             elements: bimElements,
           });
           if (r.status === 'complete' && typeof r.dxf_b64 === 'string') {
-            downloadBase64File(`infraafrica-plan-${Date.now()}.dxf`, r.dxf_b64, 'application/dxf');
+            downloadBase64File(`architex-cad-plan-${Date.now()}.dxf`, r.dxf_b64, 'application/dxf');
             finish(
               'Export plan',
               String(r.message ?? `DXF downloaded (${bimElements.length} elements)`),
@@ -330,7 +349,7 @@ export const usePlatformToolsStore = create<PlatformToolsState>((set, get) => ({
           } else if (r.status === 'unavailable') {
             finish(
               'Export DWG',
-              String(r.error ?? 'AutoCAD bridge not built — install/build InfraAfricaBridge for native DWG'),
+              String(r.error ?? 'AutoCAD bridge not built — install/build ArchiTeX-CAD Bridge for native DWG'),
               r,
             );
           } else {
@@ -346,10 +365,10 @@ export const usePlatformToolsStore = create<PlatformToolsState>((set, get) => ({
           }
           const extracted = await boqAPI.extractFromBim({
             elements: bimElements,
-            project_id: project?.name ?? 'INFRAFRICA',
+            project_id: project?.name ?? 'ARCHITEX-CAD',
           });
           const r = await documentsAPI.esgReport({
-            project_name: project?.name ?? 'INFRAFRICA',
+            project_name: project?.name ?? 'ARCHITEX-CAD',
             elements: extracted.elements,
             material_totals: extracted.material_totals,
           });
@@ -364,7 +383,7 @@ export const usePlatformToolsStore = create<PlatformToolsState>((set, get) => ({
         case 'bim.tender': {
           ws.openPanel('documents');
           const r = await documentsAPI.generateTender({
-            project_name: project?.name ?? 'INFRAFRICA',
+            project_name: project?.name ?? 'ARCHITEX-CAD',
             country_code: useGeoStore.getState().countryCode,
           });
           finish('Tender pack', String(r.status ?? 'Generated'), r);
@@ -410,7 +429,7 @@ export const usePlatformToolsStore = create<PlatformToolsState>((set, get) => ({
         }
         case 'bim.calcReport': {
           const r = await platformAPI.calcReport({
-            project_name: project?.name ?? 'INFRAFRICA',
+            project_name: project?.name ?? 'ARCHITEX-CAD',
           });
           finish('Calculation report', String(r.status ?? 'Generated'), r);
           break;

@@ -3,7 +3,12 @@ import { ProjectDashboard } from './components/Dashboard/ProjectDashboard';
 import { useProject } from './hooks/useProject';
 
 const AppShell = lazy(() =>
-  import('./components/Layout/AppShell').then((m) => ({ default: m.AppShell })),
+  import('./components/Layout/AppShell')
+    .then((m) => ({ default: m.AppShell }))
+    .catch((err) => {
+      console.error('[ARCHITEX-CAD] Failed to load workspace shell:', err);
+      throw err;
+    }),
 );
 
 type View = 'dashboard' | 'workspace';

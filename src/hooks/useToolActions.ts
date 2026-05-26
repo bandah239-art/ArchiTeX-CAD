@@ -19,6 +19,7 @@ import { useIfcModelStore } from '../store/ifcModelStore';
 import { entityIdFromExpressId } from '../services/ifcMeshXeokit';
 import { usePlatformToolsStore } from '../store/platformToolsStore';
 import { useToolbarStore } from '../components/BIMViewer/toolRegistry';
+import { runCadToolAction } from '../services/cadToolHandlers';
 import type { ActiveTool, OrthoView, RibbonTab, SectionAxis } from '../types/tools';
 import type { ViewMode } from '../types/ifc';
 import type { WorkspacePanel } from '../types/boq';
@@ -241,7 +242,7 @@ export function useToolActions() {
           if (!dataUrl) break;
           const a = document.createElement('a');
           a.href = dataUrl;
-          a.download = `infraafrica-view-${Date.now()}.png`;
+          a.download = `architex-cad-view-${Date.now()}.png`;
           a.click();
           break;
         }
@@ -476,7 +477,9 @@ export function useToolActions() {
           break;
 
         default:
-          void usePlatformToolsStore.getState().runPlatformAction(actionId);
+          if (!runCadToolAction(actionId)) {
+            void usePlatformToolsStore.getState().runPlatformAction(actionId);
+          }
           break;
       }
     },

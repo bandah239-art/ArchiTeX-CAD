@@ -287,7 +287,7 @@ export function ResultsDisplay({
         const status = (step.status || 'info') as CalculationStatus;
         const isExpanded = expandedSteps.has(step.step_number);
         const platformResult = step.platform_result ?? step.result;
-        const review = reviews[step.step_number];
+        const review = reviews[step.step_number] ?? getStoredReview(step.step_number);
         const reviewStatus: ReviewAction =
           review?.status ?? (step.review_status as ReviewAction) ?? 'pending';
         const displayResult =

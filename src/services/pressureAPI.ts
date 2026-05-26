@@ -19,6 +19,11 @@ export interface PressureDiagramData {
   points: Record<string, unknown>[];
   labels: string[];
   resultant?: { value: number; location: number | string; unit?: string };
+  footprint?: { B?: number; L?: number };
+  foundation?: { B?: number; L?: number };
+  wall_height_m?: number;
+  water_level_m?: number;
+  pier_width_m?: number;
 }
 
 export interface PressureResult extends CalculationResult {

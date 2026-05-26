@@ -9,7 +9,7 @@ from geo.http_client import fetch_json
 
 NOMINATIM = "https://nominatim.openstreetmap.org"
 
-# ISO 3166-1 alpha-2 codes supported by InfraAfrica
+# ISO 3166-1 alpha-2 codes supported by ARCHITEX-CAD
 SUPPORTED_COUNTRIES = frozenset({"ZM", "KE", "NG", "GH", "TZ", "ZW", "BW", "MZ", "ET", "UG", "SN", "CI"})
 
 

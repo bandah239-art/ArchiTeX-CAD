@@ -7,39 +7,11 @@ import {
   parseIfcBuffer,
   type ParsedIfcElement,
 } from './ifcParser';
+import { transformVertex, worldMatrixFromPlacement } from './ifcTransforms';
 
 export interface ServerMeshPayload {
   vertices: number[];
   faces: number[];
-}
-
-/** IFC Z-up → xeokit Y-up (rotate -90° about X). */
-const IFC_TO_XEOKIT = [
-  1, 0, 0, 0,
-  0, 0, 1, 0,
-  0, -1, 0, 0,
-  0, 0, 0, 1,
-];
-
-const IDENTITY_MAT4 = [
-  1, 0, 0, 0,
-  0, 1, 0, 0,
-  0, 0, 1, 0,
-  0, 0, 0, 1,
-];
-
-function multiplyMat4(a: number[], b: number[]): number[] {
-  const out = new Array(16).fill(0);
-  for (let c = 0; c < 4; c++) {
-    for (let r = 0; r < 4; r++) {
-      out[c * 4 + r] =
-        a[0 * 4 + r] * b[c * 4 + 0] +
-        a[1 * 4 + r] * b[c * 4 + 1] +
-        a[2 * 4 + r] * b[c * 4 + 2] +
-        a[3 * 4 + r] * b[c * 4 + 3];
-    }
-  }
-  return out;
 }
 
 function ifcTypeColor(type: string): [number, number, number] {
@@ -111,7 +83,7 @@ export async function loadIfcIntoXeokit(
       let geometryId = geometryCache.get(sig);
 
       if (!geometryId) {
-        geometryId = `geom-${meshIndex}`;
+        geometryId = `${sceneModelId}-geom-${meshIndex}`;
         geometryCache.set(sig, geometryId);
         sceneModel.createGeometry({
           id: geometryId,
@@ -121,8 +93,8 @@ export async function loadIfcIntoXeokit(
         } as unknown as Parameters<SceneModel['createGeometry']>[0]);
       }
 
-      const meshId = `mesh-${meshIndex++}`;
-      const matrix = multiplyMat4(IFC_TO_XEOKIT, mbuf.matrix ?? IDENTITY_MAT4);
+      const meshId = `${sceneModelId}-mesh-${meshIndex++}`;
+      const matrix = worldMatrixFromPlacement(mbuf.matrix);
 
       sceneModel.createMesh({
         id: meshId,
@@ -186,14 +158,6 @@ export async function disposeIfcModel(modelId: number): Promise<void> {
   closeIfcModel(api, modelId);
 }
 
-function transformVertex(matrix: number[], x: number, y: number, z: number): [number, number, number] {
-  return [
-    matrix[0] * x + matrix[4] * y + matrix[8] * z + matrix[12],
-    matrix[1] * x + matrix[5] * y + matrix[9] * z + matrix[13],
-    matrix[2] * x + matrix[6] * y + matrix[10] * z + matrix[14],
-  ];
-}
-
 /** Merge placed IFC meshes into flat { vertices, faces } for server geometry ops (xeokit Y-up). */
 export function placedMeshesToPayload(meshes: PlacedMeshBuffers[]): ServerMeshPayload | null {
   if (!meshes.length) return null;
@@ -203,8 +167,7 @@ export function placedMeshesToPayload(meshes: PlacedMeshBuffers[]): ServerMeshPa
   let vertexOffset = 0;
 
   for (const mesh of meshes) {
-    const placement = mesh.matrix ?? IDENTITY_MAT4;
-    const world = multiplyMat4(IFC_TO_XEOKIT, placement);
+    const world = worldMatrixFromPlacement(mesh.matrix);
 
     for (let i = 0; i < mesh.positions.length; i += 3) {
       const [x, y, z] = transformVertex(

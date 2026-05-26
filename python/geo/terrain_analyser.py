@@ -162,7 +162,7 @@ def analyse_terrain(payload: dict[str, Any]) -> dict[str, Any]:
     steps.append({"step": 3, "title": "Aspect", "result": aspect, "source": "Terrain gradient"})
     steps.append({"step": 4, "title": "Earthworks Estimate", "result": f"{earthworks:.0f} m³ to level platform", "source": "Cut/fill estimate"})
     steps.append({"step": 5, "title": "Drainage Direction", "result": "Downslope from site centroid", "source": "D8 routing simplified"})
-    steps.append({"step": 6, "title": "Buildability Score", "result": f"{buildability}/10", "source": "InfraAfrica scoring"})
+    steps.append({"step": 6, "title": "Buildability Score", "result": f"{buildability}/10", "source": "ARCHITEX-CAD scoring"})
 
     return {
         "status": "complete",

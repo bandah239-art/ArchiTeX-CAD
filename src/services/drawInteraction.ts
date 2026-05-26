@@ -6,6 +6,8 @@ import { useUndoStore } from '../store/undoStore';
 import { useViewerStore } from '../store/viewerStore';
 import { useToolbarStore } from '../components/BIMViewer/toolRegistry';
 import type { DrawTool } from '../types/tools';
+import { useCadSessionStore } from '../store/cadSessionStore';
+import { processCadModifyClick } from './cadModifyInteraction';
 
 export function syncDrawToEngine(
   drawEngine: DrawEngine | null | undefined,
@@ -76,6 +78,10 @@ export function processSketchClick(
   drawEngine: DrawEngine | null | undefined,
   canvasPos: number[],
 ): boolean {
+  if (useCadSessionStore.getState().command) {
+    return processCadModifyClick(drawEngine, canvasPos);
+  }
+
   const tool = useViewerStore.getState().activeTool;
   const drawTool = asSketchDrawTool(tool);
   if (!drawTool || useToolbarStore.getState().activeTab !== 'draw') return false;

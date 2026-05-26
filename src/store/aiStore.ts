@@ -169,7 +169,7 @@ export const useAiStore = create<AiState>((set, get) => ({
     if (!designBrief) return;
     const geo = useGeoStore.getState().analysis;
     const result = await aiAPI.generateProposal({
-      project_name: 'InfraAfrica Project',
+      project_name: 'ARCHITEX-CAD Project',
       client_name: 'Client',
       design_brief: designBrief,
       geo_data: geo ?? {},
@@ -178,7 +178,7 @@ export const useAiStore = create<AiState>((set, get) => ({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'infraafrica_proposal.html';
+    a.download = 'architex-cad_proposal.html';
     a.click();
     URL.revokeObjectURL(url);
   },

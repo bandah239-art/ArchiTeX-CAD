@@ -10,8 +10,8 @@ def generate_markdown_report(analysis: dict) -> str:
     report = []
     report.append("# INFRASTRUCTURE STRUCTURE ASSESSMENT REPORT")
     report.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-    report.append("Prepared by:  InfraAfrica Vision Engine")
-    report.append("Platform:     InfraAfrica v1.0")
+    report.append("Prepared by:  ARCHITEX-CAD Vision Engine")
+    report.append("Platform:     ARCHITEX-CAD v1.0")
     report.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     
     report.append("\n## 1. STRUCTURE IDENTIFICATION")

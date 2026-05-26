@@ -47,7 +47,7 @@ export function GeometryKernelPanel() {
 
       <p className="text-[9px] text-gray-600 mt-4 leading-relaxed">
         Gile GeometryExtensions C# library is ported to Python for IFC/BoQ workflows. Optional
-        AutoCAD bridge in GeometryExtensions/InfraAfricaBridge for native DWG when ObjectARX is installed.
+        AutoCAD bridge in GeometryExtensions/InfraAfricaBridge (ARCHITEX-CAD) for native DWG when ObjectARX is installed.
       </p>
     </div>
   );

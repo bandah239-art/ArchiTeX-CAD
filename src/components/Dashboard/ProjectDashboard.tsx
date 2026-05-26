@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useProjectStore } from '../../store/projectStore';
 import { ProjectCard } from './ProjectCard';
 import { RecentActivity } from './RecentActivity';
@@ -13,17 +14,18 @@ export function ProjectDashboard({
   onEnterWorkspace,
   hasProject,
 }: ProjectDashboardProps) {
+  const { t } = useTranslation();
   const { recentProjects } = useProjectStore();
 
   return (
     <div className="min-h-full bg-gradient-to-br from-infra-dark to-infra-darker p-8">
       <div className="max-w-5xl mx-auto">
         <div className="mb-10">
-          <h1 className="text-4xl font-bold text-white mb-2">
-            INFRA<span className="text-infra-highlight">FRICA</span>
+          <h1 className="text-4xl font-bold text-white mb-2 tracking-tight">
+            ARCHITEX<span className="text-infra-highlight">-CAD</span>
           </h1>
-          <p className="text-gray-400">
-            Calculation Engine + BIM Viewer — Version 1.0
+          <p className="text-gray-400 text-lg">
+            {t('app.tagline')} — Version 1.0
           </p>
         </div>
 

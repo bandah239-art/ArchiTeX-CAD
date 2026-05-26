@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { IconCamera, IconFileText, IconPenTool, IconPlay, IconUpload } from './VisionIcons';
 import { visionAPI, type VisionAnalysisResult } from '../../services/visionAPI';
+import { Capture3D } from '../Vision/Capture3D';
 
 export function VisionPanel() {
   const [images, setImages] = useState<string[]>([]);
@@ -208,6 +209,11 @@ export function VisionPanel() {
               </pre>
             </div>
           )}
+
+          {/* 3D Capture Integration */}
+          <div className="mt-8">
+            <Capture3D />
+          </div>
         </div>
       </div>
     </div>

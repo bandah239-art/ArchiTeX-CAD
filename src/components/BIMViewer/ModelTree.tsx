@@ -6,22 +6,22 @@ export function ModelTree() {
   const { stats } = useIfcModelStore();
 
   return (
-    <div className="p-3">
-      <h3 className="text-xs font-semibold text-gray-400 uppercase mb-2">Model Tree</h3>
-      <div id="treeViewContainer" className="text-xs text-gray-400 min-h-[40px]" />
+    <div className="p-4">
+      <h3 className="workspace-subheading mb-3 border-0 pb-0">Model Tree</h3>
+      <div id="treeViewContainer" className="text-sm text-gray-300 min-h-[48px]" />
       {loadedModel ? (
-        <div className="text-xs text-gray-400 mt-2 space-y-1">
-          <div className="font-medium text-gray-300">{loadedModel.name}</div>
+        <div className="text-sm text-gray-400 mt-3 space-y-1.5">
+          <div className="font-medium text-gray-200">{loadedModel.name}</div>
           <p>{loadedModel.elementCount} elements</p>
           {stats && stats.triangleCount > 0 && (
-            <p className="text-gray-600">{(stats.triangleCount / 1000).toFixed(1)}k triangles</p>
+            <p className="text-gray-500">{(stats.triangleCount / 1000).toFixed(1)}k triangles</p>
           )}
           {stats && stats.loadTime > 0 && (
-            <p className="text-gray-600">Loaded in {(stats.loadTime / 1000).toFixed(1)}s</p>
+            <p className="text-gray-500">Loaded in {(stats.loadTime / 1000).toFixed(1)}s</p>
           )}
         </div>
       ) : (
-        <p className="text-xs text-gray-600 mt-2">No model loaded</p>
+        <p className="text-sm text-gray-500 mt-3">No model loaded</p>
       )}
     </div>
   );

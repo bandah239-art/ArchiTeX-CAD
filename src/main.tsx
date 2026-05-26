@@ -8,7 +8,7 @@ import './index.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <ErrorBoundary fallbackTitle="INFRAFRICA failed to start">
+    <ErrorBoundary fallbackTitle="ARCHITEX-CAD failed to start">
       <App />
     </ErrorBoundary>
   </React.StrictMode>

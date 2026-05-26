@@ -34,7 +34,7 @@ def analyse_seismic(payload: dict[str, Any]) -> dict[str, Any]:
 
     url = (
         "https://earthquake.usgs.gov/ws/designmaps/asce7-22.json?"
-        f"latitude={lat}&longitude={lon}&riskCategory=II&siteClass=D&title=InfraAfrica"
+        f"latitude={lat}&longitude={lon}&riskCategory=II&siteClass=D&title=ARCHITEX-CAD"
     )
     data = fetch_json(url, timeout=20)
 

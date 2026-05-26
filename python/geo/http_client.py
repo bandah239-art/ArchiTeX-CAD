@@ -10,7 +10,7 @@ from typing import Any
 
 def fetch_json(url: str, timeout: int = 15) -> dict[str, Any] | list[Any] | None:
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "InfraAfrica/1.0"})
+        req = urllib.request.Request(url, headers={"User-Agent": "ARCHITEX-CAD/1.0"})
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return json.loads(resp.read().decode("utf-8"))
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, ValueError):

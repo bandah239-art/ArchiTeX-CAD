@@ -1,6 +1,6 @@
 /** Shared constants and types for desktop + mobile. */
 
-export const APP_NAME = 'INFRAFRICA';
+export const APP_NAME = 'ARCHITEX-CAD';
 
 export const AFRICAN_COUNTRIES = [
   { code: 'ZM', label: 'Zambia', flag: '🇿🇲' },

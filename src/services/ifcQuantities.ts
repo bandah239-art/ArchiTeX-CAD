@@ -1,5 +1,7 @@
 /** Mesh-based geometric quantity extraction (volume, area, length, bounding box). */
 
+import { transformPositions, worldMatrixFromPlacement } from './ifcTransforms';
+
 export interface MeshBuffers {
   positions: Float32Array;
   indices: Uint32Array;
@@ -130,6 +132,23 @@ export function mergeMeshes(meshes: MeshBuffers[]): MeshBuffers {
   };
 }
 
+/** Merge IFC meshes with placement applied (world space, xeokit Y-up). */
+export function mergePlacedMeshes(meshes: PlacedMeshBuffers[]): MeshBuffers {
+  if (!meshes.length) return { positions: new Float32Array(0), indices: new Uint32Array(0) };
+  if (meshes.length === 1) {
+    const world = worldMatrixFromPlacement(meshes[0].matrix);
+    return {
+      positions: transformPositions(meshes[0].positions, world),
+      indices: meshes[0].indices,
+    };
+  }
+  const buffers: MeshBuffers[] = meshes.map((mesh) => ({
+    positions: transformPositions(mesh.positions, worldMatrixFromPlacement(mesh.matrix)),
+    indices: mesh.indices,
+  }));
+  return mergeMeshes(buffers);
+}
+
 export function quantitiesFromMesh(mesh: MeshBuffers): ElementQuantities {
   const bounds = meshBounds(mesh.positions);
   const dims = bboxDimensions(bounds);
@@ -150,22 +169,24 @@ export function mergeWithPropertyQuantities(
   geom: ElementQuantities,
   properties: Record<string, string | number>
 ): ElementQuantities {
-  const num = (keys: string[]): number | undefined => {
+  const num = (keys: string[], maxReasonable: number): number | undefined => {
     for (const k of keys) {
       const v = properties[k];
-      if (typeof v === 'number' && v > 0) return v;
-      if (typeof v === 'string') {
-        const n = parseFloat(v);
-        if (!Number.isNaN(n) && n > 0) return n;
+      let n: number | undefined;
+      if (typeof v === 'number' && v > 0) n = v;
+      else if (typeof v === 'string') {
+        const parsed = parseFloat(v);
+        if (!Number.isNaN(parsed) && parsed > 0) n = parsed;
       }
+      if (n !== undefined && n <= maxReasonable) return n;
     }
     return undefined;
   };
 
   return {
     ...geom,
-    volume: num(['Volume', 'NetVolume', 'GrossVolume', 'volume']) ?? geom.volume,
-    surfaceArea: num(['Area', 'NetArea', 'GrossArea', 'area']) ?? geom.surfaceArea,
-    length: num(['Length', 'NetLength', 'length']) ?? geom.length,
+    volume: num(['Volume', 'NetVolume', 'GrossVolume', 'volume'], 1e6) ?? geom.volume,
+    surfaceArea: num(['Area', 'NetArea', 'GrossArea', 'area'], 1e6) ?? geom.surfaceArea,
+    length: num(['Length', 'NetLength', 'length'], 1e4) ?? geom.length,
   };
 }

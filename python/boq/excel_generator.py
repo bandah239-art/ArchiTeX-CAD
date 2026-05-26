@@ -24,7 +24,7 @@ def generate_boq_excel(boq: dict[str, Any], output_path: str | None = None) -> s
     # Cover
     ws = wb.active
     ws.title = "Cover"
-    ws["A1"] = "INFRAFRICA — BILL OF QUANTITIES"
+    ws["A1"] = "ARCHITEX-CAD — BILL OF QUANTITIES"
     ws["A1"].font = Font(bold=True, size=16, color="FFFFFF")
     ws["A1"].fill = navy
     ws.merge_cells("A1:F1")
@@ -112,7 +112,7 @@ def generate_boq_excel(boq: dict[str, Any], output_path: str | None = None) -> s
             sheet.column_dimensions[letter].width = min(max_len + 2, 45)
 
     if not output_path:
-        fd, output_path = tempfile.mkstemp(suffix=".xlsx", prefix="infraafrica_boq_")
+        fd, output_path = tempfile.mkstemp(suffix=".xlsx", prefix="architex-cad_boq_")
         os.close(fd)
     wb.save(output_path)
     return output_path

@@ -156,7 +156,7 @@ export function useViewerShortcuts() {
 
         a.href = dataUrl;
 
-        a.download = `infraafrica-view-${Date.now()}.png`;
+        a.download = `architex-cad-view-${Date.now()}.png`;
 
         a.click();
 

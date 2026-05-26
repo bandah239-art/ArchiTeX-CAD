@@ -30,17 +30,15 @@ export function Sidebar({ activePanel, onPanelChange }: SidebarProps) {
   const { t } = useTranslation();
 
   return (
-    <nav className="w-14 flex-shrink-0 bg-infra-darker border-r border-infra-accent/30 flex flex-col items-center py-4 gap-2 overflow-y-auto">
+    <nav className="panel-sidebar">
       {PANELS.map((item) => (
         <button
           key={item.id}
           type="button"
           title={t(item.key)}
           onClick={() => onPanelChange(item.id)}
-          className={`w-10 h-10 rounded-lg flex items-center justify-center text-lg transition-colors flex-shrink-0 ${
-            activePanel === item.id
-              ? 'bg-infra-highlight/20 text-infra-highlight border border-infra-highlight/40'
-              : 'hover:bg-infra-accent/30 text-gray-400'
+          className={`panel-sidebar-btn ${
+            activePanel === item.id ? 'panel-sidebar-btn-active' : 'panel-sidebar-btn-idle'
           }`}
         >
           {item.icon}

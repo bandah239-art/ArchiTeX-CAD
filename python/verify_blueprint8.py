@@ -74,7 +74,7 @@ def test_mobile_concrete() -> None:
 
 
 if __name__ == "__main__":
-    print("InfraAfrica Blueprint 8 Verification")
+    print("ARCHITEX-CAD Blueprint 8 Verification")
     test_portfolio()
     test_payment_certificate()
     test_mobile_concrete()

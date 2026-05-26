@@ -1,0 +1,207 @@
+/* Workspace shell layout — top bar, tool ribbon, panels, status bar */
+
+.topbar-shell {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+  padding: 0.5rem 1rem;
+  min-height: 3rem;
+  background: #16213e;
+  border-bottom: 1px solid rgba(15, 52, 96, 0.6);
+}
+
+.topbar-btn {
+  padding: 0.375rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-radius: 0.375rem;
+  white-space: nowrap;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.statusbar-shell {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-shrink: 0;
+  padding: 0.375rem 1rem;
+  min-height: 2rem;
+  font-size: 0.8125rem;
+  color: #9ca3af;
+  background: #16213e;
+  border-top: 1px solid rgba(15, 52, 96, 0.6);
+}
+
+.panel-sidebar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
+  width: 5rem;
+  padding: 0.5rem 0.25rem;
+  overflow-y: auto;
+  background: #16213e;
+  border-right: 1px solid rgba(15, 52, 96, 0.5);
+}
+
+.panel-sidebar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  font-size: 1.25rem;
+  border-radius: 0.5rem;
+  border: 1px solid transparent;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+
+.panel-sidebar-btn-idle {
+  background: transparent;
+  color: #d1d5db;
+}
+
+.panel-sidebar-btn-idle:hover {
+  background: rgba(15, 52, 96, 0.45);
+  border-color: rgba(249, 115, 22, 0.25);
+}
+
+.panel-sidebar-btn-active {
+  background: rgba(249, 115, 22, 0.15);
+  border-color: rgba(249, 115, 22, 0.5);
+}
+
+.panel-tree {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  width: 18rem;
+  min-width: 14rem;
+  max-width: 22rem;
+  overflow: hidden;
+  background: #16213e;
+  border-right: 1px solid rgba(15, 52, 96, 0.5);
+}
+
+.panel-inspector {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  width: 22rem;
+  min-width: 18rem;
+  max-width: 28rem;
+  overflow: hidden;
+  background: #16213e;
+  border-left: 1px solid rgba(15, 52, 96, 0.5);
+}
+
+.panel-workspace {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  width: 30rem;
+  min-width: 22rem;
+  max-width: 40rem;
+  overflow: hidden;
+  background: #16213e;
+  border-left: 1px solid rgba(15, 52, 96, 0.5);
+}
+
+/* Tool ribbon */
+.tool-ribbon-shell {
+  display: flex;
+  flex-direction: column;
+  background: #16213e;
+  border-bottom: 1px solid rgba(15, 52, 96, 0.55);
+}
+
+.tool-ribbon-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 0.125rem;
+  padding: 0.25rem 0.5rem 0;
+  border-bottom: 1px solid rgba(15, 52, 96, 0.4);
+}
+
+.tool-ribbon-tab {
+  padding: 0.375rem 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  white-space: nowrap;
+  border-radius: 0.375rem 0.375rem 0 0;
+  border: 1px solid transparent;
+  border-bottom: none;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.tool-ribbon-tab-idle {
+  color: #9ca3af;
+  background: transparent;
+}
+
+.tool-ribbon-tab-idle:hover {
+  color: #e5e7eb;
+  background: rgba(15, 52, 96, 0.35);
+}
+
+.tool-ribbon-tab-active {
+  color: #f97316;
+  background: #1a1a2e;
+  border-color: rgba(15, 52, 96, 0.55);
+}
+
+.tool-ribbon-row-primary,
+.tool-ribbon-row-modifier {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.375rem 0.5rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.tool-ribbon-row-modifier {
+  border-top: 1px solid rgba(15, 52, 96, 0.25);
+  min-height: 2.75rem;
+}
+
+.tool-ribbon-group-label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #6b7280;
+  margin-right: 0.25rem;
+  white-space: nowrap;
+}
+
+.tool-ribbon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  flex-shrink: 0;
+  border-radius: 0.375rem;
+  border: 1px solid transparent;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.tool-ribbon-btn-idle {
+  color: #d1d5db;
+  background: rgba(26, 26, 46, 0.6);
+}
+
+.tool-ribbon-btn-idle:hover {
+  background: rgba(15, 52, 96, 0.5);
+  border-color: rgba(249, 115, 22, 0.3);
+}
+
+.tool-ribbon-btn-active {
+  color: #fff;
+  background: rgba(249, 115, 22, 0.35);
+  border-color: rgba(249, 115, 22, 0.65);
+}

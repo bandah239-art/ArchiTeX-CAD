@@ -71,7 +71,7 @@ export const useDocumentsStore = create<DocumentsState>((set, get) => ({
         result = await documentsAPI.calculationReport({
           project_name: s.projectName,
           client_name: 'Client',
-          engineer_name: 'InfraAfrica Engineer',
+          engineer_name: 'ARCHITEX-CAD Engineer',
         });
       } else if (s.activeTab === 'eia') {
         result = await documentsAPI.eiaScreening({
@@ -104,7 +104,7 @@ export const useDocumentsStore = create<DocumentsState>((set, get) => ({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `infraafrica_${get().activeTab}_${Date.now()}.txt`;
+    a.download = `architex-cad_${get().activeTab}_${Date.now()}.txt`;
     a.click();
     URL.revokeObjectURL(url);
   },

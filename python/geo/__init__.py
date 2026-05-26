@@ -1,1 +1,1 @@
-"""African Geo Intelligence layer for InfraAfrica."""
+"""African Geo Intelligence layer for ARCHITEX-CAD."""

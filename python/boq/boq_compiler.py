@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from boq.materials_database import EXCHANGE_RATES, get_material, get_rate, get_wastage
+from boq.market_pricing import fetch_live_market_price
 
 SECTION_TITLES = {
     "A": "SECTION A — SUBSTRUCTURE",
@@ -32,7 +33,14 @@ def _price_item(material_id: str, quantity: float, country_code: str) -> dict[st
 
     wastage = get_wastage(material_id)
     qty = quantity * wastage
-    rates = material["rates"].get(country_code.upper(), material["rates"].get("ZM", {"min": 0, "max": 0}))
+    
+    # Try dynamic live market pricing first
+    rates = fetch_live_market_price(material_id, country_code)
+    is_live = True
+    if not rates:
+        rates = material["rates"].get(country_code.upper(), material["rates"].get("ZM", {"min": 0, "max": 0}))
+        is_live = False
+        
     rate_min = rates["min"]
     rate_max = rates["max"]
     rate_mid = (rate_min + rate_max) / 2
@@ -49,6 +57,7 @@ def _price_item(material_id: str, quantity: float, country_code: str) -> dict[st
         "amount_min": round(qty * rate_min, 2),
         "amount_max": round(qty * rate_max, 2),
         "amount_mid": round(qty * rate_mid, 2),
+        "is_live_price": is_live,
     }
 
 

@@ -30,6 +30,17 @@ const KIND_COLORS: Record<SketchKind, [number, number, number]> = {
   polygon: [0.38, 0.68, 0.82],
   pipe: [0.55, 0.55, 0.6],
   'site-boundary': [0.25, 0.88, 0.45],
+  circle: [0.5, 0.85, 0.95],
+  arc: [0.65, 0.8, 0.95],
+  ellipse: [0.45, 0.75, 0.88],
+  hatch: [0.3, 0.55, 0.45],
+  boundary: [0.55, 0.9, 0.7],
+  xline: [0.4, 0.45, 0.5],
+  spline: [0.7, 0.55, 0.9],
+  point: [1, 0.9, 0.2],
+  region: [0.35, 0.65, 0.78],
+  donut: [0.9, 0.7, 0.25],
+  revcloud: [0.95, 0.45, 0.35],
 };
 
 export class DrawEngine {
@@ -126,6 +137,33 @@ export class DrawEngine {
       case 'site-boundary':
         this.renderSiteBoundary(el, floorY);
         break;
+      case 'circle':
+        this.renderCircle(el, floorY);
+        break;
+      case 'arc':
+        this.renderArc(el, floorY);
+        break;
+      case 'ellipse':
+        this.renderEllipse(el, floorY);
+        break;
+      case 'hatch':
+      case 'region':
+      case 'boundary':
+        this.renderAreaElement(el, floorY);
+        break;
+      case 'xline':
+        this.renderXline(el, floorY);
+        break;
+      case 'spline':
+      case 'revcloud':
+        this.renderLineSegments(el, floorY, KIND_COLORS[el.kind]);
+        break;
+      case 'point':
+        this.renderColumn(el, floorY);
+        break;
+      case 'donut':
+        this.renderDonut(el, floorY);
+        break;
       case 'wall':
         this.renderWallSegments(el, floorY);
         break;
@@ -204,6 +242,85 @@ export class DrawEngine {
     this.renderClosedOutline(el.points, floorY, color, el.id, 0.12);
     const verts = isClosedRing(el.points) ? el.points.slice(0, -1) : el.points;
     this.renderVertexMarkers(verts, floorY, color, el.id);
+  }
+
+  private circlePoints(center: SketchPoint, edge: SketchPoint, segments = 48): SketchPoint[] {
+    const r = Math.hypot(edge.x - center.x, edge.z - center.z) || 0.01;
+    const pts: SketchPoint[] = [];
+    for (let i = 0; i <= segments; i++) {
+      const t = (i / segments) * Math.PI * 2;
+      pts.push({
+        x: center.x + Math.cos(t) * r,
+        y: center.y,
+        z: center.z + Math.sin(t) * r,
+      });
+    }
+    return pts;
+  }
+
+  private renderCircle(el: SketchElement, floorY: number) {
+    if (el.points.length < 2) return;
+    const loop = this.circlePoints(el.points[0], el.points[1]);
+    this.renderAreaElement(
+      { ...el, points: loop.slice(0, -1), kind: 'polygon', thickness: 0.03 },
+      floorY,
+    );
+    this.renderClosedOutline(loop, floorY, KIND_COLORS.circle, el.id, 0.1);
+  }
+
+  private renderArc(el: SketchElement, floorY: number) {
+    if (el.points.length < 3) return;
+    this.renderOpenOutline(el.points, floorY, KIND_COLORS.arc, el.id, 0.12, false);
+    this.renderVertexMarkers(el.points, floorY, KIND_COLORS.arc, el.id);
+  }
+
+  private renderEllipse(el: SketchElement, floorY: number) {
+    if (el.points.length < 2) return;
+    const [a, b] = el.points;
+    const cx = (a.x + b.x) / 2;
+    const cz = (a.z + b.z) / 2;
+    const rx = Math.abs(b.x - a.x) / 2 || 0.01;
+    const rz = Math.abs(b.z - a.z) / 2 || 0.01;
+    const loop: SketchPoint[] = [];
+    for (let i = 0; i <= 48; i++) {
+      const t = (i / 48) * Math.PI * 2;
+      loop.push({ x: cx + Math.cos(t) * rx, y: a.y, z: cz + Math.sin(t) * rz });
+    }
+    this.renderClosedOutline(loop, floorY, KIND_COLORS.ellipse, el.id, 0.1);
+  }
+
+  private renderXline(el: SketchElement, floorY: number) {
+    if (el.points.length < 2) return;
+    const [a, b] = el.points;
+    const dx = b.x - a.x;
+    const dz = b.z - a.z;
+    const len = Math.hypot(dx, dz) || 1;
+    const scale = 500;
+    const far: SketchPoint = {
+      x: a.x + (dx / len) * scale,
+      y: a.y,
+      z: a.z + (dz / len) * scale,
+    };
+    const back: SketchPoint = {
+      x: a.x - (dx / len) * scale,
+      y: a.y,
+      z: a.z - (dz / len) * scale,
+    };
+    this.renderThinSegment(back, far, floorY, KIND_COLORS.xline, `${el.id}-xl`, 0.06);
+  }
+
+  private renderDonut(el: SketchElement, floorY: number) {
+    if (el.points.length < 2) return;
+    const outer = this.circlePoints(el.points[0], el.points[1], 40);
+    this.renderClosedOutline(outer, floorY, KIND_COLORS.donut, el.id, 0.14);
+    const rIn = Math.hypot(el.points[1].x - el.points[0].x, el.points[1].z - el.points[0].z) * 0.5;
+    const innerEdge: SketchPoint = {
+      x: el.points[0].x + rIn * 0.5,
+      y: el.points[0].y,
+      z: el.points[0].z,
+    };
+    const inner = this.circlePoints(el.points[0], innerEdge, 32);
+    this.renderClosedOutline(inner, floorY, KIND_COLORS.donut, `${el.id}-in`, 0.1);
   }
 
   private renderSiteBoundary(el: SketchElement, floorY: number) {

@@ -9,6 +9,7 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
       '@infraafrica/shared': path.resolve(__dirname, './packages/shared/src/index.ts'),
     },
+    dedupe: ['react', 'react-dom', 'three'],
   },
   base: './',
   server: {
@@ -34,6 +35,7 @@ export default defineConfig({
   },
   optimizeDeps: {
     exclude: ['web-ifc'],
+    include: ['three'],
   },
   assetsInclude: ['**/*.wasm'],
   build: {

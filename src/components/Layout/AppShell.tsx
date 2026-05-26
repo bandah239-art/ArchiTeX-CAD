@@ -20,6 +20,7 @@ import { SeismicPanel } from '../Seismic/SeismicPanel';
 import { EmergingTechPanel } from '../Emerging/EmergingTechPanel';
 import { VisionPanel } from '../VisionCapture/VisionPanel';
 import { ViewerToolRibbon } from '../BIMViewer/ViewerToolRibbon';
+import { CadToolsPanel } from '../BIMViewer/CadToolsPanel';
 import { ToolResultBanner } from '../BIMViewer/ToolResultBanner';
 import { useViewerShortcuts } from '../../hooks/useViewerShortcuts';
 import { LayerPanel } from '../BIMViewer/LayerPanel';
@@ -87,14 +88,14 @@ export function AppShell({ onBackToDashboard }: AppShellProps) {
         onToggleCalculator={() => togglePanel('calculator')}
         onToggleInspector={toggleInspector}
       />
-      <div className="relative z-20">
+      <div className="relative z-20 flex-shrink-0">
         <ViewerToolRibbon />
         <ToolResultBanner />
       </div>
       <div className="flex flex-1 min-h-0 overflow-hidden">
         <Sidebar activePanel={activePanel} onPanelChange={setActivePanel} />
         <div className="flex flex-1 min-h-0 overflow-hidden">
-          <div className="w-56 flex-shrink-0 border-r border-infra-accent/30 overflow-y-auto z-10 bg-infra-dark">
+          <div className="panel-tree">
             <ModelTree />
             <LayerPanel />
           </div>
@@ -107,16 +108,17 @@ export function AppShell({ onBackToDashboard }: AppShellProps) {
                 activeStorey={activeStorey}
                 hiddenLayers={hiddenTypes}
               />
+              <CadToolsPanel />
             </ErrorBoundary>
           </div>
           {showInspector && (
-            <div className="w-80 flex-shrink-0 border-l border-infra-accent/30 overflow-hidden flex flex-col">
+            <div className="panel-inspector">
               <ViewerSidePanel element={selectedElement} />
             </div>
           )}
         </div>
         {showSidePanel && (
-          <div className="w-96 flex-shrink-0 border-l border-infra-accent/30 overflow-y-auto">
+          <div className="panel-workspace">
             <ErrorBoundary>
               {renderSidePanel()}
             </ErrorBoundary>

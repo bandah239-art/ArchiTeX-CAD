@@ -13,6 +13,7 @@ from data.african_conditions import apply_local_adjustments
 from calculations.loads.load_combinations import calculate_loads, generate_load_combinations
 from calculations.core.engineer_control import wrap_calculation_result
 from calculations.core.calculation_db import save_review, save_reviews_batch, load_reviews
+from reports.pdf_renderer import render_calculation_pdf
 from calculations.pressure.foundation_bearing import calculate_foundation_bearing
 from calculations.pressure.lateral_earth import calculate_lateral_earth
 from calculations.pressure.wind_distribution import calculate_wind_distribution
@@ -69,6 +70,7 @@ from ai.design_generator import generate_design
 from ai.variant_generator import generate_variants
 from ai.design_to_calculations import push_to_calculators
 from ai.proposal_generator import generate_proposal
+from ai.text_to_bim import generate_bim_from_text
 from real_estate.plot_valuation import value_plot
 from real_estate.feasibility import run_feasibility
 from real_estate.land_use_optimiser import optimise_land_use
@@ -96,6 +98,14 @@ from documents.eia_screening import screen_eia
 from sync.mobile_sync import list_sync_items, receive_sync_item
 from mobile.quick_calculators import concrete_mix, quick_beam_check, rebar_weight
 from calculations.wash.water_demand import calculate_water_demand
+
+from calculations.energy_bess import calculate_bess, BessRequest
+from calculations.energy_microgrid import calculate_voltage_drop, MicrogridRequest
+from calculations.energy_transmission import calculate_sag_tension, TransmissionRequest
+
+from calculations.wash_water_tower import calculate_water_tower, WaterTowerRequest
+from calculations.wash_epanet import calculate_pipe_network, PipeNetworkRequest
+from calculations.wash_dewats import calculate_dewats, DewatsRequest
 from calculations.wash.borehole import calculate_borehole
 from calculations.wash.sewer_design import calculate_sewer_design
 from calculations.wash.pipe_network import analyze_pipe_network
@@ -131,7 +141,7 @@ from simulations.seismic.seismic_response import simulate_seismic_response
 from calculations.generative.optimizer import optimize_structural_layout, optimize_solar_orientation
 from sync.desktop_sync import process_sync_batch
 
-app = FastAPI(title="INFRAFRICA Calculation Engine")
+app = FastAPI(title="ARCHITEX-CAD Calculation Engine")
 
 app.add_middleware(
     CORSMiddleware,
@@ -830,7 +840,7 @@ class FloodInputs(BaseModel):
 
 
 class IfcExportInput(BaseModel):
-    name: str = "INFRAFRICA Export"
+    name: str = "ARCHITEX-CAD Export"
     site_name: str = "Site"
     elements: list[dict[str, Any]] = Field(default_factory=list)
 
@@ -1071,6 +1081,17 @@ def reviews_save_batch_endpoint(inputs: ReviewBatchInput):
 def reviews_load_endpoint(calc_module: str | None = None, project_id: str = "default"):
     return load_reviews(calc_module, project_id)
 
+@app.post("/export/pdf")
+def export_pdf_endpoint(payload: dict[str, Any]):
+    try:
+        pdf_bytes = render_calculation_pdf(payload)
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": "attachment; filename=calculation_report.pdf"}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"PDF Generation failed: {str(e)}")
 
 class PressurePayload(BaseModel):
     """Flexible payload for pressure modules."""
@@ -1232,7 +1253,7 @@ def boq_export_excel(inputs: BoQCompileInput):
         return Response(
             content=data,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers={"Content-Disposition": "attachment; filename=infraafrica_boq.xlsx"},
+            headers={"Content-Disposition": "attachment; filename=architex-cad_boq.xlsx"},
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -1247,7 +1268,7 @@ def boq_export_pdf(inputs: BoQCompileInput):
         return Response(
             content=data,
             media_type=media_type,
-            headers={"Content-Disposition": f"attachment; filename=infraafrica_boq.{ext}"},
+            headers={"Content-Disposition": f"attachment; filename=architex-cad_boq.{ext}"},
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -1939,6 +1960,58 @@ def simulate_seismic_endpoint(inputs: SeismicAnalysisInput):
     except (ValueError, KeyError) as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+class GenerativeBIMRequest(BaseModel):
+    prompt: str = Field(..., description="Prompt for structural frame generation")
+
+@app.post("/api/generate/bim")
+async def generate_bim_endpoint(payload: GenerativeBIMRequest):
+    try:
+        result = generate_bim_from_text(payload.prompt)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/energy/bess")
+def energy_bess_endpoint(req: BessRequest):
+    try:
+        return calculate_bess(req)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/energy/microgrid")
+def energy_microgrid_endpoint(req: MicrogridRequest):
+    try:
+        return calculate_voltage_drop(req)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/energy/transmission")
+def energy_transmission_endpoint(req: TransmissionRequest):
+    try:
+        return calculate_sag_tension(req)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/wash/water-tower")
+def wash_water_tower_endpoint(req: WaterTowerRequest):
+    try:
+        return calculate_water_tower(req)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/wash/epanet")
+def wash_epanet_endpoint(req: PipeNetworkRequest):
+    try:
+        return calculate_pipe_network(req)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/wash/dewats")
+def wash_dewats_endpoint(req: DewatsRequest):
+    try:
+        return calculate_dewats(req)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn

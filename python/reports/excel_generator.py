@@ -14,7 +14,7 @@ def generate_excel_report(calculation_result: dict[str, Any], output_path: str) 
     header_font = Font(bold=True, size=14, color="FFFFFF")
     header_fill = PatternFill(start_color="0F3460", end_color="0F3460", fill_type="solid")
 
-    ws["A1"] = "INFRAFRICA Calculation Report"
+    ws["A1"] = "ARCHITEX-CAD Calculation Report"
     ws["A1"].font = header_font
     ws["A1"].fill = header_fill
     ws.merge_cells("A1:D1")

@@ -1,1 +1,1 @@
-"""Bill of Quantities engine for InfraAfrica."""
+"""Bill of Quantities engine for ARCHITEX-CAD."""

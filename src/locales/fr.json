@@ -1,5 +1,5 @@
 {
-  "app": { "name": "INFRAFRICA", "tagline": "Plateforme d'ingénierie des infrastructures africaines" },
+  "app": { "name": "ARCHITEX-CAD", "tagline": "Visionneuse BIM + moteur de calcul structure et infrastructures" },
   "sidebar": {
     "viewer": "Visionneuse 3D",
     "calculator": "Calculateur",

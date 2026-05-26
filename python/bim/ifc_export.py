@@ -69,7 +69,7 @@ def export_ifc_from_elements(project_data: dict[str, Any]) -> dict[str, Any]:
     if not HAS_IFCOPENSHELL:
         return {"status": "error", "error": "IfcOpenShell not installed"}
 
-    name = project_data.get("name") or "INFRAFRICA Export"
+    name = project_data.get("name") or "ARCHITEX-CAD Export"
     site_name = project_data.get("site_name") or "Site"
     elements = project_data.get("elements") or []
 

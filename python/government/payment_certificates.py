@@ -94,7 +94,7 @@ Balance to complete:                     USD {balance:,.0f}
 Local currency ({currency} @ {exchange}):
 Amount due this certificate:             {currency} {cert_amount * exchange:,.0f}
 
-Prepared using InfraAfrica Government Platform
+Prepared using ARCHITEX-CAD Government Platform
 """
 
     return {

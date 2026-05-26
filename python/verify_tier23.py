@@ -76,7 +76,7 @@ def test_tier3() -> None:
 
 
 if __name__ == "__main__":
-    print("InfraAfrica Tier 2 + Tier 3 Verification")
+    print("ARCHITEX-CAD Tier 2 + Tier 3 Verification")
     test_wash()
     test_energy()
     test_collaboration()

@@ -1,1 +1,1 @@
-"""BIM / IFC integration for InfraAfrica."""
+"""BIM / IFC integration for ARCHITEX-CAD."""

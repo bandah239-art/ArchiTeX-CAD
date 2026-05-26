@@ -35,7 +35,7 @@ th {{ background: #1a2744; color: white; }}
 <p><strong>Project:</strong> {project}<br>
 <strong>Location:</strong> {analysis.get('latitude')}, {analysis.get('longitude')} — {analysis.get('country_code')}<br>
 <strong>Prepared:</strong> {datetime.now():%d %B %Y}<br>
-<strong>Platform:</strong> InfraAfrica Geo Intelligence</p>
+<strong>Platform:</strong> ARCHITEX-CAD Geo Intelligence</p>
 
 <h2>EXECUTIVE SUMMARY</h2>
 <table>
@@ -96,7 +96,7 @@ def generate_site_report(payload: dict[str, Any], output_path: str | None = None
     html_content = _html_report(analysis)
 
     if not output_path:
-        fd, output_path = tempfile.mkstemp(suffix=".pdf", prefix="infraafrica_site_")
+        fd, output_path = tempfile.mkstemp(suffix=".pdf", prefix="architex-cad_site_")
         os.close(fd)
 
     file_type = "pdf"

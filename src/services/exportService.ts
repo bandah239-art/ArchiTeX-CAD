@@ -6,12 +6,44 @@ export async function exportToPDF(result: CalculationResult): Promise<void> {
     ? await window.electronAPI.saveFileDialog('calculation-report.pdf')
     : null;
 
-  if (!savePath) {
-    downloadAsHTML(result);
-    return;
-  }
+  try {
+    const res = await fetch('http://localhost:8000/export/pdf', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(result),
+    });
 
-  downloadAsHTML(result, savePath.replace('.pdf', '.html'));
+    if (!res.ok) throw new Error('PDF Generation failed');
+
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+
+    if (savePath) {
+      // In Electron, we might want to send the buffer to fs directly
+      // but for now we can just use the HTML5 download trick anyway
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = savePath;
+      a.click();
+    } else {
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'calculation-report.pdf';
+      a.click();
+    }
+
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    console.error('Failed to generate PDF:', err);
+    // Fallback to HTML if server isn't running or fails
+    if (!savePath) {
+      downloadAsHTML(result);
+    } else {
+      downloadAsHTML(result, savePath.replace('.pdf', '.html'));
+    }
+  }
 }
 
 export async function exportToExcel(result: CalculationResult): Promise<void> {
@@ -73,9 +105,9 @@ function downloadAsHTML(result: CalculationResult, filename = 'calculation-repor
   const stepsHtml = result.steps.map((s) => stepHtml(s, 'calc', s.step_number)).join('');
   const review = result.review_summary;
 
-  const html = `<!DOCTYPE html><html><head><title>INFRAFRICA Report</title></head>
+  const html = `<!DOCTYPE html><html><head><title>ARCHITEX-CAD Report</title></head>
 <body style="font-family:Arial,sans-serif;margin:40px;">
-<h1>INFRAFRICA Calculation Report</h1>
+<h1>ARCHITEX-CAD Calculation Report</h1>
 <p>Status: <strong>${result.status.toUpperCase()}</strong></p>
 ${reviewer ? `<p>Reviewed by: <strong>${reviewer}</strong></p>` : ''}
 ${review ? `<p>Review summary: accepted ${review.accepted ?? 0}, overridden ${review.overridden ?? 0}, flagged ${review.flagged ?? 0}, pending ${review.pending ?? 0}</p>` : ''}

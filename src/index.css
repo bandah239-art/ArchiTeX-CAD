@@ -1,3 +1,5 @@
+@import './styles/workspace-ui.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -15,12 +17,14 @@ html, body, #root {
 
 body {
   font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-size: 15px;
   background: #1a1a2e;
-  color: #e0e0e0;
+  color: #e8e8e8;
 }
 
 ::-webkit-scrollbar {
-  width: 6px;
+  width: 10px;
+  height: 10px;
 }
 
 ::-webkit-scrollbar-track {
@@ -29,9 +33,9 @@ body {
 
 ::-webkit-scrollbar-thumb {
   background: #0f3460;
-  border-radius: 3px;
+  border-radius: 5px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #e94560;
+  background: #f97316;
 }

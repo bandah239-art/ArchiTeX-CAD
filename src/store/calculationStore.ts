@@ -10,6 +10,8 @@ import type {
   PavementInputs,
   DrainageInputs,
   WindInputs,
+  SteelInputs,
+  TimberInputs,
   RoadSubmodule,
 } from '../types/calculations';
 import type { IFCElement } from '../types/ifc';
@@ -222,17 +224,115 @@ const DEFAULT_INPUTS: Record<CalculationModule, Record<string, unknown>> = {
     retaining_wall_height_m: 5,
   },
   pressure: {},
+  steel: {
+    length: 5,
+    fy: 275,
+    w: 20,
+    Wpl: 721,
+    Aw: 22.8,
+  },
+  timber: {
+    length: 4,
+    b: 50,
+    h: 200,
+    fm_k: 24,
+    fv_k: 4.0,
+    E0_mean: 11000,
+    k_mod: 0.8,
+    w: 5,
+    w_sls: 3.5,
+  },
+  fea: {
+    element_count: 4,
+    node_count: 4,
+    scale: 20,
+  },
+  energy_bess: {
+    load_profile: 'Residential',
+    daily_load_kwh: 20,
+    peak_load_kw: 5,
+    autonomy_days: 2,
+    peak_sun_hours: 4.5,
+    battery_type: 'lithium_ion',
+  },
+  energy_microgrid: {
+    cable_length_m: 250,
+    load_current_amps: 45,
+    system_voltage: 230,
+    cable_material: 'aluminum',
+    max_voltage_drop_percent: 5.0,
+  },
+  energy_transmission: {
+    span_length_m: 50,
+    conductor_weight_kg_m: 1.5,
+    max_tension_kg: 2000,
+    temperature_c: 40,
+    ground_clearance_m: 8.0,
+  },
+  wash_water_tower: {
+    population: 500,
+    liters_per_capita_day: 50,
+    borehole_depth_m: 80,
+    tower_height_m: 12,
+    pump_efficiency: 0.6,
+  },
+  wash_epanet: {
+    wash_submodule: 'pipe_network',
+    population: 500,
+    lpcd: 50,
+    peak_factor: 2.5,
+    material: 'pvc',
+    country: 'Zambia',
+  },
+  wash_dewats: {
+    population: 200,
+    wastewater_generation_lps_capita: 40,
+    influent_bod_mg_l: 300,
+    temperature_c: 25,
+  },
 };
 
-function geoSoil(inputs: Record<string, unknown>) {
+function asCalculationResult(raw: unknown, fallbackTitle: string): CalculationResult {
+  if (raw && typeof raw === 'object' && 'status' in raw && 'steps' in raw) {
+    return raw as CalculationResult;
+  }
+  const record = (raw && typeof raw === 'object' ? raw : { result: raw }) as Record<string, unknown>;
   return {
-    phi: Number(inputs.friction_angle_deg ?? 30),
-    c: Number(inputs.cohesion_kpa ?? 0),
-    gamma: Number(inputs.unit_weight_knm3 ?? 18),
-    B: Number(inputs.foundation_width_m ?? 2),
-    L: Number(inputs.foundation_length_m ?? 2),
-    H: Number(inputs.retaining_wall_height_m ?? 5),
+    status: 'pass',
+    summary: flattenSummary(record),
+    steps: [
+      {
+        step_number: 1,
+        title: fallbackTitle,
+        formula: '',
+        substitution: '',
+        result: String(record.recommendation ?? record.message ?? 'Complete'),
+        unit: '',
+        reference: '',
+      },
+    ],
+    warnings: [],
+    errors: [],
+    timestamp: new Date().toISOString(),
   };
+}
+
+function flattenSummary(
+  summary: Record<string, unknown> | undefined,
+  prefix = ''
+): Record<string, string | number | boolean> {
+  const out: Record<string, string | number | boolean> = {};
+  for (const [key, value] of Object.entries(summary ?? {})) {
+    const k = prefix ? `${prefix}_${key}` : key;
+    if (typeof value === 'number' || typeof value === 'boolean') {
+      out[k] = value;
+    } else if (typeof value === 'string') {
+      out[k] = value;
+    } else if (value != null) {
+      out[k] = JSON.stringify(value);
+    }
+  }
+  return out;
 }
 
 function terrainCategoryNum(cat: unknown): number {
@@ -280,7 +380,11 @@ async function attachPressureOutputs(
       });
       out.pressure_bridge = {
         ...hydro,
-        summary: { ...hydro.summary, hydrodynamic: hydroDyn.summary },
+        summary: {
+          ...flattenSummary(hydro.summary as Record<string, unknown>),
+          ...flattenSummary(hydroDyn.summary as Record<string, unknown>, 'hydrodynamic'),
+        },
+        steps: [...(hydro.steps ?? []), ...(hydroDyn.steps ?? [])],
         warnings: [...(hydro.warnings ?? []), ...(hydroDyn.warnings ?? [])],
       };
     }
@@ -520,6 +624,51 @@ export const useCalculationStore = create<CalculationState>((set, get) => ({
           result = await pressureAPI.tank(inputs as any) as any;
           break;
         }
+        case 'steel':
+          result = await calculationAPI.calculateSteel(inputs as unknown as SteelInputs);
+          break;
+        case 'timber':
+          result = await calculationAPI.calculateTimber(inputs as unknown as TimberInputs);
+          break;
+        case 'pressure':
+          throw new Error('Use CALCULATE PRESSURE in the Pressure tab');
+        case 'energy_bess':
+          result = asCalculationResult(
+            await calculationAPI.calculateEnergyBess(inputs),
+            'BESS & Solar sizing',
+          );
+          break;
+        case 'energy_microgrid': {
+          const raw = (await calculationAPI.calculateEnergyMicrogrid(
+            inputs,
+          )) as unknown as Record<string, unknown>;
+          result = asCalculationResult(raw, 'Microgrid cable');
+          const maxDrop = (inputs.max_voltage_drop_percent as number) ?? 5;
+          const actual = raw.actual_voltage_drop_percent as number | undefined;
+          if (typeof actual === 'number' && actual > maxDrop) result.status = 'fail';
+          break;
+        }
+        case 'energy_transmission':
+          result = asCalculationResult(
+            await calculationAPI.calculateEnergyTransmission(inputs),
+            'Sag-tension',
+          );
+          break;
+        case 'wash_water_tower':
+          result = asCalculationResult(
+            await calculationAPI.calculateWashWaterTower(inputs),
+            'Water tower & pump',
+          );
+          break;
+        case 'wash_epanet':
+          result = await calculationAPI.calculateWashPipeNetwork(inputs);
+          break;
+        case 'wash_dewats':
+          result = asCalculationResult(
+            await calculationAPI.calculateWashDewats(inputs),
+            'DEWATS facility',
+          );
+          break;
         default:
           throw new Error(`Unknown module: ${activeModule}`);
       }

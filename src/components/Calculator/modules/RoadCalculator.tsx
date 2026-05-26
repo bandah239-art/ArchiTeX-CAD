@@ -45,17 +45,15 @@ export function RoadCalculator({ inputs, onInputChange }: CalculatorFormProps) {
   const submodule = (inputs.road_submodule as RoadSubmodule) ?? 'pavement';
 
   return (
-    <div className="space-y-3">
-      <div className="flex gap-1">
+    <div className="workspace-section">
+      <div className="flex flex-wrap gap-2">
         {ROAD_SUBMODULES.map((tab) => (
           <button
             key={tab.id}
             type="button"
             onClick={() => onInputChange('road_submodule', tab.id)}
-            className={`flex-1 px-2 py-1.5 text-xs rounded transition-colors ${
-              submodule === tab.id
-                ? 'bg-infra-highlight text-white'
-                : 'bg-infra-accent/30 text-gray-400 hover:bg-infra-accent/50'
+            className={`flex-1 min-w-[7rem] workspace-chip ${
+              submodule === tab.id ? 'workspace-chip-active' : 'workspace-chip-idle'
             }`}
           >
             {tab.label}

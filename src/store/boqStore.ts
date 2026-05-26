@@ -102,7 +102,7 @@ function downloadBlob(blob: Blob, filename: string) {
 
 export const useBoQStore = create<BoQState>((set, get) => ({
   countryCode: 'ZM',
-  projectName: 'InfraAfrica Demo Project',
+  projectName: 'ARCHITEX-CAD Demo Project',
   client: 'Client Name',
   elements: [],
   compiledBoQ: null,
@@ -257,7 +257,7 @@ export const useBoQStore = create<BoQState>((set, get) => ({
         contingency: 10,
         elements,
       });
-      downloadBlob(blob, 'infraafrica_boq.xlsx');
+      downloadBlob(blob, 'architex-cad_boq.xlsx');
       set({ isExporting: false });
     } catch (err) {
       set({
@@ -285,7 +285,7 @@ export const useBoQStore = create<BoQState>((set, get) => ({
         elements,
       });
       const ext = blob.type.includes('pdf') ? 'pdf' : 'html';
-      downloadBlob(blob, `infraafrica_boq.${ext}`);
+      downloadBlob(blob, `architex-cad_boq.${ext}`);
       set({ isExporting: false });
     } catch (err) {
       set({

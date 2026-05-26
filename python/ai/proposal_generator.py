@@ -36,7 +36,7 @@ th {{ background: #1a2744; color: white; }}
 <p><strong>Project:</strong> {project}<br>
 <strong>Client:</strong> {client}<br>
 <strong>Date:</strong> {datetime.now():%d %B %Y}<br>
-<strong>Prepared using:</strong> InfraAfrica Platform v1.0</p>
+<strong>Prepared using:</strong> ARCHITEX-CAD Platform v1.0</p>
 
 <h2>Section 1 — Project Understanding</h2>
 <p>{html.escape(brief.get('description', ''))}</p>

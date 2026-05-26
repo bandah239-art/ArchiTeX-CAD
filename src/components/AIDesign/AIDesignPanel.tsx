@@ -1,5 +1,10 @@
+import { lazy, Suspense, useState } from 'react';
 import { useAiStore } from '../../store/aiStore';
 import { useTranslation } from 'react-i18next';
+
+const GenerativeBIM = lazy(() =>
+  import('./GenerativeBIM').then((m) => ({ default: m.GenerativeBIM })),
+);
 
 const COUNTRIES = [
   { code: 'ZM', label: '🇿🇲 Zambia' },
@@ -35,12 +40,40 @@ export function AIDesignPanel() {
   const spaces = (designBrief?.spatial_programme as { space: string; area_m2: number; notes?: string }[]) ?? [];
   const cost = designBrief?.preliminary_cost_estimate as Record<string, unknown> | undefined;
 
+  const [activeTab, setActiveTab] = useState<'concept' | '3d'>('concept');
+  
   return (
-    <div className="flex flex-col h-full">
-      <div className="p-4 border-b border-infra-accent/30">
-        <h2 className="text-sm font-bold text-white uppercase tracking-wide">AI Design Generation</h2>
+    <div className="flex flex-col h-full overflow-hidden">
+      <div className="p-4 border-b border-infra-accent/30 flex justify-between items-center">
+        <h2 className="text-sm font-bold text-white uppercase tracking-wide">AI Design</h2>
+        <div className="flex bg-gray-900 rounded p-1">
+          <button 
+            className={`px-3 py-1 text-xs rounded ${activeTab === 'concept' ? 'bg-infra-highlight text-black font-bold' : 'text-gray-400'}`}
+            onClick={() => setActiveTab('concept')}
+          >
+            Concept
+          </button>
+          <button 
+            className={`px-3 py-1 text-xs rounded ${activeTab === '3d' ? 'bg-infra-highlight text-black font-bold' : 'text-gray-400'}`}
+            onClick={() => setActiveTab('3d')}
+          >
+            3D Generative
+          </button>
+        </div>
       </div>
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      
+      {activeTab === '3d' ? (
+        <Suspense
+          fallback={
+            <div className="flex-1 flex items-center justify-center text-sm text-gray-400">
+              Loading 3D viewer…
+            </div>
+          }
+        >
+          <GenerativeBIM />
+        </Suspense>
+      ) : (
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
         <textarea
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
@@ -110,6 +143,7 @@ export function AIDesignPanel() {
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }

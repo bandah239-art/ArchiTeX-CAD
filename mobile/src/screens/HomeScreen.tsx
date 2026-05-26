@@ -7,7 +7,7 @@ export function HomeScreen() {
 
   return (
     <ScrollView style={styles.container}>
-      <Text style={styles.title}>InfraAfrica Mobile</Text>
+      <Text style={styles.title}>ARCHITEX-CAD Mobile</Text>
       <Text style={styles.sub}>Field companion — works offline</Text>
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Today's Tasks</Text>

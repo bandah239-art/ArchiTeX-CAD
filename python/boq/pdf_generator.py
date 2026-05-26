@@ -84,7 +84,7 @@ def _html_boq(boq: dict[str, Any], draft: bool = True) -> str:
 def generate_boq_pdf(boq: dict[str, Any], output_path: str | None = None, draft: bool = True) -> str:
     html_content = _html_boq(boq, draft=draft)
     if not output_path:
-        fd, output_path = tempfile.mkstemp(suffix=".pdf", prefix="infraafrica_boq_")
+        fd, output_path = tempfile.mkstemp(suffix=".pdf", prefix="architex-cad_boq_")
         os.close(fd)
 
     try:

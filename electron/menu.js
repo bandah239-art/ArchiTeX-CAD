@@ -36,7 +36,7 @@ export function createMenu(mainWindow) {
       label: 'Help',
       submenu: [
         {
-          label: 'About INFRAFRICA',
+          label: 'About ARCHITEX-CAD',
           click: () => mainWindow.webContents.send('menu-about'),
         },
       ],
@@ -45,7 +45,7 @@ export function createMenu(mainWindow) {
 
   if (process.platform === 'darwin') {
     template.unshift({
-      label: 'INFRAFRICA',
+      label: 'ARCHITEX-CAD',
       submenu: [
         { role: 'about' },
         { type: 'separator' },

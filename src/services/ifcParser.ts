@@ -17,7 +17,7 @@ import {
 } from 'web-ifc';
 import type { IFCElement } from '../types/ifc';
 import {
-  mergeMeshes,
+  mergePlacedMeshes,
   mergeWithPropertyQuantities,
   quantitiesFromMesh,
   type PlacedMeshBuffers,
@@ -215,7 +215,7 @@ async function parseIfcBufferInner(buffer: ArrayBuffer): Promise<IfcParseResult>
     closeIfcModel(api, lastOpenedModelId);
     lastOpenedModelId = null;
   }
-  const modelId = api.OpenModel(new Uint8Array(buffer));
+  const modelId = api.OpenModel(new Uint8Array(buffer), { COORDINATE_TO_ORIGIN: true });
   lastOpenedModelId = modelId;
 
   const meshByExpressId = new Map<number, PlacedMeshBuffers[]>();
@@ -280,7 +280,7 @@ async function parseIfcBufferInner(buffer: ArrayBuffer): Promise<IfcParseResult>
     let area: number | undefined;
 
     if (meshBuffers.length > 0) {
-      const merged = mergeMeshes(meshBuffers);
+      const merged = mergePlacedMeshes(meshBuffers);
       const geom = quantitiesFromMesh(merged);
       const mergedQty = mergeWithPropertyQuantities(geom, properties);
       length = mergedQty.length;

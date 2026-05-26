@@ -1,6 +1,6 @@
 export default {
-  appId: 'com.infraafrica.app',
-  productName: 'INFRAFRICA',
+  appId: 'com.architex.cad',
+  productName: 'ARCHITEX-CAD',
   directories: {
     output: 'dist-electron',
   },

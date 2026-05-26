@@ -1,4 +1,4 @@
-# InfraAfrica Mobile Companion
+# ARCHITEX-CAD Mobile Companion
 
 React Native (Expo SDK 50) field app for construction sites.
 
