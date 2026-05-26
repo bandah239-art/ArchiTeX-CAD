@@ -19,6 +19,7 @@ interface IfcModelState {
   elementByEntityId: Map<string, ParsedIfcElement>;
   stats: ModelStats | null;
   openModelId: number | null;
+  modelCenterOffset: [number, number, number];
   isParsing: boolean;
   parseError: string | null;
   parseFromPath: (path: string) => Promise<ArrayBuffer>;
@@ -28,6 +29,7 @@ interface IfcModelState {
     elementByEntityId: Map<string, ParsedIfcElement>;
     stats: ModelStats;
     modelId: number;
+    modelCenterOffset?: [number, number, number];
   }) => void;
   setElementMaps: (elementByEntityId: Map<string, ParsedIfcElement>) => void;
   getElementByEntityId: (entityId: string) => IFCElement | null;
@@ -44,6 +46,7 @@ export const useIfcModelStore = create<IfcModelState>((set, get) => ({
   elementByEntityId: new Map(),
   stats: null,
   openModelId: null,
+  modelCenterOffset: [0, 0, 0],
   isParsing: false,
   parseError: null,
 
@@ -79,6 +82,7 @@ export const useIfcModelStore = create<IfcModelState>((set, get) => ({
       elementByEntityId: result.elementByEntityId,
       stats: result.stats,
       openModelId: result.modelId,
+      modelCenterOffset: result.modelCenterOffset ?? [0, 0, 0],
       isParsing: false,
       parseError: null,
     });
@@ -102,7 +106,7 @@ export const useIfcModelStore = create<IfcModelState>((set, get) => ({
   exportMeshByEntityId: (entityId) => {
     const el = get().elementByEntityId.get(entityId);
     if (!el) return null;
-    return exportElementMeshPayload(el);
+    return exportElementMeshPayload(el, get().modelCenterOffset);
   },
 
   exportMergedModelMesh: (excludeEntityIds = []) => {
@@ -113,7 +117,7 @@ export const useIfcModelStore = create<IfcModelState>((set, get) => ({
       if (excluded.has(entityId) || !el.meshBuffers.length) continue;
       meshes.push(...el.meshBuffers);
     }
-    return placedMeshesToPayload(meshes);
+    return placedMeshesToPayload(meshes, get().modelCenterOffset);
   },
 
   clear: () => {
@@ -128,6 +132,7 @@ export const useIfcModelStore = create<IfcModelState>((set, get) => ({
       elementByEntityId: new Map(),
       stats: null,
       openModelId: null,
+      modelCenterOffset: [0, 0, 0],
       parseError: null,
     });
   },

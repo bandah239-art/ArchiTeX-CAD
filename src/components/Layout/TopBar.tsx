@@ -6,6 +6,7 @@ import { LanguageSwitcher } from './LanguageSwitcher';
 import { useTranslation } from 'react-i18next';
 import { useState } from 'react';
 import { APP_NAME } from '../../constants/brand';
+import { useWorkspaceStore } from '../../store/workspaceStore';
 
 interface TopBarProps {
   onBack: () => void;
@@ -18,6 +19,7 @@ export function TopBar({ onBack, onToggleCalculator, onToggleInspector }: TopBar
   const { currentProject } = useProjectStore();
   const { openIFC, saveProject } = useProject();
   const ifcElements = useIfcModelStore((s) => s.elements);
+  const { mainView, setMainView } = useWorkspaceStore();
   const [exporting, setExporting] = useState(false);
 
   const exportIfc = async () => {
@@ -80,6 +82,26 @@ export function TopBar({ onBack, onToggleCalculator, onToggleInspector }: TopBar
             {currentProject.ifcPath}
           </span>
         )}
+      </div>
+      <div className="flex bg-infra-dark border border-gray-700 rounded-md overflow-hidden mr-4">
+        <button
+          onClick={() => setMainView('bim')}
+          className={`px-3 py-1 text-sm ${mainView === 'bim' ? 'bg-infra-accent text-white font-medium' : 'text-gray-400 hover:bg-gray-800'}`}
+        >
+          BIM 3D
+        </button>
+        <button
+          onClick={() => setMainView('gis')}
+          className={`px-3 py-1 text-sm ${mainView === 'gis' ? 'bg-infra-accent text-white font-medium' : 'text-gray-400 hover:bg-gray-800'}`}
+        >
+          GIS Map
+        </button>
+        <button
+          onClick={() => setMainView('sld')}
+          className={`px-3 py-1 text-sm ${mainView === 'sld' ? 'bg-infra-accent text-white font-medium' : 'text-gray-400 hover:bg-gray-800'}`}
+        >
+          Energy SLD
+        </button>
       </div>
       <div className="flex items-center gap-2 flex-shrink-0">
         <LanguageSwitcher />

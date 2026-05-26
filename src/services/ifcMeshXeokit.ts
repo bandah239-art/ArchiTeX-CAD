@@ -1,13 +1,13 @@
 import { SceneModel, type Viewer } from '@xeokit/xeokit-sdk';
 import type { IFCElement, ModelStats } from '../types/ifc';
-import type { PlacedMeshBuffers } from './ifcQuantities';
+import { computeCombinedWorldBounds, type PlacedMeshBuffers } from './ifcQuantities';
 import {
   closeIfcModel,
   getIfcApi,
   parseIfcBuffer,
   type ParsedIfcElement,
 } from './ifcParser';
-import { transformVertex, worldMatrixFromPlacement } from './ifcTransforms';
+import { transformVertex, worldMatrixWithOffset } from './ifcTransforms';
 
 export interface ServerMeshPayload {
   vertices: number[];
@@ -38,6 +38,34 @@ export interface IfcXeokitLoadResult {
   elements: ParsedIfcElement[];
   elementByEntityId: Map<string, ParsedIfcElement>;
   modelId: number;
+  /** World-space bbox centre used to recenter the model at origin. */
+  modelCenterOffset: [number, number, number];
+}
+
+function collectAllMeshBuffers(elements: ParsedIfcElement[]): PlacedMeshBuffers[] {
+  const all: PlacedMeshBuffers[] = [];
+  for (const element of elements) {
+    if (element.meshBuffers.length) all.push(...element.meshBuffers);
+  }
+  return all;
+}
+
+function centeredBounds(
+  bounds: { min: [number, number, number]; max: [number, number, number] },
+  center: [number, number, number],
+): { min: [number, number, number]; max: [number, number, number] } {
+  return {
+    min: [
+      bounds.min[0] - center[0],
+      bounds.min[1] - center[1],
+      bounds.min[2] - center[2],
+    ],
+    max: [
+      bounds.max[0] - center[0],
+      bounds.max[1] - center[1],
+      bounds.max[2] - center[2],
+    ],
+  };
 }
 
 /**
@@ -57,6 +85,10 @@ export async function loadIfcIntoXeokit(
 
   const parsed = await parseIfcBuffer(buffer);
   const elementByEntityId = new Map<string, ParsedIfcElement>();
+
+  const allMeshes = collectAllMeshBuffers(parsed.elements);
+  const worldBounds = computeCombinedWorldBounds(allMeshes);
+  const modelCenterOffset: [number, number, number] = worldBounds?.center ?? [0, 0, 0];
 
   const sceneModel = new SceneModel(viewer.scene, {
     id: sceneModelId,
@@ -94,7 +126,7 @@ export async function loadIfcIntoXeokit(
       }
 
       const meshId = `${sceneModelId}-mesh-${meshIndex++}`;
-      const matrix = worldMatrixFromPlacement(mbuf.matrix);
+      const matrix = worldMatrixWithOffset(mbuf.matrix, modelCenterOffset);
 
       sceneModel.createMesh({
         id: meshId,
@@ -123,12 +155,16 @@ export async function loadIfcIntoXeokit(
   sceneModel.finalize();
   viewer.cameraFlight.flyTo(sceneModel);
 
+  const displayBounds = worldBounds
+    ? centeredBounds(worldBounds, modelCenterOffset)
+    : centeredBounds(parsed.bounds, modelCenterOffset);
+
   const stats: ModelStats = {
     elementCount: parsed.elements.filter((e) => e.meshBuffers.length > 0).length,
     triangleCount: parsed.triangleCount,
     bounds: {
-      min: [...parsed.bounds.min],
-      max: [...parsed.bounds.max],
+      min: [...displayBounds.min],
+      max: [...displayBounds.max],
     },
     loadTime: performance.now() - start,
   };
@@ -140,6 +176,7 @@ export async function loadIfcIntoXeokit(
     elements: parsed.elements,
     elementByEntityId,
     modelId: parsed.modelId,
+    modelCenterOffset,
   };
 }
 
@@ -159,7 +196,10 @@ export async function disposeIfcModel(modelId: number): Promise<void> {
 }
 
 /** Merge placed IFC meshes into flat { vertices, faces } for server geometry ops (xeokit Y-up). */
-export function placedMeshesToPayload(meshes: PlacedMeshBuffers[]): ServerMeshPayload | null {
+export function placedMeshesToPayload(
+  meshes: PlacedMeshBuffers[],
+  modelCenterOffset: [number, number, number] = [0, 0, 0],
+): ServerMeshPayload | null {
   if (!meshes.length) return null;
 
   const vertices: number[] = [];
@@ -167,7 +207,7 @@ export function placedMeshesToPayload(meshes: PlacedMeshBuffers[]): ServerMeshPa
   let vertexOffset = 0;
 
   for (const mesh of meshes) {
-    const world = worldMatrixFromPlacement(mesh.matrix);
+    const world = worldMatrixWithOffset(mesh.matrix, modelCenterOffset);
 
     for (let i = 0; i < mesh.positions.length; i += 3) {
       const [x, y, z] = transformVertex(
@@ -189,8 +229,11 @@ export function placedMeshesToPayload(meshes: PlacedMeshBuffers[]): ServerMeshPa
   return { vertices, faces };
 }
 
-export function exportElementMeshPayload(element: ParsedIfcElement): ServerMeshPayload | null {
-  return placedMeshesToPayload(element.meshBuffers);
+export function exportElementMeshPayload(
+  element: ParsedIfcElement,
+  modelCenterOffset: [number, number, number] = [0, 0, 0],
+): ServerMeshPayload | null {
+  return placedMeshesToPayload(element.meshBuffers, modelCenterOffset);
 }
 
 export function entityIdFromExpressId(expressId: number | string): string {

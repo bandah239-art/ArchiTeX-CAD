@@ -243,9 +243,15 @@ const DEFAULT_INPUTS: Record<CalculationModule, Record<string, unknown>> = {
     w_sls: 3.5,
   },
   fea: {
-    element_count: 4,
-    node_count: 4,
-    scale: 20,
+    height: 4.0,
+    span: 6.0,
+    lateral_load: 20000.0,
+    vertical_load: -50000.0,
+    support_type: 'fixed',
+    E: 2.0e11,
+    A: 0.01,
+    I: 1.0e-5,
+    scale: 20.0,
   },
   energy_bess: {
     load_profile: 'Residential',
@@ -277,18 +283,101 @@ const DEFAULT_INPUTS: Record<CalculationModule, Record<string, unknown>> = {
     pump_efficiency: 0.6,
   },
   wash_epanet: {
-    wash_submodule: 'pipe_network',
-    population: 500,
-    lpcd: 50,
-    peak_factor: 2.5,
-    material: 'pvc',
-    country: 'Zambia',
+    flow_rate_lps: 25,
+    pipe_length_m: 500,
+    pipe_material: 'HDPE',
+    max_velocity_mps: 1.5,
+    min_pressure_m: 10,
   },
   wash_dewats: {
     population: 200,
     wastewater_generation_lps_capita: 40,
     influent_bod_mg_l: 300,
     temperature_c: 25,
+  },
+  energy_grid_fault: {
+    generator_kva: 1000,
+    generator_voltage_v: 400,
+    generator_subtransient_reactance_pu: 0.15,
+    cable_length_m: 50,
+    cable_reactance_ohm_km: 0.08,
+    cable_resistance_ohm_km: 0.16,
+  },
+  energy_hydro: {
+    flow_rate_m3_s: 5.0,
+    net_head_m: 25.0,
+    system_efficiency: 0.85,
+  },
+  energy_biogas: {
+    cattle_count: 50,
+    poultry_count: 0,
+    human_count: 10,
+    temperature_c: 25,
+  },
+  energy_wind_wake: {
+    turbine_rotor_diameter_m: 80,
+    turbine_rating_kw: 2000,
+    wind_speed_mps: 12,
+    rows: 4,
+    spacing_factor_d: 5,
+  },
+  wash_wtp: {
+    flow_rate_m3_d: 5000,
+    turbidity_ntu: 50,
+  },
+  wash_stormwater: {
+    catchment_area_ha: 10,
+    runoff_coefficient: 0.85,
+    rainfall_intensity_mm_hr: 75,
+    duration_hours: 2,
+  },
+  wash_landfill: {
+    population: 50000,
+    waste_generation_kg_capita_day: 1.2,
+    design_life_years: 20,
+    compacted_waste_density_kg_m3: 800,
+  },
+  wash_irrigation: {
+    crop_area_ha: 50,
+    crop_coefficient_kc: 1.1,
+    reference_evapotranspiration_mm_day: 6,
+    irrigation_efficiency: 0.85,
+  },
+  geo_piles: {
+    pile_diameter_m: 0.6,
+    pile_length_m: 20,
+    soil_cohesion_kpa: 50,
+    adhesion_factor_alpha: 0.5,
+    end_bearing_capacity_factor_nc: 9,
+    factor_of_safety: 2.5,
+  },
+  geo_slope: {
+    slope_angle_degrees: 30,
+    soil_cohesion_kpa: 20,
+    friction_angle_degrees: 25,
+    soil_unit_weight_kn_m3: 18,
+    slope_height_m: 10,
+  },
+  geo_consolidation: {
+    clay_thickness_m: 5,
+    initial_void_ratio: 0.8,
+    compression_index_cc: 0.25,
+    initial_effective_stress_kpa: 100,
+    added_stress_kpa: 50,
+  },
+  geo_ground_improvement: {
+    area_to_improve_m2: 1000,
+    column_diameter_m: 0.8,
+    column_spacing_m: 2.0,
+    pattern: 'triangular',
+    depth_m: 8.0,
+  },
+  geo_tunneling: {
+    rqd_percent: 60,
+    joint_spacing_rating: 10,
+    joint_condition_rating: 12,
+    groundwater_rating: 10,
+    intact_rock_strength_mpa: 50,
   },
 };
 
@@ -630,6 +719,9 @@ export const useCalculationStore = create<CalculationState>((set, get) => ({
         case 'timber':
           result = await calculationAPI.calculateTimber(inputs as unknown as TimberInputs);
           break;
+        case 'fea':
+          result = await calculationAPI.calculateFea(inputs);
+          break;
         case 'pressure':
           throw new Error('Use CALCULATE PRESSURE in the Pressure tab');
         case 'energy_bess':
@@ -661,7 +753,10 @@ export const useCalculationStore = create<CalculationState>((set, get) => ({
           );
           break;
         case 'wash_epanet':
-          result = await calculationAPI.calculateWashPipeNetwork(inputs);
+          result = asCalculationResult(
+            await calculationAPI.calculateWashEpanet(inputs),
+            'Pipe network (EPANET)',
+          );
           break;
         case 'wash_dewats':
           result = asCalculationResult(
@@ -669,6 +764,95 @@ export const useCalculationStore = create<CalculationState>((set, get) => ({
             'DEWATS facility',
           );
           break;
+        case 'energy_grid_fault':
+          result = asCalculationResult(
+            await calculationAPI.calculateEnergyGridFault(inputs),
+            'Grid fault current',
+          );
+          break;
+        case 'energy_hydro':
+          result = asCalculationResult(
+            await calculationAPI.calculateEnergyHydro(inputs),
+            'Hydro power',
+          );
+          break;
+        case 'energy_biogas':
+          result = asCalculationResult(
+            await calculationAPI.calculateEnergyBiogas(inputs),
+            'Biogas digester',
+          );
+          break;
+        case 'energy_wind_wake': {
+          const raw = (await calculationAPI.calculateEnergyWindWake(
+            inputs,
+          )) as unknown as Record<string, unknown>;
+          result = asCalculationResult(raw, 'Wind farm wake');
+          const eff = raw.farm_efficiency_percent as number | undefined;
+          if (typeof eff === 'number' && eff < 85) result.status = 'warning';
+          break;
+        }
+        case 'wash_wtp':
+          result = asCalculationResult(
+            await calculationAPI.calculateWashWtp(inputs),
+            'Water treatment plant',
+          );
+          break;
+        case 'wash_stormwater':
+          result = asCalculationResult(
+            await calculationAPI.calculateWashStormwater(inputs),
+            'Stormwater',
+          );
+          break;
+        case 'wash_landfill':
+          result = asCalculationResult(
+            await calculationAPI.calculateWashLandfill(inputs),
+            'Sanitary landfill',
+          );
+          break;
+        case 'wash_irrigation':
+          result = asCalculationResult(
+            await calculationAPI.calculateWashIrrigation(inputs),
+            'Irrigation',
+          );
+          break;
+        case 'geo_piles':
+          result = asCalculationResult(
+            await calculationAPI.calculateGeoPiles(inputs),
+            'Pile capacity',
+          );
+          break;
+        case 'geo_slope': {
+          const raw = (await calculationAPI.calculateGeoSlope(inputs)) as unknown as Record<
+            string,
+            unknown
+          >;
+          result = asCalculationResult(raw, 'Slope stability');
+          const st = String(raw.status ?? '');
+          if (st === 'unsafe') result.status = 'fail';
+          else if (st === 'warning') result.status = 'warning';
+          break;
+        }
+        case 'geo_consolidation':
+          result = asCalculationResult(
+            await calculationAPI.calculateGeoConsolidation(inputs),
+            'Consolidation settlement',
+          );
+          break;
+        case 'geo_ground_improvement':
+          result = asCalculationResult(
+            await calculationAPI.calculateGeoGroundImprovement(inputs),
+            'Ground improvement',
+          );
+          break;
+        case 'geo_tunneling': {
+          const raw = (await calculationAPI.calculateGeoTunneling(
+            inputs,
+          )) as unknown as Record<string, unknown>;
+          result = asCalculationResult(raw, 'Tunnel rock mass');
+          const rmr = raw.rmr_score as number | undefined;
+          if (typeof rmr === 'number' && rmr < 40) result.status = 'warning';
+          break;
+        }
         default:
           throw new Error(`Unknown module: ${activeModule}`);
       }

@@ -3,8 +3,8 @@
 from datetime import datetime, timezone
 from typing import Any
 
-from boq.materials_database import EXCHANGE_RATES, get_material, get_rate, get_wastage
-from boq.market_pricing import fetch_live_market_price
+from boq.materials_database import EXCHANGE_RATES, get_material, get_wastage
+from calculators.market_pricing import get_live_pricing, PricingRequest
 
 SECTION_TITLES = {
     "A": "SECTION A — SUBSTRUCTURE",
@@ -29,13 +29,24 @@ def _price_item(material_id: str, quantity: float, country_code: str) -> dict[st
             "amount_min": 0,
             "amount_max": 0,
             "amount_mid": 0,
+            "pricing_missing": True,
+            "pricing_warning": f"Material '{material_id}' not found in database — rates set to zero. Update the materials database or enter rates manually.",
         }
 
     wastage = get_wastage(material_id)
     qty = quantity * wastage
     
     # Try dynamic live market pricing first
-    rates = fetch_live_market_price(material_id, country_code)
+    rates = None
+    try:
+        req = PricingRequest(materials=[material_id], currency="USD")
+        live_res = get_live_pricing(req)
+        price_usd = live_res["prices"].get(material_id.lower())
+        if price_usd is not None and price_usd > 0:
+            rates = {"min": price_usd * 0.95, "max": price_usd * 1.05}
+    except Exception:
+        pass
+        
     is_live = True
     if not rates:
         rates = material["rates"].get(country_code.upper(), material["rates"].get("ZM", {"min": 0, "max": 0}))
@@ -71,6 +82,7 @@ def compile_boq(payload: dict[str, Any]) -> dict[str, Any]:
 
     sections: dict[str, list[dict[str, Any]]] = {k: [] for k in SECTION_TITLES}
     line_no = 0
+    missing_materials: list[str] = []
 
     for element in elements:
         section = element.get("section", "A")
@@ -85,6 +97,8 @@ def compile_boq(payload: dict[str, Any]) -> dict[str, Any]:
             priced["element_ref"] = ref
             priced["element_description"] = desc
             priced["notes"] = item.get("notes", "")
+            if priced.get("pricing_missing"):
+                missing_materials.append(item["material_id"])
             sections[section].append(priced)
 
     section_totals: dict[str, dict[str, float]] = {}
@@ -150,6 +164,12 @@ def compile_boq(payload: dict[str, Any]) -> dict[str, Any]:
         "disclaimer": (
             "Rates are indicative. Based on African market data. "
             "Obtain competitive tenders before committing to contract."
+        ),
+        "missing_materials": missing_materials,
+        "missing_materials_warning": (
+            f"{len(missing_materials)} material(s) had no pricing data and were costed at zero: "
+            + ", ".join(missing_materials)
+            if missing_materials else None
         ),
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }

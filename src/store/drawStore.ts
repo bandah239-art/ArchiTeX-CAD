@@ -144,8 +144,9 @@ export const useDrawStore = create<DrawState>((set, get) => ({
     }
 
     const { lengthM, areaM2 } = metricsForElement(kind, activePoints);
+    const id = uid();
     const el: SketchElement = {
-      id: uid(),
+      id,
       kind,
       points: pts,
       height: modifiers.wallHeight,
@@ -160,6 +161,38 @@ export const useDrawStore = create<DrawState>((set, get) => ({
       el.height = modifiers.wallHeight;
       el.thickness = modifiers.columnSize;
     }
+
+    // Auto-register in SemanticReference (dynamic import avoids circular dep with sketchConstraintStore)
+    const type = el.kind === 'circle' ? 'circle' : el.kind === 'arc' ? 'arc' : el.kind === 'point' ? 'point' : 'line';
+    let params: number[] = [];
+    if (el.kind === 'circle' && el.points.length >= 2) {
+      const r = Math.hypot(el.points[1].x - el.points[0].x, el.points[1].z - el.points[0].z);
+      params = [el.points[0].x, el.points[0].z, r];
+    } else if (el.kind === 'arc' && el.points.length >= 3) {
+      const r = Math.hypot(el.points[1].x - el.points[0].x, el.points[1].z - el.points[0].z);
+      const a1 = Math.atan2(el.points[1].z - el.points[0].z, el.points[1].x - el.points[0].x);
+      const a2 = Math.atan2(el.points[2].z - el.points[0].z, el.points[2].x - el.points[0].x);
+      params = [el.points[0].x, el.points[0].z, r, a1, a2];
+    } else if (el.kind === 'point' && el.points.length >= 1) {
+      params = [el.points[0].x, el.points[0].z];
+    } else {
+      params = [el.points[0].x, el.points[0].z, el.points[el.points.length - 1].x, el.points[el.points.length - 1].z];
+    }
+    void import('./sketchConstraintStore')
+      .then(({ semanticRef }) => {
+        const name = semanticRef.register({
+          id: el.id,
+          type,
+          params,
+          dof: type === 'point' ? 2 : type === 'line' ? 4 : type === 'circle' ? 3 : 5,
+          fixed: false,
+          name: '',
+        });
+        set((s) => ({
+          elements: s.elements.map((e) => (e.id === el.id ? { ...e, label: name } : e)),
+        }));
+      })
+      .catch((e) => console.error('Semantic registration failed', e));
 
     set({
       elements: [...elements, el],

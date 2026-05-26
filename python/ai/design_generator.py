@@ -4,7 +4,7 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
-from ai.claude_client import call_claude
+from ai.gemini_client import call_gemini
 
 SYSTEM_TEMPLATE = """You are a senior structural and architectural engineer specialising in African infrastructure.
 You have deep knowledge of Eurocode 2, SATCC road standards, Kenya Road Design Manual, Nigerian building codes,
@@ -29,7 +29,7 @@ All recommendations must suit the African country and site provided."""
 
 
 def _fallback_brief(payload: dict[str, Any]) -> dict[str, Any]:
-    """Rule-based design brief when Claude API unavailable."""
+    """Rule-based design brief when Gemini API unavailable."""
     country = payload.get("country_code", "ZM")
     budget = float(payload.get("budget_usd", 45000))
     ptype = payload.get("project_type", "residential")
@@ -164,7 +164,7 @@ def generate_design(payload: dict[str, Any]) -> dict[str, Any]:
     )
 
     user = json_prompt(payload)
-    result = call_claude(system, user)
+    result = call_gemini(system, user)
 
     if result.get("fallback") or "design_brief" not in result:
         brief = _fallback_brief(payload)
@@ -172,7 +172,7 @@ def generate_design(payload: dict[str, Any]) -> dict[str, Any]:
         brief["timestamp"] = datetime.now(timezone.utc).isoformat()
         return brief
 
-    result["source"] = "claude_api"
+    result["source"] = "gemini_api"
     result["timestamp"] = datetime.now(timezone.utc).isoformat()
     return result
 

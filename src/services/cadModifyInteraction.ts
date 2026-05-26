@@ -37,13 +37,8 @@ function replaceElement(id: string, next: SketchElement, drawEngine: DrawEngine 
   syncAfterDraw(drawEngine);
 }
 
-function applyConstraintSolve(drawEngine: DrawEngine | null | undefined) {
-  const draw = useDrawStore.getState();
-  const solved = useSketchConstraintStore.getState().applyToElements(draw.elements);
-  const before = draw.getSnapshot();
-  useDrawStore.setState({ elements: solved as SketchElement[] });
-  useUndoStore.getState().pushDrawAction('Apply constraints', before, useDrawStore.getState().getSnapshot());
-  syncAfterDraw(drawEngine);
+function applyConstraintSolve(_drawEngine: DrawEngine | null | undefined) {
+  useSketchConstraintStore.getState().solveConstraints();
 }
 
 /** Handle canvas click when a CAD modify/session command is active. */

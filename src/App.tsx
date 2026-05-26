@@ -1,6 +1,7 @@
 import { lazy, Suspense, useState } from 'react';
 import { ProjectDashboard } from './components/Dashboard/ProjectDashboard';
 import { useProject } from './hooks/useProject';
+import { VoiceAssistant } from './components/AI/VoiceAssistant';
 
 const AppShell = lazy(() =>
   import('./components/Layout/AppShell')
@@ -38,16 +39,20 @@ function App() {
     return (
       <Suspense fallback={<WorkspaceFallback />}>
         <AppShell onBackToDashboard={() => setView('dashboard')} />
+        <VoiceAssistant />
       </Suspense>
     );
   }
 
   return (
-    <ProjectDashboard
-      onOpenProject={handleOpenProject}
-      onEnterWorkspace={handleOpenWorkspace}
-      hasProject={!!currentProject}
-    />
+    <>
+      <ProjectDashboard
+        onOpenProject={handleOpenProject}
+        onEnterWorkspace={handleOpenWorkspace}
+        hasProject={!!currentProject}
+      />
+      <VoiceAssistant />
+    </>
   );
 }
 

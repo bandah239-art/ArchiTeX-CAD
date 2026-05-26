@@ -1,6 +1,7 @@
 import { InputGroup } from '../InputGroup';
 import { Button } from '../../ui/Button';
 import { useCalculationStore } from '../../../store/calculationStore';
+import { EnergySimulationPanel } from '../../Energy/EnergySimulationPanel';
 
 interface EnergyCalculatorProps {
   inputs: Record<string, unknown>;
@@ -68,6 +69,7 @@ export function EnergyCalculator({ inputs, onInputChange }: EnergyCalculatorProp
       <Button onClick={() => void runCalculation()} disabled={isCalculating} className="w-full">
         {isCalculating ? 'Calculating...' : 'Size BESS & Solar'}
       </Button>
+      <EnergySimulationPanel inputs={inputs} />
     </div>
   );
 }

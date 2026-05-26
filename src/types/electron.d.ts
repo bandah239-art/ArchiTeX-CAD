@@ -13,6 +13,7 @@ export interface ElectronAPI {
   offlineLoadProjects: () => Promise<Record<string, unknown>[]>;
   offlineSaveCalculation: (id: string, projectId: string, type: string, inputs: Record<string, unknown>, results: Record<string, unknown>) => Promise<void>;
   offlineLoadCalculations: (projectId: string) => Promise<Record<string, unknown>[]>;
+  osAction?: (action: string, targetPath?: string) => Promise<void>;
 }
 
 declare global {

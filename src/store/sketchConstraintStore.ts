@@ -1,4 +1,10 @@
 import { create } from 'zustand';
+import { useDrawStore } from './drawStore';
+import { useViewerStore } from './viewerStore';
+import { GeometricEntity, Constraint, ConstraintType, SolverResult, DOFAnalysis } from '../cad/constraints/ConstraintTypes';
+import { ConstraintSolver } from '../cad/constraints/ConstraintSolver';
+import { DOFAnalyser } from '../cad/constraints/DOFAnalyser';
+import { semanticRef } from '../cad/semantic/SemanticReference';
 
 export type GeometricConstraintType =
   | 'horizontal'
@@ -9,6 +15,8 @@ export type GeometricConstraintType =
   | 'tangent'
   | 'equal'
   | 'symmetric'
+  | 'fixed_point'
+  | 'midpoint'
   | 'fix';
 
 export type DimensionalConstraintType = 'distance' | 'angle' | 'radius' | 'diameter';
@@ -25,30 +33,27 @@ export interface SketchConstraint {
 interface SketchConstraintState {
   constraints: SketchConstraint[];
   barVisible: boolean;
+  solverResult: SolverResult | null;
+  dofAnalysis: DOFAnalysis | null;
   setBarVisible: (v: boolean) => void;
   addGeometric: (type: GeometricConstraintType, elementIds: string[]) => SketchConstraint;
   addDimensional: (type: DimensionalConstraintType, elementIds: string[], value: number) => SketchConstraint;
   remove: (id: string) => void;
   clearAll: () => void;
-  applyToElements: (
-    elements: { id: string; points: { x: number; y: number; z: number }[] }[],
-  ) => { id: string; points: { x: number; y: number; z: number }[] }[];
+  solveConstraints: () => void;
 }
 
 function uid() {
   return `con-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
-function dist2d(
-  a: { x: number; z: number },
-  b: { x: number; z: number },
-): number {
-  return Math.hypot(a.x - b.x, a.z - b.z);
-}
+export { semanticRef } from '../cad/semantic/SemanticReference';
 
 export const useSketchConstraintStore = create<SketchConstraintState>((set, get) => ({
   constraints: [],
   barVisible: false,
+  solverResult: null,
+  dofAnalysis: null,
 
   setBarVisible: (barVisible) => set({ barVisible }),
 
@@ -60,6 +65,7 @@ export const useSketchConstraintStore = create<SketchConstraintState>((set, get)
       elementIds,
     };
     set((s) => ({ constraints: [...s.constraints, c] }));
+    get().solveConstraints();
     return c;
   },
 
@@ -73,82 +79,143 @@ export const useSketchConstraintStore = create<SketchConstraintState>((set, get)
       label: `${type}=${value.toFixed(2)}`,
     };
     set((s) => ({ constraints: [...s.constraints, c] }));
+    get().solveConstraints();
     return c;
   },
 
-  remove: (id) => set((s) => ({ constraints: s.constraints.filter((c) => c.id !== id) })),
-
-  clearAll: () => set({ constraints: [] }),
-
-  applyToElements: (elements) => {
-    const cons = get().constraints;
-    if (!cons.length) return elements;
-
-    const out = elements.map((e) => ({
-      ...e,
-      points: e.points.map((p) => ({ ...p })),
-    }));
-
-    for (const c of cons) {
-      if (c.kind !== 'geometric') continue;
-      const targets = out.filter((e) => c.elementIds.includes(e.id));
-      if (!targets.length) continue;
-
-      if (c.type === 'horizontal' && targets[0].points.length >= 2) {
-        const z = targets[0].points[0].z;
-        targets[0].points = targets[0].points.map((p) => ({ ...p, z }));
-      }
-      if (c.type === 'vertical' && targets[0].points.length >= 2) {
-        const x = targets[0].points[0].x;
-        targets[0].points = targets[0].points.map((p) => ({ ...p, x }));
-      }
-      if (c.type === 'equal' && targets.length >= 2) {
-        const lenA = dist2d(targets[0].points[0], targets[0].points[targets[0].points.length - 1]);
-        const lenB = dist2d(targets[1].points[0], targets[1].points[targets[1].points.length - 1]);
-        if (lenB > 1e-6 && lenA > 1e-6) {
-          const scale = lenA / lenB;
-          const cx = targets[1].points.reduce((s, p) => s + p.x, 0) / targets[1].points.length;
-          const cz = targets[1].points.reduce((s, p) => s + p.z, 0) / targets[1].points.length;
-          targets[1].points = targets[1].points.map((p) => ({
-            ...p,
-            x: cx + (p.x - cx) * scale,
-            z: cz + (p.z - cz) * scale,
-          }));
-        }
-      }
-      if (c.type === 'coincident' && targets.length >= 2) {
-        const p0 = targets[0].points[0];
-        const dx = p0.x - targets[1].points[0].x;
-        const dz = p0.z - targets[1].points[0].z;
-        targets[1].points = targets[1].points.map((p) => ({ ...p, x: p.x + dx, z: p.z + dz }));
-      }
-      if (c.type === 'fix' && targets[0]) {
-        /* points unchanged — marker constraint */
-      }
-    }
-
-    for (const c of cons) {
-      if (c.kind !== 'dimensional' || c.value == null) continue;
-      const el = out.find((e) => c.elementIds.includes(e.id));
-      if (!el || el.points.length < 2) continue;
-      if (c.type === 'distance') {
-        const a = el.points[0];
-        const b = el.points[el.points.length - 1];
-        const len = dist2d(a, b);
-        if (len < 1e-6) continue;
-        const scale = c.value / len;
-        el.points = el.points.map((p, i) =>
-          i === 0
-            ? p
-            : {
-                ...p,
-                x: a.x + (p.x - a.x) * scale,
-                z: a.z + (p.z - a.z) * scale,
-              },
-        );
-      }
-    }
-
-    return out;
+  remove: (id) => {
+    set((s) => ({ constraints: s.constraints.filter((c) => c.id !== id) }));
+    get().solveConstraints();
   },
+
+  clearAll: () => {
+    set({ constraints: [] });
+    get().solveConstraints();
+  },
+
+  solveConstraints: () => {
+    const draw = useDrawStore.getState();
+    const elements = draw.elements;
+    const cons = get().constraints;
+
+    if (elements.length === 0) {
+      set({ solverResult: null, dofAnalysis: null });
+      return;
+    }
+
+    // 1. Build GeometricEntity array from drawStore elements
+    const entities: GeometricEntity[] = elements.map(el => {
+      const type = el.kind === 'circle' ? 'circle' : el.kind === 'arc' ? 'arc' : el.kind === 'point' ? 'point' : 'line';
+      let params: number[] = [];
+      if (el.kind === 'circle' && el.points.length >= 2) {
+        const r = Math.hypot(el.points[1].x - el.points[0].x, el.points[1].z - el.points[0].z);
+        params = [el.points[0].x, el.points[0].z, r];
+      } else if (el.kind === 'arc' && el.points.length >= 3) {
+        const r = Math.hypot(el.points[1].x - el.points[0].x, el.points[1].z - el.points[0].z);
+        const a1 = Math.atan2(el.points[1].z - el.points[0].z, el.points[1].x - el.points[0].x);
+        const a2 = Math.atan2(el.points[2].z - el.points[0].z, el.points[2].x - el.points[0].x);
+        params = [el.points[0].x, el.points[0].z, r, a1, a2];
+      } else if (el.kind === 'point' && el.points.length >= 1) {
+        params = [el.points[0].x, el.points[0].z];
+      } else {
+        // Line segment
+        const p1 = el.points[0];
+        const p2 = el.points[el.points.length - 1];
+        params = [p1.x, p1.z, p2.x, p2.z];
+      }
+
+      // Check if this entity has a fixed point constraint or is marked fixed
+      const hasFix = cons.some(c => (c.type === 'fix' || c.type === 'fixed_point') && c.elementIds.includes(el.id));
+      const name = semanticRef.resolveIdToName(el.id) ?? el.label ?? el.id;
+
+      return {
+        id: el.id,
+        type,
+        params,
+        dof: type === 'point' ? 2 : type === 'line' ? 4 : type === 'circle' ? 3 : 5,
+        fixed: hasFix,
+        name
+      };
+    });
+
+    // Make sure all entities are registered in semanticRef
+    entities.forEach(ent => semanticRef.register(ent));
+
+    // 2. Map frontend SketchConstraint list to the solver Constraint format
+    const solverCons: Constraint[] = cons.map(c => {
+      let type: ConstraintType = 'coincident';
+      if (c.type === 'horizontal') type = 'horizontal';
+      else if (c.type === 'vertical') type = 'vertical';
+      else if (c.type === 'parallel') type = 'parallel';
+      else if (c.type === 'perpendicular') type = 'perpendicular';
+      else if (c.type === 'coincident') type = 'coincident';
+      else if (c.type === 'equal') type = 'equal_length';
+      else if (c.type === 'fix') type = 'fixed_point';
+      else if (c.type === 'tangent') type = 'tangent';
+      else if (c.type === 'symmetric') type = 'symmetric';
+      else if (c.type === 'midpoint') type = 'midpoint';
+      else if (c.type === 'angle') type = 'angle';
+      else if (c.type === 'distance') type = 'fixed_distance';
+
+      return {
+        id: c.id,
+        type,
+        entities: c.elementIds,
+        params: c.value != null ? [c.value] : [],
+        satisfied: false,
+        error: 0
+      };
+    });
+
+    // 3. Solve
+    const solver = new ConstraintSolver();
+    const result = solver.solve(entities, solverCons);
+
+    // 4. Update elements in drawStore
+    const nextElements = elements.map(el => {
+      const solvedEnt = result.updated_entities.find(e => e.id === el.id);
+      if (!solvedEnt) return el;
+
+      const pts = el.points.map(p => ({ ...p }));
+      if (solvedEnt.type === 'circle' && pts.length >= 2) {
+        const [cx, cz, r] = solvedEnt.params;
+        pts[0] = { ...pts[0], x: cx, z: cz };
+        pts[1] = { ...pts[1], x: cx + r, z: cz };
+      } else if (solvedEnt.type === 'arc' && pts.length >= 3) {
+        const [cx, cz, r, a1, a2] = solvedEnt.params;
+        pts[0] = { ...pts[0], x: cx, z: cz };
+        pts[1] = { ...pts[1], x: cx + r * Math.cos(a1), z: cz + r * Math.sin(a1) };
+        pts[2] = { ...pts[2], x: cx + r * Math.cos(a2), z: cz + r * Math.sin(a2) };
+      } else if (solvedEnt.type === 'point' && pts.length >= 1) {
+        const [px, pz] = solvedEnt.params;
+        pts[0] = { ...pts[0], x: px, z: pz };
+      } else {
+        // Line segment
+        const [x1, z1, x2, z2] = solvedEnt.params;
+        pts[0] = { ...pts[0], x: x1, z: z1 };
+        pts[pts.length - 1] = { ...pts[pts.length - 1], x: x2, z: z2 };
+      }
+
+      return {
+        ...el,
+        points: pts,
+        label: solvedEnt.name || el.label
+      };
+    });
+
+    // Save back to drawStore
+    useDrawStore.setState({ elements: nextElements });
+
+    // 5. Update state
+    const dofAnalyser = new DOFAnalyser();
+    const dofAnalysis = dofAnalyser.analyse(entities, solverCons);
+
+    set({
+      solverResult: result,
+      dofAnalysis
+    });
+
+    // Re-sync sketch rendering in 3D viewer
+    useViewerStore.getState().viewerControls?.syncSketches(nextElements, draw.activePoints, draw.floorElevation);
+  }
 }));

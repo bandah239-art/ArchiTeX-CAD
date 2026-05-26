@@ -3,11 +3,11 @@
 import json
 import os
 import re
-import urllib.error
-import urllib.request
 from typing import Any
 
-MODEL = "claude-sonnet-4-20250514"
+import anthropic
+
+MODEL = "claude-sonnet-4-6"
 MAX_TOKENS = 4000
 
 
@@ -16,34 +16,19 @@ def call_claude(system: str, user: str) -> dict[str, Any]:
     if not api_key:
         return {"error": "no_api_key", "fallback": True}
 
-    body = json.dumps(
-        {
-            "model": MODEL,
-            "max_tokens": MAX_TOKENS,
-            "system": system,
-            "messages": [{"role": "user", "content": user}],
-        }
-    ).encode("utf-8")
-
-    req = urllib.request.Request(
-        "https://api.anthropic.com/v1/messages",
-        data=body,
-        headers={
-            "Content-Type": "application/json",
-            "x-api-key": api_key,
-            "anthropic-version": "2023-06-01",
-        },
-        method="POST",
-    )
     try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-        text = ""
-        for block in data.get("content", []):
-            if block.get("type") == "text":
-                text += block.get("text", "")
+        client = anthropic.Anthropic(api_key=api_key)
+        message = client.messages.create(
+            model=MODEL,
+            max_tokens=MAX_TOKENS,
+            system=system,
+            messages=[{"role": "user", "content": user}],
+        )
+        text = "".join(
+            block.text for block in message.content if block.type == "text"
+        )
         return parse_json_response(text)
-    except (urllib.error.URLError, json.JSONDecodeError, TimeoutError) as e:
+    except anthropic.APIError as e:
         return {"error": str(e), "fallback": True}
 
 

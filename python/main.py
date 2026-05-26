@@ -9,6 +9,9 @@ from calculations.structural.slab import calculate_slab
 from calculations.structural.column import calculate_column
 from calculations.structural.foundation import calculate_foundation
 from calculations.structural.bearings import calculate_bearing
+from calculations.structural.steel import calculate_steel_beam
+from calculations.structural.timber import calculate_timber_beam
+from calculations.fea.solver_2d import run_fea_calculation
 from data.african_conditions import apply_local_adjustments
 from calculations.loads.load_combinations import calculate_loads, generate_load_combinations
 from calculations.core.engineer_control import wrap_calculation_result
@@ -67,10 +70,10 @@ from bim.autocad_bridge import autocad_bridge_status, export_dwg_geometry
 from bim.plan_detection import extract_plan_takeoff
 from geo.geo_cache import cache_status, clear_cache
 from ai.design_generator import generate_design
-from ai.variant_generator import generate_variants
-from ai.design_to_calculations import push_to_calculators
+from ai.gemini_client import call_gemini
 from ai.proposal_generator import generate_proposal
 from ai.text_to_bim import generate_bim_from_text
+from ai.voice_agent import process_voice_command
 from real_estate.plot_valuation import value_plot
 from real_estate.feasibility import run_feasibility
 from real_estate.land_use_optimiser import optimise_land_use
@@ -99,28 +102,42 @@ from sync.mobile_sync import list_sync_items, receive_sync_item
 from mobile.quick_calculators import concrete_mix, quick_beam_check, rebar_weight
 from calculations.wash.water_demand import calculate_water_demand
 
-from calculations.energy_bess import calculate_bess, BessRequest
-from calculations.energy_bess import calculate_bess, BessRequest
-from calculations.energy_microgrid import calculate_voltage_drop, MicrogridRequest
-from calculations.energy_transmission import calculate_sag_tension, TransmissionRequest
-from calculations.energy_hydro import calculate_hydro, HydroRequest
-from calculations.energy_biogas import calculate_biogas, BiogasRequest
-from calculations.energy_wind_wake import calculate_wind_wake, WindWakeRequest
-from calculations.energy_grid_fault import calculate_grid_fault, GridFaultRequest
+from calculators.energy_bess import calculate_bess, BessRequest
+from calculators.energy_microgrid import calculate_voltage_drop, MicrogridRequest
+from calculators.energy_transmission import calculate_sag_tension, TransmissionRequest
+from calculators.energy_hydro import calculate_hydro, HydroRequest
+from calculators.energy_biogas import calculate_biogas, BiogasRequest
+from calculators.energy_wind_wake import calculate_wind_wake, WindWakeRequest
+from calculators.energy_grid_fault import calculate_grid_fault, GridFaultRequest
 
-from calculations.wash_water_tower import calculate_water_tower, WaterTowerRequest
-from calculations.wash_epanet import calculate_pipe_network, PipeNetworkRequest
-from calculations.wash_dewats import calculate_dewats, DewatsRequest
-from calculations.wash_wtp import calculate_wtp, WTPRequest
-from calculations.wash_stormwater import calculate_stormwater, StormwaterRequest
-from calculations.wash_landfill import calculate_landfill, LandfillRequest
-from calculations.wash_irrigation import calculate_irrigation, IrrigationRequest
+from calculators.wash_water_tower import calculate_water_tower, WaterTowerRequest
+from calculators.wash_epanet import calculate_pipe_network, PipeNetworkRequest
+from calculators.wash_dewats import calculate_dewats, DewatsRequest
+from calculators.wash_wtp import calculate_wtp, WTPRequest
+from calculators.wash_stormwater import calculate_stormwater, StormwaterRequest
+from calculators.wash_landfill import calculate_landfill, LandfillRequest
+from calculators.wash_irrigation import calculate_irrigation, IrrigationRequest
 
-from calculations.geo_piles import calculate_piles, PilesRequest
-from calculations.geo_slope import calculate_slope, SlopeRequest
-from calculations.geo_consolidation import calculate_consolidation, ConsolidationRequest
-from calculations.geo_ground_improvement import calculate_ground_improvement, GroundImprovementRequest
-from calculations.geo_tunneling import calculate_tunneling, TunnelingRequest
+# New Engines
+from geo.gis_engine import analyze_terrain, TerrainAnalyticsRequest
+from calculators.energy_power_flow import run_power_flow, PowerFlowRequest
+from calculators.market_pricing import get_live_pricing, PricingRequest
+
+from calculators.geo_piles import calculate_piles, PilesRequest
+from calculators.geo_slope import calculate_slope, SlopeRequest
+from calculators.geo_consolidation import calculate_consolidation, ConsolidationRequest
+from calculators.geo_ground_improvement import calculate_ground_improvement, GroundImprovementRequest
+from calculators.geo_tunneling import calculate_tunneling, TunnelingRequest
+from calculators.energy_simulations import (
+    simulate_solar_battery_day, SolarBatteryDayRequest,
+    simulate_wind_wake_map, WindWakeMapRequest,
+    simulate_hydro_curve, HydroCurveRequest,
+)
+from calculators.geo_simulations import (
+    simulate_consolidation_settlement, ConsolidationSimRequest,
+    simulate_slope_slip_circle, SlopeSlipRequest,
+    simulate_pile_load_transfer, PileLoadTransferRequest,
+)
 from calculations.wash.borehole import calculate_borehole
 from calculations.wash.sewer_design import calculate_sewer_design
 from calculations.wash.pipe_network import analyze_pipe_network
@@ -165,6 +182,20 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+from cad.occ_routes import router as occ_router
+app.include_router(occ_router)
+
+
+class FeaInputs(BaseModel):
+    height: float = Field(4.0, gt=0, description="Column height in metres")
+    span: float = Field(6.0, gt=0, description="Beam span in metres")
+    lateral_load: float = Field(20000.0, description="Lateral point load at top-left joint in N")
+    vertical_load: float = Field(-50000.0, description="Vertical point load at top-right joint in N")
+    support_type: str = Field("fixed", description="Support conditions: fixed or pinned")
+    E: float = Field(2.0e11, gt=0, description="Elastic modulus in Pa")
+    A: float = Field(0.01, gt=0, description="Cross-sectional area in m²")
+    I: float = Field(1.0e-5, gt=0, description="Second moment of area in m⁴")
 
 
 class BeamInputs(BaseModel):
@@ -224,6 +255,26 @@ class FoundationInputs(BaseModel):
     column_depth: float = Field(300, gt=0, description="Column depth mm")
     exposure_class: str = "XC1"
     country: str = "Zambia"
+
+
+class SteelInputs(BaseModel):
+    length: float = Field(..., gt=0, description="Member length in metres")
+    fy: float = Field(275, gt=0, description="Yield strength in MPa")
+    w: float = Field(20, ge=0, description="Design line load in kN/m")
+    Wpl: float = Field(721, gt=0, description="Plastic section modulus in cm^3")
+    Aw: float = Field(22.8, gt=0, description="Web area in cm^2")
+
+
+class TimberInputs(BaseModel):
+    length: float = Field(..., gt=0, description="Span/length in metres")
+    b: float = Field(..., gt=0, description="Section width in mm")
+    h: float = Field(..., gt=0, description="Section depth in mm")
+    fm_k: float = Field(24, gt=0, description="Characteristic bending strength in MPa")
+    fv_k: float = Field(4.0, gt=0, description="Characteristic shear strength in MPa")
+    E0_mean: float = Field(11000, gt=0, description="Mean modulus of elasticity in MPa")
+    k_mod: float = Field(0.8, gt=0, description="Modification factor")
+    w: float = Field(5, ge=0, description="Design line load in kN/m")
+    w_sls: float = Field(3.5, ge=0, description="Serviceability line load in kN/m")
 
 
 class LoadInputs(BaseModel):
@@ -927,6 +978,14 @@ def geo_site_classification_endpoint(inputs: GeoSiteClassificationInput):
     except (ValueError, KeyError) as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+@app.post("/calculate/fea")
+def calculate_fea_endpoint(inputs: FeaInputs):
+    try:
+        return wrap_calculation_result(run_fea_calculation(inputs.model_dump()))
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @app.post("/calculate/beam")
 def calculate_beam_endpoint(inputs: BeamInputs):
     try:
@@ -983,6 +1042,23 @@ def calculate_bearing_endpoint(inputs: BearingInputs):
         return wrap_calculation_result(calculate_bearing(inputs.model_dump()))
     except (ValueError, KeyError) as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/calculate/steel")
+def calculate_steel_endpoint(inputs: SteelInputs):
+    try:
+        return wrap_calculation_result(calculate_steel_beam(inputs.model_dump()))
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/calculate/timber")
+def calculate_timber_endpoint(inputs: TimberInputs):
+    try:
+        return wrap_calculation_result(calculate_timber_beam(inputs.model_dump()))
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 
 @app.post("/materials/recommend")
 def materials_recommend_endpoint(inputs: MaterialSelectorInputs):
@@ -1504,6 +1580,15 @@ def bim_geometry_intersection(inputs: GeometryBooleanInput):
         raise HTTPException(status_code=400, detail=str(e))
 
 
+class VoiceRequest(BaseModel):
+    command: str
+
+@app.post("/ai/voice-command")
+def ai_voice_command(req: VoiceRequest):
+    result = process_voice_command(req.command)
+    return result
+
+
 @app.post("/ai/generate-design")
 def ai_generate_design(inputs: AiDesignInput):
     try:
@@ -1978,7 +2063,7 @@ def simulate_seismic_endpoint(inputs: SeismicAnalysisInput):
 class GenerativeBIMRequest(BaseModel):
     prompt: str = Field(..., description="Prompt for structural frame generation")
 
-@app.post("/api/generate/bim")
+@app.post("/generate/bim")
 async def generate_bim_endpoint(payload: GenerativeBIMRequest):
     try:
         result = generate_bim_from_text(payload.prompt)
@@ -1986,138 +2071,207 @@ async def generate_bim_endpoint(payload: GenerativeBIMRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/energy/bess")
+@app.post("/geo/terrain-analytics")
+def geo_terrain_analytics_endpoint(req: TerrainAnalyticsRequest):
+    try:
+        return analyze_terrain(req)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/energy/power-flow")
+def energy_power_flow_endpoint(req: PowerFlowRequest):
+    try:
+        return run_power_flow(req)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/finance/live-pricing")
+def finance_live_pricing_endpoint(req: PricingRequest):
+    try:
+        return get_live_pricing(req)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/energy/bess")
 def energy_bess_endpoint(req: BessRequest):
     try:
         return calculate_bess(req)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@app.post("/api/energy/microgrid")
+@app.post("/energy/microgrid")
 def energy_microgrid_endpoint(req: MicrogridRequest):
     try:
         return calculate_voltage_drop(req)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@app.post("/api/energy/transmission")
+@app.post("/energy/transmission")
 def energy_transmission_endpoint(req: TransmissionRequest):
     try:
         return calculate_sag_tension(req)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@app.post("/api/energy/hydro")
+@app.post("/energy/hydro")
 def energy_hydro_endpoint(req: HydroRequest):
     try:
         return calculate_hydro(req)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@app.post("/api/energy/biogas")
+@app.post("/energy/biogas")
 def energy_biogas_endpoint(req: BiogasRequest):
     try:
         return calculate_biogas(req)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@app.post("/api/energy/wind-wake")
+@app.post("/energy/wind-wake")
 def energy_wind_wake_endpoint(req: WindWakeRequest):
     try:
         return calculate_wind_wake(req)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@app.post("/api/energy/grid-fault")
+@app.post("/energy/grid-fault")
 def energy_grid_fault_endpoint(req: GridFaultRequest):
     try:
         return calculate_grid_fault(req)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@app.post("/api/wash/water-tower")
+@app.post("/wash/water-tower")
 def wash_water_tower_endpoint(req: WaterTowerRequest):
     try:
         return calculate_water_tower(req)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@app.post("/api/wash/epanet")
+@app.post("/wash/epanet")
 def wash_epanet_endpoint(req: PipeNetworkRequest):
     try:
         return calculate_pipe_network(req)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@app.post("/api/wash/dewats")
+@app.post("/wash/dewats")
 def wash_dewats_endpoint(req: DewatsRequest):
     try:
         return calculate_dewats(req)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@app.post("/api/wash/wtp")
+@app.post("/wash/wtp")
 def wash_wtp_endpoint(req: WTPRequest):
     try:
         return calculate_wtp(req)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@app.post("/api/wash/stormwater")
+@app.post("/wash/stormwater")
 def wash_stormwater_endpoint(req: StormwaterRequest):
     try:
         return calculate_stormwater(req)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@app.post("/api/wash/landfill")
+@app.post("/wash/landfill")
 def wash_landfill_endpoint(req: LandfillRequest):
     try:
         return calculate_landfill(req)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@app.post("/api/wash/irrigation")
+@app.post("/wash/irrigation")
 def wash_irrigation_endpoint(req: IrrigationRequest):
     try:
         return calculate_irrigation(req)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@app.post("/api/geo/piles")
+@app.post("/geo/piles")
 def geo_piles_endpoint(req: PilesRequest):
     try:
         return calculate_piles(req)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@app.post("/api/geo/slope")
+@app.post("/geo/slope")
 def geo_slope_endpoint(req: SlopeRequest):
     try:
         return calculate_slope(req)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@app.post("/api/geo/consolidation")
+@app.post("/geo/consolidation")
 def geo_consolidation_endpoint(req: ConsolidationRequest):
     try:
         return calculate_consolidation(req)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@app.post("/api/geo/ground-improvement")
+@app.post("/geo/ground-improvement")
 def geo_ground_improvement_endpoint(req: GroundImprovementRequest):
     try:
         return calculate_ground_improvement(req)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@app.post("/api/geo/tunneling")
+@app.post("/geo/tunneling")
 def geo_tunneling_endpoint(req: TunnelingRequest):
     try:
         return calculate_tunneling(req)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/energy/simulation/solar-battery-day")
+def solar_battery_day_endpoint(req: SolarBatteryDayRequest):
+    try:
+        return simulate_solar_battery_day(req)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/energy/simulation/wind-wake-map")
+def wind_wake_map_endpoint(req: WindWakeMapRequest):
+    try:
+        return simulate_wind_wake_map(req)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/energy/simulation/hydro-curve")
+def hydro_curve_endpoint(req: HydroCurveRequest):
+    try:
+        return simulate_hydro_curve(req)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/geo/simulation/consolidation")
+def geo_consolidation_sim_endpoint(req: ConsolidationSimRequest):
+    try:
+        return simulate_consolidation_settlement(req)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/geo/simulation/slope-slip-circle")
+def geo_slope_sim_endpoint(req: SlopeSlipRequest):
+    try:
+        return simulate_slope_slip_circle(req)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/geo/simulation/pile-load-transfer")
+def geo_pile_sim_endpoint(req: PileLoadTransferRequest):
+    try:
+        return simulate_pile_load_transfer(req)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 
 if __name__ == "__main__":
     import uvicorn

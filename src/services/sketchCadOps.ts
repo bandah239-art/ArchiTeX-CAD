@@ -55,6 +55,28 @@ function lineIntersect2d(
   return { x: x1 + t * (x2 - x1), y: a1.y, z: z1 + t * (z2 - z1) };
 }
 
+/** Get segment intersection between AB and CD (on-segment check). */
+function getLineIntersection(
+  a: SketchPoint,
+  b: SketchPoint,
+  c: SketchPoint,
+  d: SketchPoint
+): SketchPoint | null {
+  const det = (b.x - a.x) * (d.z - c.z) - (b.z - a.z) * (d.x - c.x);
+  if (Math.abs(det) < 1e-9) return null; // Parallel
+  const u = ((c.x - a.x) * (d.z - c.z) - (c.z - a.z) * (d.x - c.x)) / det;
+  const v = ((c.x - a.x) * (b.z - a.z) - (c.z - a.z) * (b.x - a.x)) / det;
+  const tol = 1e-7;
+  if (u >= -tol && u <= 1.0 + tol && v >= -tol && v <= 1.0 + tol) {
+    return {
+      x: a.x + u * (b.x - a.x),
+      y: a.y,
+      z: a.z + u * (b.z - a.z)
+    };
+  }
+  return null;
+}
+
 export function segmentsFromElement(el: SketchElement): Segment2D[] {
   const pts = el.points;
   const segs: Segment2D[] = [];
@@ -128,50 +150,80 @@ export function pickNearestVertex(
   return best;
 }
 
-/** Offset open/closed polyline in 2D (positive = left of direction). */
+/** Offset open/closed polyline in 2D with exact miter joints and spike limiting. */
 export function offsetPolyline(points: SketchPoint[], distance: number, closed: boolean): SketchPoint[] {
   if (points.length < 2) return points;
-  const n = closed ? points.length : points.length - 1;
+  const n = points.length;
+  
+  // Calculate offset lines for each segment
+  const offsetLines: { a: SketchPoint; b: SketchPoint; normal: SketchPoint }[] = [];
+  const numSegs = closed ? n : n - 1;
+  
+  for (let i = 0; i < numSegs; i++) {
+    const p1 = points[i];
+    const p2 = points[(i + 1) % n];
+    const dx = p2.x - p1.x;
+    const dz = p2.z - p1.z;
+    const len = Math.hypot(dx, dz) || 1;
+    const nx = -dz / len;
+    const nz = dx / len;
+    
+    offsetLines.push({
+      a: { x: p1.x + nx * distance, y: p1.y, z: p1.z + nz * distance },
+      b: { x: p2.x + nx * distance, y: p2.y, z: p2.z + nz * distance },
+      normal: { x: nx, y: 0, z: nz }
+    });
+  }
+  
   const out: SketchPoint[] = [];
-  for (let i = 0; i < n; i++) {
-    const i0 = i;
-    const i1 = (i + 1) % points.length;
-    const p0 = points[i0];
-    const p1 = points[i1];
-    const dx = p1.x - p0.x;
-    const dz = p1.z - p0.z;
-    const len = Math.hypot(dx, dz) || 1;
-    const nx = (-dz / len) * distance;
-    const nz = (dx / len) * distance;
-    const mx = (p0.x + p1.x) / 2 + nx;
-    const mz = (p0.z + p1.z) / 2 + nz;
-    out.push({ x: mx, y: p0.y, z: mz });
+  
+  if (closed) {
+    for (let i = 0; i < n; i++) {
+      const prev = offsetLines[(i - 1 + n) % n];
+      const curr = offsetLines[i];
+      const ip = lineIntersect2d(prev.a, prev.b, curr.a, curr.b);
+      if (ip) {
+        const orig = points[i];
+        if (dist2d(ip, orig) > Math.abs(distance) * 4) {
+          out.push({ x: orig.x + curr.normal.x * distance, y: orig.y, z: orig.z + curr.normal.z * distance });
+        } else {
+          out.push(ip);
+        }
+      } else {
+        const orig = points[i];
+        out.push({ x: orig.x + curr.normal.x * distance, y: orig.y, z: orig.z + curr.normal.z * distance });
+      }
+    }
+  } else {
+    // Start point
+    out.push(offsetLines[0].a);
+    
+    // Intermediate points
+    for (let i = 1; i < n - 1; i++) {
+      const prev = offsetLines[i - 1];
+      const curr = offsetLines[i];
+      const ip = lineIntersect2d(prev.a, prev.b, curr.a, curr.b);
+      if (ip) {
+        const orig = points[i];
+        if (dist2d(ip, orig) > Math.abs(distance) * 4) {
+          out.push({ x: orig.x + curr.normal.x * distance, y: orig.y, z: orig.z + curr.normal.z * distance });
+        } else {
+          out.push(ip);
+        }
+      } else {
+        const orig = points[i];
+        out.push({ x: orig.x + curr.normal.x * distance, y: orig.y, z: orig.z + curr.normal.z * distance });
+      }
+    }
+    
+    // End point
+    out.push(offsetLines[offsetLines.length - 1].b);
   }
-  if (!closed) {
-    const p0 = points[0];
-    const p1 = points[1];
-    const dx = p1.x - p0.x;
-    const dz = p1.z - p0.z;
-    const len = Math.hypot(dx, dz) || 1;
-    out.unshift({
-      x: p0.x + (-dz / len) * distance,
-      y: p0.y,
-      z: p0.z + (dx / len) * distance,
-    });
-    const pn = points[points.length - 1];
-    const pm = points[points.length - 2];
-    const dx2 = pn.x - pm.x;
-    const dz2 = pn.z - pm.z;
-    const len2 = Math.hypot(dx2, dz2) || 1;
-    out.push({
-      x: pn.x + (-dz2 / len2) * distance,
-      y: pn.y,
-      z: pn.z + (dx2 / len2) * distance,
-    });
-  }
+  
   return out;
 }
 
+/** Trim element using a cutter segment by performing topological point splits and discarding closest click side. */
 export function trimElementWithCutter(
   el: SketchElement,
   cutter: Segment2D,
@@ -179,22 +231,69 @@ export function trimElementWithCutter(
 ): SketchElement | null {
   if (el.points.length < 2) return null;
   const pts = [...el.points];
-  const hits: { t: number; seg: number; pt: SketchPoint }[] = [];
+  
+  // Find all segment split points along the target polyline
+  const splitSegments: SketchPoint[][] = [];
+  let currentSegment: SketchPoint[] = [pts[0]];
+  
   for (let i = 0; i < pts.length - 1; i++) {
-    const hit = lineIntersect2d(pts[i], pts[i + 1], cutter.a, cutter.b);
-    if (hit) {
-      const t = dist2d(pts[i], hit) / (dist2d(pts[i], pts[i + 1]) || 1);
-      hits.push({ t, seg: i, pt: hit });
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const ip = getLineIntersection(p1, p2, cutter.a, cutter.b);
+    
+    if (ip && dist2d(ip, p1) > 1e-5 && dist2d(ip, p2) > 1e-5) {
+      currentSegment.push(ip);
+      splitSegments.push(currentSegment);
+      currentSegment = [ip, p2];
+    } else {
+      currentSegment.push(p2);
     }
   }
-  if (!hits.length) return null;
-  const { seg: si } = hits[0];
-  const keepStart = dist2d(click, pts[0]) < dist2d(click, pts[pts.length - 1]);
-  const newPts = keepStart ? [...pts.slice(0, si + 1), hits[0].pt] : [hits[0].pt, ...pts.slice(si + 1)];
-  if (newPts.length < 2) return null;
-  return { ...el, points: newPts };
+  splitSegments.push(currentSegment);
+  
+  if (splitSegments.length < 2) {
+    // No intersection found
+    return null;
+  }
+  
+  // Find which split segment is closest to the user's click point
+  let closestIndex = 0;
+  let minDistance = Infinity;
+  
+  splitSegments.forEach((segPts, segIdx) => {
+    // Check distance to each segment part
+    for (let i = 0; i < segPts.length - 1; i++) {
+      const { dist } = closestOnSegment(click, segPts[i], segPts[i + 1]);
+      if (dist < minDistance) {
+        minDistance = dist;
+        closestIndex = segIdx;
+      }
+    }
+  });
+  
+  // Discard the clicked piece, gather the rest
+  const keptSegments = splitSegments.filter((_, idx) => idx !== closestIndex);
+  if (keptSegments.length === 0) return null;
+  
+  // Return the longest remaining piece to keep geometry contiguous and logical
+  let longestSegment = keptSegments[0];
+  let maxLength = 0;
+  
+  keptSegments.forEach((segPts) => {
+    let len = 0;
+    for (let i = 0; i < segPts.length - 1; i++) {
+      len += dist2d(segPts[i], segPts[i + 1]);
+    }
+    if (len > maxLength) {
+      maxLength = len;
+      longestSegment = segPts;
+    }
+  });
+  
+  return { ...el, points: longestSegment };
 }
 
+/** Extend element endpoints along their tangents to snap precisely to a boundary. */
 export function extendElementToBoundary(
   el: SketchElement,
   boundary: Segment2D,
@@ -202,45 +301,117 @@ export function extendElementToBoundary(
 ): SketchElement | null {
   if (el.points.length < 2) return null;
   const pts = [...el.points];
-  const i = end === 'start' ? 0 : pts.length - 1;
-  const j = end === 'start' ? 1 : pts.length - 2;
-  const hit = lineIntersect2d(pts[i], pts[j], boundary.a, boundary.b);
-  if (!hit) return null;
-  if (end === 'start') pts[0] = hit;
-  else pts[pts.length - 1] = hit;
+  const n = pts.length;
+  
+  let pEnd: SketchPoint;
+  let pPrev: SketchPoint;
+  let endIdx: number;
+  
+  if (end === 'start') {
+    pEnd = pts[0];
+    pPrev = pts[1];
+    endIdx = 0;
+  } else {
+    pEnd = pts[n - 1];
+    pPrev = pts[n - 2];
+    endIdx = n - 1;
+  }
+  
+  // Extrude end segment direction infinitely
+  const dx = pEnd.x - pPrev.x;
+  const dz = pEnd.z - pPrev.z;
+  const len = Math.hypot(dx, dz);
+  if (len < 1e-6) return null;
+  
+  const pFar = {
+    x: pEnd.x + (dx / len) * 1000.0,
+    y: pEnd.y,
+    z: pEnd.z + (dz / len) * 1000.0
+  };
+  
+  const ip = getLineIntersection(pEnd, pFar, boundary.a, boundary.b);
+  if (!ip) return null;
+  
+  pts[endIdx] = ip;
   return { ...el, points: pts };
 }
 
-/** Fillet one interior vertex with radius r. */
+/** Fillet one interior vertex with a true mathematical tangent circular arc. */
 export function filletAtVertex(points: SketchPoint[], index: number, radius: number): SketchPoint[] {
   if (points.length < 3 || index <= 0 || index >= points.length - 1) return points;
-  const prev = points[index - 1];
-  const curr = points[index];
-  const next = points[index + 1];
-  const v1x = prev.x - curr.x;
-  const v1z = prev.z - curr.z;
-  const v2x = next.x - curr.x;
-  const v2z = next.z - curr.z;
-  const len1 = Math.hypot(v1x, v1z);
-  const len2 = Math.hypot(v2x, v2z);
+  
+  const pPrev = points[index - 1];
+  const pCurr = points[index];
+  const pNext = points[index + 1];
+  
+  const dx1 = pPrev.x - pCurr.x;
+  const dz1 = pPrev.z - pCurr.z;
+  const dx2 = pNext.x - pCurr.x;
+  const dz2 = pNext.z - pCurr.z;
+  
+  const len1 = Math.hypot(dx1, dz1);
+  const len2 = Math.hypot(dx2, dz2);
   if (len1 < 1e-6 || len2 < 1e-6) return points;
-  const r = Math.min(radius, len1 * 0.4, len2 * 0.4);
-  const n1x = v1x / len1;
-  const n1z = v1z / len1;
-  const n2x = v2x / len2;
-  const n2z = v2z / len2;
-  const p1 = { x: curr.x + n1x * r, y: curr.y, z: curr.z + n1z * r };
-  const p2 = { x: curr.x + n2x * r, y: curr.y, z: curr.z + n2z * r };
+  
+  const v1x = dx1 / len1;
+  const v1z = dz1 / len1;
+  const v2x = dx2 / len2;
+  const v2z = dz2 / len2;
+  
+  // Dot product to compute interior angle
+  const dot = v1x * v2x + v1z * v2z;
+  const cosHalfTheta = Math.sqrt(Math.max(0, (1 + dot) / 2));
+  const sinHalfTheta = Math.sqrt(Math.max(0, (1 - dot) / 2));
+  if (sinHalfTheta < 1e-4) return points; // Collinear, fillet impossible
+  
+  const tanHalfTheta = sinHalfTheta / cosHalfTheta;
+  
+  // Bound the tangent distance to 40% of the shortest segment to prevent self-intersection collapse
+  const maxD = Math.min(len1, len2) * 0.4;
+  let d_tangent = radius / tanHalfTheta;
+  let r = radius;
+  if (d_tangent > maxD) {
+    d_tangent = maxD;
+    r = d_tangent * tanHalfTheta;
+  }
+  
+  // Calculate tangent intersections
+  const t1 = { x: pCurr.x + v1x * d_tangent, y: pCurr.y, z: pCurr.z + v1z * d_tangent };
+  const t2 = { x: pCurr.x + v2x * d_tangent, y: pCurr.y, z: pCurr.z + v2z * d_tangent };
+  
+  // Center of fillet arc
+  const bx = v1x + v2x;
+  const bz = v1z + v2z;
+  const blen = Math.hypot(bx, bz) || 1;
+  const bnx = bx / blen;
+  const bnz = bz / blen;
+  
+  const distToCenter = r / sinHalfTheta;
+  const center = {
+    x: pCurr.x + bnx * distToCenter,
+    y: pCurr.y,
+    z: pCurr.z + bnz * distToCenter
+  };
+  
+  // Generate arc points
+  const a1 = Math.atan2(t1.z - center.z, t1.x - center.x);
+  const a2 = Math.atan2(t2.z - center.z, t2.x - center.x);
+  
+  let diff = a2 - a1;
+  while (diff < -Math.PI) diff += Math.PI * 2;
+  while (diff > Math.PI) diff -= Math.PI * 2;
+  
+  const steps = 8;
   const arcPts: SketchPoint[] = [];
-  const steps = 6;
   for (let s = 0; s <= steps; s++) {
-    const t = s / steps;
+    const angle = a1 + (s / steps) * diff;
     arcPts.push({
-      x: p1.x * (1 - t) + p2.x * t,
-      y: curr.y,
-      z: p1.z * (1 - t) + p2.z * t,
+      x: center.x + Math.cos(angle) * r,
+      y: pCurr.y,
+      z: center.z + Math.sin(angle) * r
     });
   }
+  
   return [...points.slice(0, index), ...arcPts, ...points.slice(index + 1)];
 }
 

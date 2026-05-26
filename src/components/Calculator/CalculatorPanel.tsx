@@ -29,6 +29,12 @@ import { WTPCalculator } from './modules/WTPCalculator';
 import { StormwaterCalculator } from './modules/StormwaterCalculator';
 import { LandfillCalculator } from './modules/LandfillCalculator';
 import { IrrigationCalculator } from './modules/IrrigationCalculator';
+import { PilesCalculator } from './modules/PilesCalculator';
+import { SlopeStabilityCalculator } from './modules/SlopeStabilityCalculator';
+import { ConsolidationCalculator } from './modules/ConsolidationCalculator';
+import { GroundImprovementCalculator } from './modules/GroundImprovementCalculator';
+import { TunnelingCalculator } from './modules/TunnelingCalculator';
+import { MODULES_WITH_INLINE_CALCULATE } from './calculatorModuleUtils';
 import { ResultsDisplay, PressureBearingSection } from './ResultsDisplay';
 import { PressurePanel } from './pressure/PressurePanel';
 import { ReportExporter } from './ReportExporter';
@@ -66,6 +72,11 @@ const MODULES: { id: CalculationModule; label: string }[] = [
   { id: 'wash_stormwater', label: 'Stormwater & Ponds' },
   { id: 'wash_landfill', label: 'Sanitary Landfill' },
   { id: 'wash_irrigation', label: 'Agri-Irrigation' },
+  { id: 'geo_piles', label: 'Pile Capacity' },
+  { id: 'geo_slope', label: 'Slope Stability' },
+  { id: 'geo_consolidation', label: 'Consolidation' },
+  { id: 'geo_ground_improvement', label: 'Ground Improve' },
+  { id: 'geo_tunneling', label: 'Tunneling RMR' },
 ];
 
 export function CalculatorPanel() {
@@ -120,7 +131,7 @@ export function CalculatorPanel() {
       case 'timber':
         return <TimberCalculator {...props} />;
       case 'fea':
-        return <FEACalculator />;
+        return <FEACalculator {...props} />;
       case 'energy_bess':
         return <EnergyCalculator {...props} />;
       case 'energy_microgrid':
@@ -149,6 +160,16 @@ export function CalculatorPanel() {
         return <LandfillCalculator {...props} />;
       case 'wash_irrigation':
         return <IrrigationCalculator {...props} />;
+      case 'geo_piles':
+        return <PilesCalculator {...props} />;
+      case 'geo_slope':
+        return <SlopeStabilityCalculator {...props} />;
+      case 'geo_consolidation':
+        return <ConsolidationCalculator {...props} />;
+      case 'geo_ground_improvement':
+        return <GroundImprovementCalculator {...props} />;
+      case 'geo_tunneling':
+        return <TunnelingCalculator {...props} />;
       default:
         return null;
     }
@@ -182,13 +203,7 @@ export function CalculatorPanel() {
 
         {activeModule !== 'loadCombinations' &&
           activeModule !== 'pressure' &&
-          ![
-            'energy_bess',
-            'energy_microgrid',
-            'energy_transmission',
-            'wash_water_tower',
-            'wash_dewats',
-          ].includes(activeModule) && (
+          !MODULES_WITH_INLINE_CALCULATE.includes(activeModule) && (
           <>
             <button
               onClick={() => runCalculation()}

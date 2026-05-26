@@ -50,3 +50,16 @@ export function transformPositions(positions: Float32Array, matrix: number[]): F
 export function worldMatrixFromPlacement(placement?: number[]): number[] {
   return multiplyMat4(IFC_TO_XEOKIT, placement ?? IDENTITY_MAT4);
 }
+
+/** Column-major translation matrix (xeokit / IFC world space). */
+export function translationMat4(tx: number, ty: number, tz: number): number[] {
+  return [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, tx, ty, tz, 1];
+}
+
+export function worldMatrixWithOffset(
+  placement: number[] | undefined,
+  centerOffset: [number, number, number],
+): number[] {
+  const [cx, cy, cz] = centerOffset;
+  return multiplyMat4(translationMat4(-cx, -cy, -cz), worldMatrixFromPlacement(placement));
+}

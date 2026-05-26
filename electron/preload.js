@@ -20,4 +20,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
   offlineSaveCalculation: (id, projectId, type, inputs, results) =>
     ipcRenderer.invoke('offline:save-calculation', id, projectId, type, inputs, results),
   offlineLoadCalculations: (projectId) => ipcRenderer.invoke('offline:load-calculations', projectId),
+  osAction: (action, targetPath) => ipcRenderer.invoke('os-action', action, targetPath),
 });

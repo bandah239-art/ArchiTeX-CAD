@@ -1,10 +1,46 @@
 import type { CalculationResult, CalculationStep } from '../types/calculations';
 import { useEngineerReviewStore } from '../store/engineerReviewStore';
+import { useCalculationStore } from '../store/calculationStore';
 
 export async function exportToPDF(result: CalculationResult): Promise<void> {
   const savePath = window.electronAPI
     ? await window.electronAPI.saveFileDialog('calculation-report.pdf')
     : null;
+
+  const { stepReviews, engineerName, registrationNumber } = useEngineerReviewStore.getState();
+  const activeModule = useCalculationStore.getState().activeModule;
+  const reviewer = [engineerName, registrationNumber].filter(Boolean).join(' — ');
+
+  const steps = result.steps ?? [];
+  const counts = { accepted: 0, overridden: 0, flagged: 0, pending: 0 };
+  const mappedSteps = steps.map((step) => {
+    const record = stepReviews[`${activeModule}:${step.step_number}`] || stepReviews[`calc:${step.step_number}`];
+    const status = record?.status ?? 'pending';
+    counts[status] += 1;
+    return {
+      ...step,
+      review_status: status,
+      engineer_name: reviewer,
+      effective_result: status === 'overridden' ? record?.overrideValue : (step.platform_result ?? step.result),
+      override_reason: record?.overrideReason ?? null,
+      flag_note: record?.flagNote ?? null,
+    };
+  });
+
+  const payload = {
+    ...result,
+    steps: mappedSteps,
+    review_summary: counts,
+    engineer_name: reviewer,
+    module: activeModule,
+  };
+
+  if (counts.pending > 0) {
+    payload.warnings = [
+      ...(payload.warnings ?? []),
+      `${counts.pending} steps not yet reviewed — do not use for construction`,
+    ];
+  }
 
   try {
     const res = await fetch('http://localhost:8000/export/pdf', {
@@ -12,7 +48,7 @@ export async function exportToPDF(result: CalculationResult): Promise<void> {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(result),
+      body: JSON.stringify(payload),
     });
 
     if (!res.ok) throw new Error('PDF Generation failed');
@@ -21,8 +57,6 @@ export async function exportToPDF(result: CalculationResult): Promise<void> {
     const url = URL.createObjectURL(blob);
 
     if (savePath) {
-      // In Electron, we might want to send the buffer to fs directly
-      // but for now we can just use the HTML5 download trick anyway
       const a = document.createElement('a');
       a.href = url;
       a.download = savePath;
@@ -37,11 +71,10 @@ export async function exportToPDF(result: CalculationResult): Promise<void> {
     URL.revokeObjectURL(url);
   } catch (err) {
     console.error('Failed to generate PDF:', err);
-    // Fallback to HTML if server isn't running or fails
     if (!savePath) {
-      downloadAsHTML(result);
+      downloadAsHTML(payload);
     } else {
-      downloadAsHTML(result, savePath.replace('.pdf', '.html'));
+      downloadAsHTML(payload, savePath.replace('.pdf', '.html'));
     }
   }
 }

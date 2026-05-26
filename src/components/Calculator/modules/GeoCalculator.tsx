@@ -1,5 +1,6 @@
 import type { CalculatorFormProps } from '../CalculatorTypes';
 import type { GeoSubmodule } from '../../../types/calculations';
+import { GeoSimulationPanel } from '../../Geo/GeoSimulationPanel';
 
 const GEO_SUBMODULES: { id: GeoSubmodule; label: string }[] = [
   { id: 'bearing_capacity', label: 'Bearing Capacity' },
@@ -47,6 +48,8 @@ export function GeoCalculator({ inputs, onInputChange }: CalculatorFormProps) {
       {submodule === 'settlement' && <SettlementForm inputs={inputs} onInputChange={onInputChange} />}
       {submodule === 'slope_stability' && <SlopeStabilityForm inputs={inputs} onInputChange={onInputChange} />}
       {submodule === 'site_classification' && <SiteClassificationForm inputs={inputs} onInputChange={onInputChange} />}
+
+      <GeoSimulationPanel inputs={inputs} />
     </div>
   );
 }

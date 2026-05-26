@@ -873,3 +873,8 @@ export function buildEntityTypeMap(
   }
   return map;
 }
+
+/** Active Xeokit viewer instance, if the BIM canvas is mounted. */
+export function getViewer(): Viewer | null {
+  return useViewerStore.getState().viewerControls?.viewer ?? null;
+}

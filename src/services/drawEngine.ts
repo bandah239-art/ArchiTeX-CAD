@@ -2,6 +2,7 @@ import type { Viewer } from '@xeokit/xeokit-sdk';
 import { Mesh, PhongMaterial, buildBoxGeometry, ReadableGeometry } from '@xeokit/xeokit-sdk';
 import type { SketchElement, SketchKind, SketchPoint } from '../store/drawStore';
 import type { DrawTool } from '../types/tools';
+import { useFeatureTreeStore } from '../store/featureTreeStore';
 import {
   SKETCH_FLOOR_PLANE_ID,
   isClosedRing,
@@ -65,6 +66,10 @@ export class DrawEngine {
       this.renderElement(el, floorY);
     }
     this.renderActivePreview(activePoints, floorY, options.previewPoint ?? null, options.activeTool ?? null);
+    const activeSolid = useFeatureTreeStore.getState().activeSolidMesh;
+    if (activeSolid && activeSolid.vertices && activeSolid.vertices.length > 0) {
+      this.renderSolidMesh(activeSolid, floorY);
+    }
     try {
       this.viewer.scene.render();
     } catch (err) {
@@ -74,6 +79,44 @@ export class DrawEngine {
 
   destroy() {
     this.clearMeshes();
+  }
+
+  private renderSolidMesh(solid: any, floorY: number) {
+    const scene = this.viewer.scene;
+    
+    // Map backend coordinate axes to Xeokit 3D coordinate system
+    const positions = [];
+    const N = solid.vertices.length / 3;
+    for (let i = 0; i < N; i++) {
+      const x = solid.vertices[3 * i];
+      const y = solid.vertices[3 * i + 1];
+      const z = solid.vertices[3 * i + 2];
+      positions.push(x);
+      positions.push(floorY + z);
+      positions.push(y);
+    }
+    
+    const geometry = new ReadableGeometry(scene, {
+      primitive: "triangles",
+      positions: positions,
+      indices: solid.faces
+    });
+    
+    const material = new PhongMaterial(scene, {
+      diffuse: [0.1, 0.7, 0.9],
+      opacity: 0.75,
+      backfaces: true
+    });
+    this.materials.push(material);
+    
+    const mesh = new Mesh(scene, {
+      id: `solid-feature-${Date.now()}-${Math.random()}`,
+      geometry: geometry,
+      material: material,
+      pickable: true
+    });
+    
+    this.meshes.set(mesh.id, mesh);
   }
 
   private clearMeshes() {

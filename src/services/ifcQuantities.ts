@@ -1,6 +1,6 @@
 /** Mesh-based geometric quantity extraction (volume, area, length, bounding box). */
 
-import { transformPositions, worldMatrixFromPlacement } from './ifcTransforms';
+import { transformPositions, transformVertex, worldMatrixFromPlacement } from './ifcTransforms';
 
 export interface MeshBuffers {
   positions: Float32Array;
@@ -80,6 +80,54 @@ export function meshSurfaceArea(positions: Float32Array, indices: Uint32Array): 
     area += length3(cross(ab)) * 0.5;
   }
   return area;
+}
+
+function updateBounds(
+  min: [number, number, number],
+  max: [number, number, number],
+  x: number,
+  y: number,
+  z: number,
+): void {
+  min[0] = Math.min(min[0], x);
+  min[1] = Math.min(min[1], y);
+  min[2] = Math.min(min[2], z);
+  max[0] = Math.max(max[0], x);
+  max[1] = Math.max(max[1], y);
+  max[2] = Math.max(max[2], z);
+}
+
+/** World-space AABB of all placed meshes (xeokit Y-up). */
+export function computeCombinedWorldBounds(meshes: PlacedMeshBuffers[]): {
+  min: [number, number, number];
+  max: [number, number, number];
+  center: [number, number, number];
+} | null {
+  if (!meshes.length) return null;
+
+  const min: [number, number, number] = [Infinity, Infinity, Infinity];
+  const max: [number, number, number] = [-Infinity, -Infinity, -Infinity];
+
+  for (const mesh of meshes) {
+    const world = worldMatrixFromPlacement(mesh.matrix);
+    for (let i = 0; i < mesh.positions.length; i += 3) {
+      const [x, y, z] = transformVertex(
+        world,
+        mesh.positions[i],
+        mesh.positions[i + 1],
+        mesh.positions[i + 2],
+      );
+      updateBounds(min, max, x, y, z);
+    }
+  }
+
+  if (!Number.isFinite(min[0])) return null;
+
+  return {
+    min,
+    max,
+    center: [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2],
+  };
 }
 
 export function meshBounds(positions: Float32Array): {

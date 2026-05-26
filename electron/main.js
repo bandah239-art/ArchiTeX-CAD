@@ -1,10 +1,16 @@
-import { app, BrowserWindow, ipcMain, dialog, session } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, session, shell } from 'electron';
 import { spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import http from 'http';
 import { createMenu } from './menu.js';
+import {
+  describePythonSource,
+  getPipInstallConfig,
+  getUvicornLaunchConfig,
+  resolvePythonExecutable,
+} from '../scripts/resolve-python.mjs';
 import {
   recordChange,
   getSyncStatus,
@@ -62,10 +68,12 @@ let mainWindow = null;
 let pythonProcess = null;
 
 function getPythonSpawnArgs() {
-  if (process.platform === 'win32') {
-    return { cmd: 'py', args: ['-3', '-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(PYTHON_PORT)] };
-  }
-  return { cmd: 'python3', args: ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(PYTHON_PORT)] };
+  const { cmd, args, shell } = getUvicornLaunchConfig({
+    host: '127.0.0.1',
+    port: PYTHON_PORT,
+    reload: false,
+  });
+  return { cmd, args, shell };
 }
 
 function getPythonScriptPath() {
@@ -121,10 +129,8 @@ function waitForServer(port, maxAttempts = 30, interval = 1000) {
 }
 
 function getPythonPipArgs() {
-  if (process.platform === 'win32') {
-    return { cmd: 'py', args: ['-3', '-m', 'pip', 'install', '-r', 'requirements.txt'] };
-  }
-  return { cmd: 'python3', args: ['-m', 'pip', 'install', '-r', 'requirements.txt'] };
+  const { cmd, args, shell } = getPipInstallConfig();
+  return { cmd, args, shell };
 }
 
 function ensurePythonDependencies() {
@@ -135,13 +141,17 @@ function ensurePythonDependencies() {
     }
 
     const pythonDir = getPythonScriptPath();
-    const { cmd, args } = getPythonPipArgs();
-    safeLog('[Python] Checking dependencies...');
+    const { cmd, args, shell } = getPythonPipArgs();
+    const exe = resolvePythonExecutable();
+    safeLog(
+      `[Python] Checking dependencies (${describePythonSource(exe)})...`,
+      exe ?? cmd,
+    );
 
     const proc = spawn(cmd, args, {
       cwd: pythonDir,
       stdio: 'inherit',
-      shell: process.platform === 'win32',
+      shell,
     });
 
     proc.on('close', (code) => {
@@ -166,12 +176,17 @@ function spawnPythonServer() {
     }
 
     const pythonDir = getPythonScriptPath();
-    const { cmd, args } = getPythonSpawnArgs();
+    const { cmd, args, shell } = getPythonSpawnArgs();
+    const exe = resolvePythonExecutable();
+    safeLog(
+      `[Python] Starting server (${describePythonSource(exe)})...`,
+      exe ?? cmd,
+    );
 
     pythonProcess = spawn(cmd, args, {
       cwd: pythonDir,
       stdio: ['ignore', 'pipe', 'pipe'],
-      shell: process.platform === 'win32',
+      shell,
     });
 
     pythonProcess.stdout?.on('data', (data) => {
@@ -346,6 +361,33 @@ ipcMain.handle('offline:save-calculation', (_, id, projectId, type, inputs, resu
   saveCalculationLocal(id, projectId, type, inputs, results)
 );
 ipcMain.handle('offline:load-calculations', (_, projectId) => loadCalculationsLocal(projectId));
+
+// OS Action IPC
+ipcMain.handle('os-action', async (_, action, targetPath) => {
+  try {
+    switch (action) {
+      case 'minimize_app':
+        if (mainWindow) mainWindow.minimize();
+        return { success: true };
+      case 'maximize_app':
+        if (mainWindow) {
+          if (mainWindow.isMaximized()) mainWindow.unmaximize();
+          else mainWindow.maximize();
+        }
+        return { success: true };
+      case 'open_folder':
+        if (targetPath) {
+          const result = await shell.openPath(targetPath);
+          return { success: !result, error: result };
+        }
+        return { success: false, error: 'No path provided' };
+      default:
+        return { success: false, error: `Unknown OS action: ${action}` };
+    }
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
 
 app.whenReady().then(async () => {
   if (isDev) {

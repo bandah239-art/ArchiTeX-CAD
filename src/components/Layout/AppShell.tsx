@@ -4,6 +4,8 @@ import { StatusBar } from './StatusBar';
 import { BIMViewer } from '../BIMViewer/BIMViewer';
 import { ViewerSidePanel } from '../BIMViewer/ViewerSidePanel';
 import { CalculatorPanel } from '../Calculator/CalculatorPanel';
+import { GISViewer } from '../GIS/GISViewer';
+import { SLDViewer } from '../Energy/SLDViewer';
 import { BoQPanel } from '../BoQ/BoQPanel';
 import { GeoPanel } from '../GeoIntelligence/GeoPanel';
 import { AIDesignPanel } from '../AIDesign/AIDesignPanel';
@@ -29,15 +31,18 @@ import { useViewerStore } from '../../store/viewerStore';
 import { useWorkspaceStore } from '../../store/workspaceStore';
 import { useBIMViewer } from '../../hooks/useBIMViewer';
 import { ErrorBoundary } from '../ErrorBoundary';
+import { useToolbarStore } from '../BIMViewer/toolRegistry';
+import { FeatureTreePanel } from '../../cad/history/FeatureTreePanel';
 
 interface AppShellProps {
   onBackToDashboard: () => void;
 }
 
 export function AppShell({ onBackToDashboard }: AppShellProps) {
-  const { activePanel, showInspector, setActivePanel, togglePanel, toggleInspector } = useWorkspaceStore();
+  const { activePanel, showInspector, setActivePanel, togglePanel, toggleInspector, mainView } = useWorkspaceStore();
   const { modelPath, activeStorey, hiddenTypes, selectedElement } = useViewerStore();
   const { handleElementSelected, handleModelLoaded } = useBIMViewer();
+  const { activeTab } = useToolbarStore();
   useViewerShortcuts();
 
   const showSidePanel = ['calculator', 'boq', 'geo', 'vision', 'ai', 'realestate', 'government', 'documents', 'wash', 'energy', 'intelligence', 'carbon', 'schedule', 'emerging', 'optimizer', 'seismic'].includes(activePanel);
@@ -95,23 +100,35 @@ export function AppShell({ onBackToDashboard }: AppShellProps) {
       <div className="flex flex-1 min-h-0 overflow-hidden">
         <Sidebar activePanel={activePanel} onPanelChange={setActivePanel} />
         <div className="flex flex-1 min-h-0 overflow-hidden">
-          <div className="panel-tree">
-            <ModelTree />
-            <LayerPanel />
+          <div className="panel-tree flex flex-col min-h-0">
+            {activeTab === 'draw' ? (
+              <FeatureTreePanel />
+            ) : (
+              <>
+                <ModelTree />
+                <LayerPanel />
+              </>
+            )}
           </div>
           <div className="flex-1 relative min-h-0 min-w-0 overflow-hidden">
             <ErrorBoundary>
-              <BIMViewer
-                modelPath={modelPath}
-                onElementSelected={handleElementSelected}
-                onModelLoaded={handleModelLoaded}
-                activeStorey={activeStorey}
-                hiddenLayers={hiddenTypes}
-              />
-              <CadToolsPanel />
+              {mainView === 'bim' && (
+                <>
+                  <BIMViewer
+                    modelPath={modelPath}
+                    onElementSelected={handleElementSelected}
+                    onModelLoaded={handleModelLoaded}
+                    activeStorey={activeStorey}
+                    hiddenLayers={hiddenTypes}
+                  />
+                  <CadToolsPanel />
+                </>
+              )}
+              {mainView === 'gis' && <GISViewer />}
+              {mainView === 'sld' && <SLDViewer />}
             </ErrorBoundary>
           </div>
-          {showInspector && (
+          {showInspector && mainView === 'bim' && (
             <div className="panel-inspector">
               <ViewerSidePanel element={selectedElement} />
             </div>

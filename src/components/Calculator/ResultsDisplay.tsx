@@ -2,7 +2,11 @@ import { useMemo, useState } from 'react';
 import type { CalculationResult, CalculationStatus } from '../../types/calculations';
 import { useEngineerReviewStore, type StepReviewRecord } from '../../store/engineerReviewStore';
 import { DepthTable, extractDepthTable } from './DepthTable';
-import { PressureDiagram } from './pressure/PressureDiagram';
+import { PressureDiagram } from '../Diagrams/PressureDiagram';
+import { StructuralDiagram } from '../Diagrams/StructuralDiagram';
+import { FoundationDiagram } from '../Diagrams/FoundationDiagram';
+import { SoilProfileDiagram } from '../Diagrams/SoilProfileDiagram';
+import { useCalculationStore } from '../../store/calculationStore';
 import type { PressureDiagramData } from '../../services/pressureAPI';
 
 interface ResultsDisplayProps {
@@ -48,12 +52,42 @@ function parsePlatformNumber(result: string): string {
   return m ? m[0].replace(/,/g, '') : '';
 }
 
+function resolvePressureDiagramData(
+  result: CalculationResult,
+  explicit?: PressureDiagramData | null
+): PressureDiagramData | null {
+  if (explicit) return explicit;
+  const root = (result as CalculationResult & { pressure_diagram_data?: PressureDiagramData })
+    .pressure_diagram_data;
+  if (root) return root;
+
+  const nested = [
+    result.pressure_wind,
+    result.pressure_lateral,
+    result.pressure_bridge,
+    result.pressure_tank,
+    result.pressure_pipe,
+    result.pressure_boussinesq,
+    result.pressure_consolidation,
+    result.pressure_pavement,
+    result.pressure_bearing,
+  ];
+  for (const block of nested) {
+    if (!block) continue;
+    const d = (block as CalculationResult & { pressure_diagram_data?: PressureDiagramData })
+      .pressure_diagram_data;
+    if (d) return d;
+  }
+  return null;
+}
+
 export function ResultsDisplay({
   result,
   pressureDiagram,
   reviewKeyPrefix = 'calc',
   hideDiagram = false,
 }: ResultsDisplayProps) {
+  const { currentInputs } = useCalculationStore();
   const {
     engineerName,
     registrationNumber,
@@ -67,9 +101,7 @@ export function ResultsDisplay({
   const [overrideStep, setOverrideStep] = useState<number | null>(null);
   const [flagStep, setFlagStep] = useState<number | null>(null);
 
-  const diagram =
-    pressureDiagram ??
-    (result as CalculationResult & { pressure_diagram_data?: PressureDiagramData }).pressure_diagram_data;
+  const resolvedPressureDiagram = resolvePressureDiagramData(result, pressureDiagram);
 
   const depthRows = extractDepthTable(result.summary ?? {});
 
@@ -221,10 +253,25 @@ export function ResultsDisplay({
         )}
       </div>
 
-      {diagram && !hideDiagram && (
+      {/* Structural Beam Diagrams */}
+      {reviewKeyPrefix === 'beam' && (
+        <StructuralDiagram inputs={currentInputs as any} summary={result.summary} />
+      )}
+
+      {/* Foundation Diagrams */}
+      {reviewKeyPrefix === 'foundation' && (
+        <FoundationDiagram inputs={currentInputs as any} summary={result.summary} />
+      )}
+
+      {/* Soil Profile Diagrams */}
+      {reviewKeyPrefix === 'geo' && currentInputs.geo_submodule === 'site_classification' && (
+        <SoilProfileDiagram inputs={currentInputs as any} summary={result.summary as any} />
+      )}
+
+      {/* Pressure Diagrams (Wind, Retention Wall, Bridge Pier, etc.) */}
+      {resolvedPressureDiagram && !hideDiagram && (
         <div>
-          <h3 className="text-xs font-semibold text-gray-400 uppercase mb-2">Pressure diagram</h3>
-          <PressureDiagram data={diagram} />
+          <PressureDiagram data={resolvedPressureDiagram} />
         </div>
       )}
 

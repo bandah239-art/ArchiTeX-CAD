@@ -2,7 +2,6 @@ import { useToolbarStore } from '../components/BIMViewer/toolRegistry';
 import { useDrawStore } from '../store/drawStore';
 import { useUndoStore } from '../store/undoStore';
 import { useViewerStore } from '../store/viewerStore';
-import { useWorkspaceStore } from '../store/workspaceStore';
 import { usePlatformToolsStore } from '../store/platformToolsStore';
 import { useCadSessionStore } from '../store/cadSessionStore';
 import { useSketchBlockStore } from '../store/sketchBlockStore';
@@ -11,6 +10,40 @@ import { entityIdFromExpressId } from './ifcMeshXeokit';
 import { revolveProfileToColumn } from './sketchCadOps';
 import type { DrawTool } from '../types/tools';
 import type { CadCommand } from '../store/cadSessionStore';
+import { occAPI } from './occAPI';
+import { useFeatureTreeStore } from '../store/featureTreeStore';
+import type { GeometricEntity } from '../cad/constraints/ConstraintTypes';
+
+export function getGeometricEntities(elements?: any[]): GeometricEntity[] {
+  const drawElements = elements || useDrawStore.getState().elements;
+  return drawElements.map(el => {
+    const type = el.kind === 'circle' ? 'circle' : el.kind === 'arc' ? 'arc' : el.kind === 'point' ? 'point' : 'line';
+    let params: number[] = [];
+    if (el.kind === 'circle' && el.points.length >= 2) {
+      const r = Math.hypot(el.points[1].x - el.points[0].x, el.points[1].z - el.points[0].z);
+      params = [el.points[0].x, el.points[0].z, r];
+    } else if (el.kind === 'arc' && el.points.length >= 3) {
+      const r = Math.hypot(el.points[1].x - el.points[0].x, el.points[1].z - el.points[0].z);
+      const a1 = Math.atan2(el.points[1].z - el.points[0].z, el.points[1].x - el.points[0].x);
+      const a2 = Math.atan2(el.points[2].z - el.points[0].z, el.points[2].x - el.points[0].x);
+      params = [el.points[0].x, el.points[0].z, r, a1, a2];
+    } else if (el.kind === 'point' && el.points.length >= 1) {
+      params = [el.points[0].x, el.points[0].z];
+    } else {
+      const p1 = el.points[0];
+      const p2 = el.points[el.points.length - 1];
+      params = [p1.x, p1.z, p2.x, p2.z];
+    }
+    return {
+      id: el.id,
+      type,
+      params,
+      dof: type === 'point' ? 2 : type === 'line' ? 4 : type === 'circle' ? 3 : 5,
+      fixed: false,
+      name: el.label || el.id
+    };
+  });
+}
 
 const CAD_DRAW_MAP: Record<string, DrawTool> = {
   'cad.draw.circle': 'circle',
@@ -39,7 +72,6 @@ export function runCadToolAction(actionId: string): boolean {
   const vc = viewer.viewerControls;
   const draw = useDrawStore.getState();
   const undo = useUndoStore.getState();
-  const workspace = useWorkspaceStore.getState();
   const finish = (label: string, summary: string) => {
     usePlatformToolsStore.setState({
       lastResult: {
@@ -165,9 +197,21 @@ export function runCadToolAction(actionId: string): boolean {
     case 'cad.annotate.table':
       finish(actionId, 'Annotation tool ready — place via canvas or inspector.');
       return true;
-    case 'cad.util.properties':
-      workspace.toggleInspector();
+    case 'cad.util.properties': {
+      const entities = getGeometricEntities();
+      if (entities.length === 0) {
+        finish('Properties', 'Select or draw a sketch profile first.');
+        return true;
+      }
+      occAPI.getProperties(entities)
+        .then(res => {
+          finish('Properties', `Area: ${res.area.toLocaleString()} mm², Centroid: (${res.centroid.x.toFixed(1)}, ${res.centroid.y.toFixed(1)}), Perimeter: ${res.perimeter.toFixed(1)} mm`);
+        })
+        .catch(err => {
+          finish('Properties', `Failed: ${err.message}`);
+        });
       return true;
+    }
     case 'cad.util.purge': {
       const before = draw.getSnapshot();
       const removed = useDrawStore.getState().purgeEmptySketches();
@@ -197,12 +241,74 @@ export function runCadToolAction(actionId: string): boolean {
     case 'cad.modify.extend':
       startCadSession('extend');
       return true;
-    case 'cad.modify.offset':
-      startCadSession('offset');
+    case 'cad.modify.offset': {
+      const entities = getGeometricEntities();
+      if (entities.length === 0) {
+        finish('Offset', 'Select or draw a sketch profile first.');
+        return true;
+      }
+      const distStr = prompt("Enter offset distance (mm):", "200");
+      if (distStr) {
+        const distance = parseFloat(distStr);
+        if (!isNaN(distance)) {
+          occAPI.offsetProfile(entities, distance)
+            .then(res => {
+              if (res.status === 'ok') {
+                const id = `offset_${Date.now()}`;
+                useFeatureTreeStore.getState().addFeature({
+                  id,
+                  type: 'sketch',
+                  name: `Offset_${distance}mm`,
+                  inputs: { entities, height: 0 },
+                  dependencies: [],
+                  output: res.shape,
+                  status: 'built',
+                  error: null
+                });
+                finish('Offset', `Offset ${distance}mm applied.`);
+              }
+            })
+            .catch(err => {
+              finish('Offset', `Offset failed: ${err.message}`);
+            });
+        }
+      }
       return true;
-    case 'cad.modify.fillet':
-      startCadSession('fillet');
+    }
+    case 'cad.modify.fillet': {
+      const entities = getGeometricEntities();
+      if (entities.length === 0) {
+        finish('Fillet', 'Select or draw a sketch profile first.');
+        return true;
+      }
+      const radStr = prompt("Enter fillet radius (mm):", "50");
+      if (radStr) {
+        const radius = parseFloat(radStr);
+        if (!isNaN(radius)) {
+          occAPI.addFillet(entities, radius)
+            .then(res => {
+              if (res.status === 'ok') {
+                const id = `fillet_${Date.now()}`;
+                useFeatureTreeStore.getState().addFeature({
+                  id,
+                  type: 'fillet',
+                  name: `Fillet_${radius}mm`,
+                  inputs: { entities, radius },
+                  dependencies: [],
+                  output: res.shape,
+                  status: 'built',
+                  error: null
+                });
+                finish('Fillet', `Fillet R${radius}mm applied.`);
+              }
+            })
+            .catch(err => {
+              finish('Fillet', `Fillet failed: ${err.message}`);
+            });
+        }
+      }
       return true;
+    }
     case 'cad.modify.chamfer':
       startCadSession('chamfer');
       return true;
@@ -252,20 +358,48 @@ export function runCadToolAction(actionId: string): boolean {
       finish('Constraint bar', `${useSketchConstraintStore.getState().constraints.length} constraint(s).`);
       return true;
     case 'cad.solid.presspull': {
-      const id = draw.selectedId;
-      if (!id) {
-        finish('Press/Pull', 'Select a closed profile, then run again.');
+      const entities = getGeometricEntities();
+      if (entities.length === 0) {
+        finish('Extrude', 'Select or draw a sketch profile first.');
         return true;
       }
-      const before = draw.getSnapshot();
-      const el = useDrawStore.getState().extrudeElement(id, draw.modifiers.extrudeHeight);
-      if (el) {
-        undo.pushDrawAction('Press/Pull', before, useDrawStore.getState().getSnapshot());
-        const s = useDrawStore.getState();
-        vc?.syncSketches(s.elements, s.activePoints, s.floorElevation);
-        finish('Press/Pull', `Extruded to ${draw.modifiers.extrudeHeight} m.`);
-      } else {
-        finish('Press/Pull', 'Select polygon, rectangle, or slab profile.');
+      const hStr = prompt("Enter extrusion height (mm):", "3000");
+      if (hStr) {
+        const height = parseFloat(hStr);
+        if (!isNaN(height)) {
+          occAPI.extrude(entities, height)
+            .then(res => {
+              if (res.status === 'ok') {
+                const sketchId = `sketch_${Date.now()}`;
+                useFeatureTreeStore.getState().addFeature({
+                  id: sketchId,
+                  type: 'sketch',
+                  name: 'Sketch_Base',
+                  inputs: { entities },
+                  dependencies: [],
+                  output: null,
+                  status: 'built',
+                  error: null
+                });
+                
+                const id = `extrude_${Date.now()}`;
+                useFeatureTreeStore.getState().addFeature({
+                  id,
+                  type: 'extrude',
+                  name: `Extrude_${height}mm`,
+                  inputs: { sketch_id: sketchId, height },
+                  dependencies: [sketchId],
+                  output: res.shape,
+                  status: 'built',
+                  error: null
+                });
+                finish('Extrude', `Extruded to ${height}mm.`);
+              }
+            })
+            .catch(err => {
+              finish('Extrude', `Extrusion failed: ${err.message}`);
+            });
+        }
       }
       return true;
     }
@@ -297,14 +431,39 @@ export function runCadToolAction(actionId: string): boolean {
       startCadSession('loft');
       return true;
     case 'cad.solid.union':
-      void usePlatformToolsStore.getState().runPlatformAction('bim.booleanUnion');
-      return true;
     case 'cad.solid.subtract':
-      void usePlatformToolsStore.getState().runPlatformAction('bim.booleanDiff');
+    case 'cad.solid.intersect': {
+      const entities = getGeometricEntities();
+      if (entities.length < 2) {
+        finish('Boolean', 'Requires at least two sketch elements.');
+        return true;
+      }
+      const op = actionId === 'cad.solid.union' ? 'union' : actionId === 'cad.solid.subtract' ? 'subtract' : 'intersect';
+      const entA = [entities[0]];
+      const entB = [entities[1]];
+      
+      occAPI.boolean(entA, entB, op)
+        .then(res => {
+          if (res.status === 'ok') {
+            const id = `boolean_${Date.now()}`;
+            useFeatureTreeStore.getState().addFeature({
+              id,
+              type: op === 'union' ? 'boolean_union' : 'boolean_subtract',
+              name: `${op.toUpperCase()}_1`,
+              inputs: { entities, operation: op },
+              dependencies: [],
+              output: res.shape,
+              status: 'built',
+              error: null
+            });
+            finish(op.toUpperCase(), `Boolean ${op} completed successfully.`);
+          }
+        })
+        .catch(err => {
+          finish(op.toUpperCase(), `Boolean failed: ${err.message}`);
+        });
       return true;
-    case 'cad.solid.intersect':
-      void usePlatformToolsStore.getState().runPlatformAction('bim.intersectionVolume');
-      return true;
+    }
     case 'cad.solid.slice':
       void usePlatformToolsStore.getState().runPlatformAction('section.z');
       return true;

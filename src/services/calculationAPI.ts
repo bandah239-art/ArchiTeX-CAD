@@ -87,6 +87,9 @@ export const calculationAPI = {
   calculateTimber: (inputs: TimberInputs): Promise<CalculationResult> =>
     post('/calculate/timber', inputs),
 
+  calculateFea: (inputs: Record<string, unknown>): Promise<CalculationResult> =>
+    post('/calculate/fea', inputs),
+
   calculateLoads: (inputs: LoadInputs): Promise<CalculationResult> =>
     post('/calculate/loads', inputs),
 
@@ -171,6 +174,48 @@ export const calculationAPI = {
 
   calculateWashDewats: (inputs: Record<string, unknown>): Promise<CalculationResult> =>
     post('/wash/dewats', inputs),
+
+  calculateEnergyGridFault: (inputs: Record<string, unknown>): Promise<CalculationResult> =>
+    post('/energy/grid-fault', inputs),
+
+  calculateEnergyHydro: (inputs: Record<string, unknown>): Promise<CalculationResult> =>
+    post('/energy/hydro', inputs),
+
+  calculateEnergyBiogas: (inputs: Record<string, unknown>): Promise<CalculationResult> =>
+    post('/energy/biogas', inputs),
+
+  calculateEnergyWindWake: (inputs: Record<string, unknown>): Promise<CalculationResult> =>
+    post('/energy/wind-wake', inputs),
+
+  calculateWashEpanet: (inputs: Record<string, unknown>): Promise<CalculationResult> =>
+    post('/wash/epanet', inputs),
+
+  calculateWashWtp: (inputs: Record<string, unknown>): Promise<CalculationResult> =>
+    post('/wash/wtp', inputs),
+
+  calculateWashStormwater: (inputs: Record<string, unknown>): Promise<CalculationResult> =>
+    post('/wash/stormwater', inputs),
+
+  calculateWashLandfill: (inputs: Record<string, unknown>): Promise<CalculationResult> =>
+    post('/wash/landfill', inputs),
+
+  calculateWashIrrigation: (inputs: Record<string, unknown>): Promise<CalculationResult> =>
+    post('/wash/irrigation', inputs),
+
+  calculateGeoPiles: (inputs: Record<string, unknown>): Promise<CalculationResult> =>
+    post('/geo/piles', inputs),
+
+  calculateGeoSlope: (inputs: Record<string, unknown>): Promise<CalculationResult> =>
+    post('/geo/slope', inputs),
+
+  calculateGeoConsolidation: (inputs: Record<string, unknown>): Promise<CalculationResult> =>
+    post('/geo/consolidation', inputs),
+
+  calculateGeoGroundImprovement: (inputs: Record<string, unknown>): Promise<CalculationResult> =>
+    post('/geo/ground-improvement', inputs),
+
+  calculateGeoTunneling: (inputs: Record<string, unknown>): Promise<CalculationResult> =>
+    post('/geo/tunneling', inputs),
 
   checkHealth: async (): Promise<boolean> => {
     try {

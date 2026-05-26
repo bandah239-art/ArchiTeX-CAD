@@ -2,6 +2,11 @@ import http from 'http';
 import { spawn } from 'child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import {
+  describePythonSource,
+  getUvicornLaunchConfig,
+  resolvePythonExecutable,
+} from './resolve-python.mjs';
 
 const PORT = Number(process.env.INFRA_PYTHON_PORT || 8000);
 const HOST = process.env.INFRA_PYTHON_HOST || '127.0.0.1';
@@ -27,18 +32,22 @@ function keepAlive() {
 }
 
 function startServer() {
-  const cmd = process.platform === 'win32' ? 'py' : 'python3';
-  const args =
-    process.platform === 'win32'
-      ? ['-3', '-m', 'uvicorn', 'main:app', '--reload', '--host', HOST, '--port', String(PORT)]
-      : ['-m', 'uvicorn', 'main:app', '--reload', '--host', HOST, '--port', String(PORT)];
+  const exe = resolvePythonExecutable();
+  const { cmd, args, shell } = getUvicornLaunchConfig({
+    host: HOST,
+    port: PORT,
+    reload: true,
+  });
 
-  console.log(`Starting Python server at http://${HOST}:${PORT} ...`);
+  console.log(
+    `Starting Python server at http://${HOST}:${PORT} (${describePythonSource(exe)}) ...`,
+  );
+  if (exe) console.log(`  ${exe}`);
 
   const proc = spawn(cmd, args, {
     cwd: path.join(projectRoot, 'python'),
     stdio: 'inherit',
-    shell: process.platform === 'win32',
+    shell,
   });
 
   proc.on('error', (err) => {

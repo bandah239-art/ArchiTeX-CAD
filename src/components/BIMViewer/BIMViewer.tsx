@@ -18,6 +18,10 @@ import {
 } from '@xeokit/xeokit-sdk';
 import type { BIMViewerProps } from './ViewerTypes';
 import type { IFCElement } from '../../types/ifc';
+import { DOFIndicator } from '../../cad/ui/DOFIndicator';
+import { ConflictAlert } from '../../cad/ui/ConflictAlert';
+import { ConstraintPanel } from '../../cad/ui/ConstraintPanel';
+import { useSketchConstraintStore } from '../../store/sketchConstraintStore';
 import { useViewerStore } from '../../store/viewerStore';
 import { useDrawStore } from '../../store/drawStore';
 import { useScheduleStore } from '../../store/scheduleStore';
@@ -88,6 +92,7 @@ export function BIMViewer({
   const geoOverlayVisibility = usePlatformToolsStore((s) => s.geoOverlayVisibility);
   const floodResult = useGeoStore((s) => s.floodResult);
   const areaPoints = useMeasureStore((s) => s.areaPoints);
+  const barVisible = useSketchConstraintStore((s) => s.barVisible);
   const elementMapRef = useRef<Map<string, ParsedIfcElement>>(new Map());
 
   useEffect(() => {
@@ -485,6 +490,7 @@ export function BIMViewer({
             elementByEntityId: result.elementByEntityId,
             stats: result.stats,
             modelId: result.modelId,
+            modelCenterOffset: result.modelCenterOffset,
           });
 
           const bmin = result.stats.bounds.min;
@@ -590,6 +596,13 @@ export function BIMViewer({
       <CollaborationPresence />
       <MeasureResultBanner />
       <DrawToolBanner />
+      <DOFIndicator />
+      <ConflictAlert />
+      {barVisible && (
+        <div className="absolute top-16 left-4 w-80 h-[75%] z-20 pointer-events-auto">
+          <ConstraintPanel />
+        </div>
+      )}
 
       <canvas
         ref={canvasRef}

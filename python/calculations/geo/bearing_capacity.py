@@ -47,26 +47,19 @@ def calculate_bearing_capacity(inputs: dict[str, Any]) -> dict[str, Any]:
         fqs = 1 + (b/l) * math.tan(phi_rad)
         fgs = 1 - 0.4 * (b/l)
 
-    # Depth Factors (Meyerhof)
-    if df / b <= 1:
-        if phi == 0:
-            fcd = 1 + 0.4 * (df/b)
-            fqd = 1.0
-            fgd = 1.0
-        else:
-            fcd = fqd - (1 - fqd) / (nc * math.tan(phi_rad))
-            fqd = 1 + 2 * math.tan(phi_rad) * (1 - math.sin(phi_rad))**2 * (df/b)
-            fgd = 1.0
+    # Depth Factors (Hansen/Meyerhof)
+    # For df/b <= 1: depth term = df/b (linear).
+    # For df/b > 1: depth term = (4/π)*arctan(df/b), which equals df/b=1 at the boundary (continuous).
+    # The (4/π) normalisation ensures continuity: at df/b=1, (4/π)*arctan(1) = (4/π)*(π/4) = 1.
+    _depth_term = df / b if df / b <= 1 else (4.0 / math.pi) * math.atan(df / b)
+    if phi == 0:
+        fcd = 1 + 0.4 * _depth_term
+        fqd = 1.0
+        fgd = 1.0
     else:
-        # For deep foundations, arctan is used but we'll approximate 
-        if phi == 0:
-            fcd = 1 + 0.4 * math.atan(df/b)
-            fqd = 1.0
-            fgd = 1.0
-        else:
-            fqd = 1 + 2 * math.tan(phi_rad) * (1 - math.sin(phi_rad))**2 * math.atan(df/b)
-            fcd = fqd - (1 - fqd) / (nc * math.tan(phi_rad))
-            fgd = 1.0
+        fqd = 1 + 2 * math.tan(phi_rad) * (1 - math.sin(phi_rad))**2 * _depth_term
+        fcd = fqd - (1 - fqd) / (nc * math.tan(phi_rad))
+        fgd = 1.0
 
     # Ultimate Bearing Capacity
     qu = (c * nc * fcs * fcd) + (q * nq * fqs * fqd) + (0.5 * gamma * b * ngamma * fgs * fgd)

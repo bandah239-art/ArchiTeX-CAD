@@ -1,6 +1,7 @@
 fastapi==0.104.0
 uvicorn==0.24.0
 python-multipart>=0.0.6
+pydantic>=2.0.0
 openpyxl>=3.1.0
 ifcopenshell>=0.8.0
 shapely>=2.0.0
@@ -8,8 +9,10 @@ numpy>=1.24.0
 scipy>=1.11.0
 optuna>=3.5.0
 openseespy>=3.2.0; platform_system != "Windows"
-Anthropic
+anthropic>=0.25.0
+pandapower>=2.12.0
 Pillow
+reportlab>=4.0.0
 
 # Optional extras (not required for npm run electron:dev):
 #   pip install -r python/requirements-wntr.txt   # EPANET pipe network (needs MSVC on Windows)

@@ -29,6 +29,9 @@ export interface CalculationResult {
   errors: string[];
   timestamp: string;
   review_summary?: Record<string, number>;
+  nodes?: any[];
+  elements?: any[];
+  displacements?: any[];
   pressure_bearing?: CalculationResult;
   pressure_pavement?: CalculationResult;
   pressure_lateral?: CalculationResult;
