@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { API_BASE } from '../../services/apiConfig';
 
 interface SliceRect {
   x_left: number;
@@ -65,7 +66,7 @@ export function SlopeSlipCircle({
     abortRef.current = ctrl;
     setLoading(true);
 
-    fetch('http://localhost:8000/geo/simulation/slope-slip-circle', {
+    fetch(`${API_BASE}/geo/simulation/slope-slip-circle`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

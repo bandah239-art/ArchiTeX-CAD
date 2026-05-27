@@ -1,4 +1,6 @@
 import type { CalculatorFormProps } from '../CalculatorTypes';
+import { NumField } from '../FormElements';
+import { StructuralMorePanel } from '../../Structural/StructuralMorePanel';
 
 const EXPOSURE = [
   { value: 'B', label: 'B — Suburban' },
@@ -15,18 +17,11 @@ export function WindCalculator({ inputs, onInputChange }: CalculatorFormProps) {
       <NumField label="Building length L (m)" value={inputs.building_length ?? 30} onChange={(v) => onInputChange('building_length', v)} />
       <SelectField label="Exposure category" value={(inputs.exposure_category as string) ?? 'B'} options={EXPOSURE} onChange={(v) => onInputChange('exposure_category', v)} />
       <p className="text-[10px] text-gray-500">ASCE 7-22 / SANS 10160-3 MWFRS wind pressures and base shear.</p>
+      <StructuralMorePanel inputs={inputs} />
     </div>
   );
 }
 
-function NumField({ label, value, onChange }: { label: string; value: unknown; onChange: (v: number) => void }) {
-  return (
-    <div>
-      <label className="block text-xs text-gray-400 mb-1">{label}</label>
-      <input type="number" value={value as number} onChange={(e) => onChange(parseFloat(e.target.value) || 0)} className="w-full px-2 py-1.5 text-sm bg-infra-darker border border-infra-accent/40 rounded text-white focus:outline-none focus:border-infra-highlight/60" />
-    </div>
-  );
-}
 
 function SelectField({ label, value, options, onChange }: { label: string; value: string; options: { value: string; label: string }[]; onChange: (v: string) => void }) {
   return (

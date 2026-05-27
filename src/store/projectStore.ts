@@ -22,7 +22,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     set({ isLoading: true });
     const project: Project = {
       id: crypto.randomUUID(),
-      name: path.split(/[/\\]/).pop()?.replace('.ifc', '') || 'Untitled',
+      name: path.split(/[/\\]/).pop()?.replace(/\.[^/.]+$/, '') || 'Untitled',
       path,
       ifcPath: path,
       createdAt: new Date().toISOString(),
@@ -72,7 +72,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const path = String(meta.path);
     const project: Project = {
       id: crypto.randomUUID(),
-      name: String(meta.name ?? path.split(/[/\\]/).pop()?.replace('.ifc', '') ?? 'Untitled'),
+      name: String(meta.name ?? path.split(/[/\\]/).pop()?.replace(/\.[^/.]+$/, '') ?? 'Untitled'),
       path,
       ifcPath: String(meta.ifcPath ?? path),
       createdAt: String(meta.openedAt ?? new Date().toISOString()),

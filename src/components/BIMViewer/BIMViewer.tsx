@@ -34,7 +34,16 @@ import {
   syncDrawToEngine,
 } from '../../services/drawInteraction';
 import { useIfcModelStore } from '../../store/ifcModelStore';
-import { formatIfcLoadError, loadIfcIntoXeokit, ifcElementFromEntity } from '../../services/ifcMeshXeokit';
+import {
+  formatIfcLoadError,
+  loadIfcIntoXeokit,
+  loadOtherModelIntoXeokit,
+  loadCadServerIntoXeokit,
+  ifcElementFromEntity,
+} from '../../services/ifcMeshXeokit';
+import { isBimCad3DExtension, isCadDrawingExtension, resolveModelFileMeta } from '../../services/fileService';
+import { bimGeometryAPI } from '../../services/bimGeometryAPI';
+import { CadEngineStatusIndicator } from './CadEngineStatus';
 import { CollaborationPresence } from './CollaborationPresence';
 import { collaborationClient } from '../../services/collaborationWS';
 import { createViewerControls, buildEntityTypeMap, type ViewerPluginRefs } from '../../services/viewerControls';
@@ -75,6 +84,7 @@ export function BIMViewer({
   const [viewerReady, setViewerReady] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadProgress, setLoadProgress] = useState(0);
+  const [loadStage, setLoadStage] = useState('');
   const [error, setError] = useState<string | null>(null);
   const {
     viewMode,
@@ -419,10 +429,13 @@ export function BIMViewer({
 
     setLoading(true);
     setError(null);
+    setLoadStage('');
+    setLoadProgress(0);
 
     const loadModel = async () => {
       try {
         const start = performance.now();
+        const { ext: fileExt } = resolveModelFileMeta(modelPath);
 
         if (modelPath.endsWith('.xkt')) {
           const model = xktLoader.load({
@@ -451,7 +464,7 @@ export function BIMViewer({
             setError(msg);
             setLoading(false);
           });
-        } else if (modelPath.toLowerCase().endsWith('.ifc')) {
+        } else if (fileExt === 'ifc' || modelPath.toLowerCase().endsWith('.ifc')) {
           setLoadProgress(0);
           const buffer = await parseFromPath(modelPath);
           if (cancelled) return;
@@ -509,14 +522,184 @@ export function BIMViewer({
           onModelLoaded(result.stats);
           setLoading(false);
           setLoadProgress(100);
+          setLoadStage('');
+        } else if (isCadDrawingExtension(fileExt)) {
+          const isDwg = fileExt === 'dwg';
+          setLoadStage(
+            isDwg
+              ? 'Converting DWG (ODA) and reading geometry…'
+              : 'Reading DXF geometry on server…',
+          );
+          setLoadProgress(8);
+          const parseTicker = window.setInterval(() => {
+            setLoadProgress((p) => (p < 44 ? p + 1 : p));
+          }, 500);
+          const { fileName } = resolveModelFileMeta(modelPath);
+          let cadPayload;
+          let useFallback = false;
+          let cadParseError: string | null = null;
+          try {
+            if (modelPath.startsWith('blob:')) {
+              const blob = await fetch(modelPath).then((r) => r.blob());
+              const file = new File([blob], fileName || `drawing.${fileExt}`);
+              cadPayload = await bimGeometryAPI.parseCadUpload(file);
+            } else {
+              cadPayload = await bimGeometryAPI.parseCadPath(modelPath);
+            }
+            if (cadPayload.status !== 'complete') {
+              useFallback = true;
+              cadParseError = cadPayload.error ?? null;
+            }
+          } catch (e) {
+            console.warn('[BIMViewer] CAD server parse failed:', e);
+            useFallback = true;
+            cadParseError = e instanceof Error ? e.message : String(e);
+          } finally {
+            window.clearInterval(parseTicker);
+          }
+          if (cancelled) return;
+
+          if (useFallback && isDwg) {
+            setError(
+              cadParseError ||
+              'Cannot load DWG: ODA File Converter is required. ' +
+              'Install it free from opendesign.com/guestfiles/oda_file_converter and restart, ' +
+              'or export your drawing as DXF from AutoCAD.',
+            );
+            setLoading(false);
+            setLoadStage('');
+            return;
+          }
+
+          let result;
+          if (useFallback) {
+            setLoadStage(`Building procedural 3D view for CAD ${fileExt.toUpperCase()}…`);
+            result = await loadOtherModelIntoXeokit(viewer, modelPath, { ext: fileExt });
+          } else {
+            setLoadStage(`Building 3D view (${cadPayload!.element_count ?? cadPayload!.elements.length} layers)…`);
+            setLoadProgress(48);
+            result = await loadCadServerIntoXeokit(viewer, cadPayload!, {
+              onProgress: (pct) => {
+                if (!cancelled) setLoadProgress(48 + pct * 0.5);
+              },
+            });
+          }
+          if (cancelled) return;
+          setLoadProgress(85);
+
+          elementMapRef.current = result.elementByEntityId;
+          transformGizmoRef.current?.setElementMap(result.elementByEntityId);
+          const typeMap = buildEntityTypeMap(result.elementByEntityId);
+          const controls = createViewerControls(
+            viewer,
+            typeMap,
+            pluginsRef.current ?? undefined,
+            drawEngineRef.current ?? undefined,
+            transformGizmoRef.current ?? undefined,
+            geoOverlayRef.current ?? undefined,
+            areaMeasureRef.current ?? undefined,
+            sketchWorkspaceRef.current ?? undefined,
+          );
+          setViewerControls(controls);
+          useViewerStore.getState().setActiveTool('select');
+          controls.exitSketchSession();
+
+          const catalog = buildAssetCatalog(result.elements, result.elementByEntityId);
+          setLayerTypes(catalog.map((c) => c.type));
+
+          setParseResult({
+            path: modelPath,
+            elements: result.elements,
+            elementByEntityId: result.elementByEntityId,
+            stats: result.stats,
+            modelId: result.modelId,
+            modelCenterOffset: result.modelCenterOffset,
+          });
+
+          const bmin = result.stats.bounds.min;
+          const bmax = result.stats.bounds.max;
+          const floorY = bmin[1];
+          const cx = (bmin[0] + bmax[0]) / 2;
+          const cz = (bmin[2] + bmax[2]) / 2;
+          const span = Math.max(bmax[0] - bmin[0], bmax[2] - bmin[2], 20);
+          useDrawStore.getState().setFloorElevation(floorY);
+          useDrawStore.getState().setSketchBounds(cx, cz, span);
+
+          controls.fitToView();
+
+          if (useViewerStore.getState().gridVisible) {
+            controls.setGridVisible(true);
+          }
+
+          onModelLoaded(result.stats);
+          setLoading(false);
+          setLoadProgress(100);
+          setLoadStage('');
+        } else if (isBimCad3DExtension(fileExt)) {
+          setLoadProgress(0);
+          await new Promise((r) => setTimeout(r, 400));
+          if (cancelled) return;
+          setLoadProgress(40);
+
+          const result = await loadOtherModelIntoXeokit(viewer, modelPath, { ext: fileExt });
+          if (cancelled) return;
+          setLoadProgress(80);
+
+          elementMapRef.current = result.elementByEntityId;
+          transformGizmoRef.current?.setElementMap(result.elementByEntityId);
+          const typeMap = buildEntityTypeMap(result.elementByEntityId);
+          const controls = createViewerControls(
+            viewer,
+            typeMap,
+            pluginsRef.current ?? undefined,
+            drawEngineRef.current ?? undefined,
+            transformGizmoRef.current ?? undefined,
+            geoOverlayRef.current ?? undefined,
+            areaMeasureRef.current ?? undefined,
+            sketchWorkspaceRef.current ?? undefined,
+          );
+          setViewerControls(controls);
+          useViewerStore.getState().setActiveTool('select');
+          controls.exitSketchSession();
+          controls.fitToView();
+
+          const catalog = buildAssetCatalog(result.elements, result.elementByEntityId);
+          setLayerTypes(catalog.map((c) => c.type));
+
+          setParseResult({
+            path: modelPath,
+            elements: result.elements,
+            elementByEntityId: result.elementByEntityId,
+            stats: result.stats,
+            modelId: result.modelId,
+            modelCenterOffset: result.modelCenterOffset,
+          });
+
+          const bmin = result.stats.bounds.min;
+          const bmax = result.stats.bounds.max;
+          const floorY = bmin[1];
+          const cx = (bmin[0] + bmax[0]) / 2;
+          const cz = (bmin[2] + bmax[2]) / 2;
+          const span = Math.max(bmax[0] - bmin[0], bmax[2] - bmin[2], 20);
+          useDrawStore.getState().setFloorElevation(floorY);
+          useDrawStore.getState().setSketchBounds(cx, cz, span);
+
+          if (useViewerStore.getState().gridVisible) {
+            controls.setGridVisible(true);
+          }
+
+          onModelLoaded(result.stats);
+          setLoading(false);
+          setLoadProgress(100);
         } else {
-          setError('Unsupported model format. Use .ifc or .xkt');
+          setError('Unsupported model format.');
           setLoading(false);
         }
       } catch (err) {
         if (cancelled) return;
         setError(formatIfcLoadError(err));
         setLoading(false);
+        setLoadStage('');
       }
     };
 
@@ -621,8 +804,9 @@ export function BIMViewer({
 
       {loading && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-20">
-          <div className="text-white text-sm text-center">
+          <div className="text-white text-sm text-center max-w-md px-4">
             <div>Loading model…</div>
+            {loadStage && <div className="mt-2 text-xs text-gray-200">{loadStage}</div>}
             {loadProgress > 0 && loadProgress < 100 && (
               <div className="mt-2 text-xs text-gray-300">{Math.round(loadProgress)}% geometry</div>
             )}
@@ -631,12 +815,13 @@ export function BIMViewer({
       )}
 
       {!modelPath && !loading && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center z-10 pointer-events-none">
+        <div className="absolute inset-0 flex flex-col items-center justify-center z-10 pointer-events-none px-6">
           <div className="text-6xl mb-4 opacity-30">🏗️</div>
-          <p className="text-gray-400 text-sm">Open an IFC file to view the 3D model</p>
-          <p className="text-gray-600 text-xs mt-2">
-            Use File → Open IFC or the Open IFC button above
+          <p className="text-gray-400 text-sm">Open IFC, DWG, or DXF to view the model</p>
+          <p className="text-gray-600 text-xs mt-2 text-center">
+            Use File → Open or the Open button above
           </p>
+          <CadEngineStatusIndicator className="mt-4 pointer-events-auto" />
         </div>
       )}
 

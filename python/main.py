@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 from typing import Any
 
@@ -56,6 +56,7 @@ from geo.seismic_intelligence import analyse_seismic
 from geo.site_report import generate_site_report
 from bim.ifc_to_boq import extract_from_bim
 from bim.ifc_geometry import parse_ifc_file, parse_ifc_bytes, HAS_IFCOPENSHELL
+from bim.cad_parser import parse_cad_file, parse_cad_bytes, _cad_status as cad_parser_status
 from bim.ifc_export import export_ifc_from_elements
 from bim.geometry_kernel import boolean_operation, mesh_intersection_volume, region_boolean
 from bim.geometry_extensions import (
@@ -70,7 +71,7 @@ from bim.autocad_bridge import autocad_bridge_status, export_dwg_geometry
 from bim.plan_detection import extract_plan_takeoff
 from geo.geo_cache import cache_status, clear_cache
 from ai.design_generator import generate_design
-from ai.gemini_client import call_gemini
+from ai.gemini_client import call_gemini, call_gemini_chat, CHAT_SYSTEM
 from ai.proposal_generator import generate_proposal
 from ai.text_to_bim import generate_bim_from_text
 from ai.voice_agent import process_voice_command
@@ -138,6 +139,49 @@ from calculators.geo_simulations import (
     simulate_slope_slip_circle, SlopeSlipRequest,
     simulate_pile_load_transfer, PileLoadTransferRequest,
 )
+from calculators.wash_simulations import (
+    simulate_water_tower_day, WaterTowerDayRequest,
+    simulate_pipe_pressure_profile, PipePressureRequest,
+)
+from calculators.structural_simulations import (
+    simulate_beam_bmd_sfd, BeamSimRequest,
+    simulate_foundation_pressure, FoundationPressureRequest,
+)
+from calculators.energy_extended_simulations import (
+    simulate_voltage_drop_profile, VoltageDropRequest,
+    simulate_biogas_yield_curve, BiogasYieldRequest,
+    simulate_conductor_catenary, CatenaryRequest,
+    simulate_fault_current_decay, FaultDecayRequest,
+)
+from calculators.structural_more_simulations import (
+    simulate_slab_moments, SlabSimRequest,
+    simulate_pm_interaction, PMSimRequest,
+    simulate_wind_facade, WindFacadeRequest,
+)
+from calculators.road_simulations import (
+    simulate_pavement_stress, PavementStressRequest,
+    simulate_esal_growth, ESALGrowthRequest,
+    simulate_stormwater_hydrograph, HydrographRequest,
+)
+from calculators.geo_more_simulations import (
+    simulate_rmr_support, RMRSimRequest,
+    simulate_ground_improvement_layout, GroundImprovSimRequest,
+)
+from calculators.environment_simulations import (
+    simulate_landfill_gas, LandfillGasRequest,
+    simulate_soil_moisture, SoilMoistureRequest,
+    simulate_tank_hoop_stress, TankHoopRequest,
+)
+from calculations.fea.modal_analysis import run_modal_analysis
+from calculations.seismic.response_spectrum import run_seismic_spectrum, modal_seismic_response
+from calculations.structural.crack_width import run_crack_width
+from calculations.structural.winkler import run_winkler
+from calculations.wash.water_hammer import run_water_hammer
+from calculations.circuit.spice_solver import solve_dc, solve_ac_sweep, solve_transient
+from calculations.wind.panel_method import run_panel_cfd, building_shapes
+from calculations.power.short_circuit import run_short_circuit
+from calculations.power.protection import grading_chart
+from calculations.power.harmonics import harmonic_spectrum
 from calculations.wash.borehole import calculate_borehole
 from calculations.wash.sewer_design import calculate_sewer_design
 from calculations.wash.pipe_network import analyze_pipe_network
@@ -766,13 +810,15 @@ class WashDemandInput(BaseModel):
 
 
 class BoreholeInput(BaseModel):
-    aquifer_yield_lps: float = 2.5
-    static_level_m: float = 25
-    drawdown_m: float = 10
-    total_depth_m: float = 45
-    daily_demand_m3: float = 50
-    pumping_hours: float = 8
-    delivery_head_m: float = 15
+    pumping_rate_m3d: float = 100
+    transmissivity_m2d: float = 50
+    storage_coeff: float = 0.001
+    time_days: float = 1.0
+    radius_m: float = 0.1
+    aquifer_thickness_m: float = 20
+    static_lift_m: float = 30
+    friction_losses_m: float = 5
+    residual_pressure_m: float = 15
     country: str = "Zambia"
 
 
@@ -1548,6 +1594,36 @@ async def bim_parse_ifc_upload(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@app.get("/bim/cad/status")
+def bim_cad_status():
+    return cad_parser_status()
+
+
+@app.post("/bim/parse-cad-path")
+def bim_parse_cad_path(inputs: BimParsePathInput):
+    try:
+        result = parse_cad_file(inputs.path)
+        if result.get("status") == "error":
+            return JSONResponse(status_code=400, content={"detail": result.get("error", "CAD parse failed"), "cad": result.get("cad")})
+        return result
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except (ValueError, RuntimeError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/bim/parse-cad-upload")
+async def bim_parse_cad_upload(file: UploadFile = File(...)):
+    try:
+        data = await file.read()
+        result = parse_cad_bytes(data, file.filename or "upload.dxf")
+        if result.get("status") == "error":
+            return JSONResponse(status_code=400, content={"detail": result.get("error", "CAD parse failed"), "cad": result.get("cad")})
+        return result
+    except (ValueError, RuntimeError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @app.post("/bim/geometry/boolean")
 def bim_geometry_boolean(inputs: GeometryBooleanInput):
     try:
@@ -1587,6 +1663,39 @@ class VoiceRequest(BaseModel):
 def ai_voice_command(req: VoiceRequest):
     result = process_voice_command(req.command)
     return result
+
+
+class ChatRequest(BaseModel):
+    message: str
+    context: str = ""
+
+
+@app.post("/ai/chat")
+def ai_chat(req: ChatRequest):
+    """Dual-mode chat: structured engineering commands get action payloads,
+    conversational messages get a spoken reply."""
+    voice_result = process_voice_command(req.message)
+    intent = voice_result.get("intent", "chat")
+    spoken = voice_result.get("spoken_response", "")
+
+    if intent != "chat":
+        return {
+            "reply": spoken or "Done.",
+            "intent": intent,
+            "action": voice_result.get("payload", {}),
+        }
+
+    # For chat: the voice agent (Gemini JSON-mode or local NLU) already generated
+    # a spoken_response — use it directly. No second Gemini call needed.
+    if spoken:
+        return {"reply": spoken, "intent": "chat", "action": None}
+
+    # Fallback only if spoken_response is somehow empty
+    system = CHAT_SYSTEM
+    if req.context:
+        system = f"{CHAT_SYSTEM}\n\nProject context: {req.context}"
+    reply = call_gemini_chat(system, req.message)
+    return {"reply": reply or "Hello! How can I help you?", "intent": "chat", "action": None}
 
 
 @app.post("/ai/generate-design")
@@ -2269,6 +2378,454 @@ def geo_slope_sim_endpoint(req: SlopeSlipRequest):
 def geo_pile_sim_endpoint(req: PileLoadTransferRequest):
     try:
         return simulate_pile_load_transfer(req)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/wash/simulation/water-tower-day")
+def wash_tower_sim_endpoint(req: WaterTowerDayRequest):
+    try:
+        return simulate_water_tower_day(req)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/wash/simulation/pipe-pressure")
+def wash_pipe_sim_endpoint(req: PipePressureRequest):
+    try:
+        return simulate_pipe_pressure_profile(req)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/structural/simulation/beam-bmd-sfd")
+def struct_beam_sim_endpoint(req: BeamSimRequest):
+    try:
+        return simulate_beam_bmd_sfd(req)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/structural/simulation/foundation-pressure")
+def struct_foundation_sim_endpoint(req: FoundationPressureRequest):
+    try:
+        return simulate_foundation_pressure(req)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/structural/simulation/slab-moments")
+def struct_slab_sim_endpoint(req: SlabSimRequest):
+    try:
+        return simulate_slab_moments(req)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/structural/simulation/pm-interaction")
+def struct_pm_sim_endpoint(req: PMSimRequest):
+    try:
+        return simulate_pm_interaction(req)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/structural/simulation/wind-facade")
+def struct_wind_sim_endpoint(req: WindFacadeRequest):
+    try:
+        return simulate_wind_facade(req)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/road/simulation/pavement-stress")
+def road_pavement_sim_endpoint(req: PavementStressRequest):
+    try:
+        return simulate_pavement_stress(req)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/road/simulation/esal-growth")
+def road_esal_sim_endpoint(req: ESALGrowthRequest):
+    try:
+        return simulate_esal_growth(req)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/road/simulation/stormwater-hydrograph")
+def road_hydro_sim_endpoint(req: HydrographRequest):
+    try:
+        return simulate_stormwater_hydrograph(req)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/geo/simulation/rmr-support")
+def geo_rmr_sim_endpoint(req: RMRSimRequest):
+    try:
+        return simulate_rmr_support(req)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/geo/simulation/ground-improvement-layout")
+def geo_ground_sim_endpoint(req: GroundImprovSimRequest):
+    try:
+        return simulate_ground_improvement_layout(req)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/env/simulation/landfill-gas")
+def env_landfill_sim_endpoint(req: LandfillGasRequest):
+    try:
+        return simulate_landfill_gas(req)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/env/simulation/soil-moisture")
+def env_soil_sim_endpoint(req: SoilMoistureRequest):
+    try:
+        return simulate_soil_moisture(req)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/env/simulation/tank-hoop-stress")
+def env_tank_sim_endpoint(req: TankHoopRequest):
+    try:
+        return simulate_tank_hoop_stress(req)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/energy/simulation/voltage-drop")
+def energy_voltage_drop_endpoint(req: VoltageDropRequest):
+    try:
+        return simulate_voltage_drop_profile(req)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/energy/simulation/biogas-yield")
+def energy_biogas_yield_endpoint(req: BiogasYieldRequest):
+    try:
+        return simulate_biogas_yield_curve(req)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/energy/simulation/catenary")
+def energy_catenary_endpoint(req: CatenaryRequest):
+    try:
+        return simulate_conductor_catenary(req)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/energy/simulation/fault-current-decay")
+def energy_fault_decay_endpoint(req: FaultDecayRequest):
+    try:
+        return simulate_fault_current_decay(req)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ---------------------------------------------------------------------------
+# Circuit / SPICE-lite endpoints
+# ---------------------------------------------------------------------------
+
+class CircuitDCRequest(BaseModel):
+    components: list[dict]
+
+class CircuitACRequest(BaseModel):
+    components: list[dict]
+    freq_start: float = 1.0
+    freq_stop: float = 1e6
+    n_pts: int = 100
+    input_node: str = "1"
+    output_node: str = "2"
+
+class CircuitTransientRequest(BaseModel):
+    components: list[dict]
+    t_stop: float = 0.01
+    dt: float = 1e-5
+    output_nodes: list[str] = ["1"]
+
+@app.post("/circuit/dc")
+def circuit_dc_endpoint(req: CircuitDCRequest):
+    try:
+        return solve_dc(req.components)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/circuit/ac-sweep")
+def circuit_ac_endpoint(req: CircuitACRequest):
+    try:
+        return solve_ac_sweep(
+            req.components, req.freq_start, req.freq_stop,
+            req.n_pts, req.input_node, req.output_node,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/circuit/transient")
+def circuit_transient_endpoint(req: CircuitTransientRequest):
+    try:
+        return solve_transient(req.components, req.t_stop, req.dt, req.output_nodes)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ---------------------------------------------------------------------------
+# Wind CFD (panel method) endpoints
+# ---------------------------------------------------------------------------
+
+class WindCFDRequest(BaseModel):
+    polygon_x: list[float]
+    polygon_y: list[float]
+    wind_speed_ms: float = 10.0
+    wind_angle_deg: float = 0.0
+    grid_nx: int = 30
+    grid_ny: int = 25
+    grid_margin: float = 2.5
+
+@app.post("/wind/cfd-panel")
+def wind_cfd_endpoint(req: WindCFDRequest):
+    try:
+        return run_panel_cfd(
+            req.polygon_x, req.polygon_y, req.wind_speed_ms,
+            req.wind_angle_deg, req.grid_nx, req.grid_ny, req.grid_margin,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/wind/building-shapes")
+def wind_shapes_endpoint():
+    shapes = building_shapes()
+    return {name: {"x": pts[0], "y": pts[1]} for name, pts in shapes.items()}
+
+
+# ---------------------------------------------------------------------------
+# Power systems endpoints (short-circuit, protection grading, harmonics)
+# ---------------------------------------------------------------------------
+
+class ShortCircuitRequest(BaseModel):
+    system_voltage_kv: float = 11.0
+    source_impedance_ohm: float = 0.05
+    cable_length_km: float = 1.0
+    cable_r_ohm_km: float = 0.32
+    cable_x_ohm_km: float = 0.08
+
+class RelayGradingRequest(BaseModel):
+    relays: list[dict]
+    fault_current_a: float = 5000.0
+    i_range_factor: float = 10.0
+
+class HarmonicRequest(BaseModel):
+    system_voltage_v: float = 11000.0
+    load_kva: float = 500.0
+    system_impedance_ohm: float = 0.05
+    cable_r_ohm: float = 0.32
+    cable_x_ohm: float = 0.08
+    fund_freq_hz: float = 50.0
+    harmonic_profile: str = "class3_iec"
+    max_harmonic: int = 25
+
+@app.post("/power/short-circuit")
+def power_sc_endpoint(req: ShortCircuitRequest):
+    try:
+        return run_short_circuit(
+            req.system_voltage_kv, req.source_impedance_ohm,
+            req.cable_length_km, req.cable_r_ohm_km, req.cable_x_ohm_km,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/power/relay-grading")
+def power_relay_endpoint(req: RelayGradingRequest):
+    try:
+        return grading_chart(req.relays, req.fault_current_a, req.i_range_factor)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/power/harmonics")
+def power_harmonics_endpoint(req: HarmonicRequest):
+    try:
+        return harmonic_spectrum(
+            req.system_voltage_v, req.load_kva, req.system_impedance_ohm,
+            req.cable_r_ohm, req.cable_x_ohm, req.fund_freq_hz,
+            req.harmonic_profile, req.max_harmonic,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ---------------------------------------------------------------------------
+# FEA Modal Analysis endpoint
+# ---------------------------------------------------------------------------
+
+class ModalAnalysisRequest(BaseModel):
+    height: float = 4.0
+    span: float = 6.0
+    support_type: str = "fixed"
+    E: float = 2.0e11
+    A: float = 0.01
+    I: float = 1.0e-5
+    rho: float = 7850.0
+    n_modes: int = 6
+
+@app.post("/fea/modal-analysis")
+def fea_modal_endpoint(req: ModalAnalysisRequest):
+    try:
+        from calculations.fea.solver_2d import assemble_frame_stiffness
+        K, nodes, elements, boundary_dofs = assemble_frame_stiffness(req.model_dump())
+        return run_modal_analysis(nodes, elements, K, boundary_dofs, req.rho, req.n_modes)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ---------------------------------------------------------------------------
+# Seismic response spectrum endpoints
+# ---------------------------------------------------------------------------
+
+class SeismicSpectrumRequest(BaseModel):
+    ag: float = 0.15               # Peak ground acceleration in g
+    ground_type: str = "B"         # A, B, C, D, E
+    xi_pct: float = 5.0            # Damping ratio %
+    q: float = 1.5                 # Behaviour factor
+    importance_class: str = "II"   # I, II, III, IV
+    spectrum_type: int = 1         # 1 = high seismicity, 2 = low seismicity
+    combination: str = "SRSS"      # SRSS or CQC
+    modal_periods: list[float] = []
+    modal_eff_masses_x: list[float] = []
+    modal_eff_masses_y: list[float] = []
+    modal_mass_part_x: list[float] = []
+
+@app.post("/seismic/response-spectrum")
+def seismic_spectrum_endpoint(req: SeismicSpectrumRequest):
+    try:
+        return run_seismic_spectrum(
+            req.ag, req.ground_type, req.xi_pct, req.q,
+            req.importance_class, req.spectrum_type,
+            req.modal_periods or None,
+            req.modal_eff_masses_x or None,
+            req.modal_eff_masses_y or None,
+            req.modal_mass_part_x or None,
+            req.combination,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+class SeismicModalCombineRequest(BaseModel):
+    modes: list[dict]              # From /fea/modal-analysis output
+    ag: float = 0.15              # in g
+    ground_type: str = "B"
+    xi_pct: float = 5.0
+    q: float = 1.5
+    importance_class: str = "II"
+    spectrum_type: int = 1
+    combination: str = "SRSS"
+
+@app.post("/seismic/modal-combine")
+def seismic_modal_combine_endpoint(req: SeismicModalCombineRequest):
+    try:
+        ag_ms2 = req.ag * 9.81
+        return modal_seismic_response(
+            req.modes, ag_ms2, req.ground_type, req.xi_pct,
+            req.q, req.importance_class, req.spectrum_type, req.combination,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ---------------------------------------------------------------------------
+# Water Hammer endpoint
+# ---------------------------------------------------------------------------
+
+class WaterHammerRequest(BaseModel):
+    D_mm: float = 200.0
+    t_mm: float = 6.0
+    L_m: float = 500.0
+    V0_ms: float = 1.5
+    Tc_s: float = 0.0
+    H_static_m: float = 50.0
+    E_pipe_gpa: float = 200.0
+    pipe_material: str = "steel"
+    safety_factor: float = 1.3
+
+@app.post("/wash/water-hammer")
+def water_hammer_endpoint(req: WaterHammerRequest):
+    try:
+        return run_water_hammer(
+            req.D_mm, req.t_mm, req.L_m, req.V0_ms,
+            req.Tc_s, req.H_static_m, req.E_pipe_gpa,
+            req.pipe_material, safety_factor=req.safety_factor,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ---------------------------------------------------------------------------
+# Winkler Foundation endpoint
+# ---------------------------------------------------------------------------
+
+class WinklerRequest(BaseModel):
+    L_m: float = 10.0
+    B_m: float = 1.0
+    EI_knm2: float = 50000.0
+    ks_knm3: float = 20000.0
+    load_type: str = "udl"
+    q_knm: float = 50.0
+    P_kn: float = 100.0
+    point_loads: list[dict] = []
+    support: str = "free"
+    n_el: int = 40
+
+@app.post("/structural/winkler")
+def winkler_endpoint(req: WinklerRequest):
+    try:
+        return run_winkler(
+            req.L_m, req.B_m, req.EI_knm2, req.ks_knm3,
+            req.load_type, req.q_knm, req.P_kn,
+            req.point_loads or None, req.support, req.n_el,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ---------------------------------------------------------------------------
+# EC2 Crack Width endpoint
+# ---------------------------------------------------------------------------
+
+class CrackWidthRequest(BaseModel):
+    b_mm: float = 300.0
+    h_mm: float = 500.0
+    d_mm: float | None = None
+    cover_mm: float = 35.0
+    bar_dia_mm: float = 16.0
+    n_bars: int = 3
+    fck_mpa: float = 30.0
+    fyk_mpa: float = 500.0
+    Es_gpa: float = 200.0
+    M_knm: float = 80.0
+    N_kn: float = 0.0
+    wk_limit_mm: float = 0.3
+    bond_condition: str = "good"
+
+@app.post("/structural/crack-width")
+def crack_width_endpoint(req: CrackWidthRequest):
+    try:
+        return run_crack_width(
+            req.b_mm, req.h_mm, req.d_mm, req.cover_mm,
+            req.bar_dia_mm, req.n_bars,
+            req.fck_mpa, req.fyk_mpa, req.Es_gpa,
+            req.M_knm, req.N_kn, req.wk_limit_mm, req.bond_condition,
+        )
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

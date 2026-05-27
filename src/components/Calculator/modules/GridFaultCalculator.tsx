@@ -1,6 +1,7 @@
 import { InputGroup } from '../InputGroup';
 import { Button } from '../../ui/Button';
 import { useCalculationStore } from '../../../store/calculationStore';
+import { EnergyExtendedPanel } from '../../Energy/EnergyExtendedPanel';
 
 interface GridFaultCalculatorProps {
   inputs: Record<string, unknown>;
@@ -60,6 +61,7 @@ export function GridFaultCalculator({ inputs, onInputChange }: GridFaultCalculat
       <Button onClick={() => void runCalculation()} disabled={isCalculating} className="w-full">
         {isCalculating ? 'Calculating...' : 'Calculate Fault Current'}
       </Button>
+      <EnergyExtendedPanel inputs={inputs} />
     </div>
   );
 }

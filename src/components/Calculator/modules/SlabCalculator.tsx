@@ -4,6 +4,8 @@ import {
   SLAB_STEEL_GRADES,
   SLAB_SUPPORT_CONDITIONS,
 } from '../CalculatorTypes';
+import { NumField } from '../FormElements';
+import { StructuralMorePanel } from '../../Structural/StructuralMorePanel';
 
 export function SlabCalculator({ inputs, onInputChange }: CalculatorFormProps) {
   const slabType = (inputs.slab_type as string) ?? 'one_way';
@@ -65,32 +67,12 @@ export function SlabCalculator({ inputs, onInputChange }: CalculatorFormProps) {
         options={SLAB_SUPPORT_CONDITIONS}
         onChange={(v) => onInputChange('support_condition', v)}
       />
+      <StructuralMorePanel inputs={inputs} />
     </div>
   );
 }
 
-function Field({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: unknown;
-  onChange: (v: number) => void;
-}) {
-  return (
-    <div>
-      <label className="block text-xs text-gray-400 mb-1">{label}</label>
-      <input
-        type="number"
-        step="any"
-        value={value as number}
-        onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
-        className="w-full px-2 py-1.5 text-sm bg-infra-darker border border-infra-accent/40 rounded text-white focus:outline-none focus:border-infra-highlight/60"
-      />
-    </div>
-  );
-}
+const Field = NumField;
 
 function SelectField({
   label,

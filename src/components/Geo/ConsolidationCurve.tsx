@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { API_BASE } from '../../services/apiConfig';
 
 interface CurvePoint {
   time_years: number;
@@ -51,7 +52,7 @@ export function ConsolidationCurve({
     abortRef.current = ctrl;
     setLoading(true);
 
-    fetch('http://localhost:8000/geo/simulation/consolidation', {
+    fetch(`${API_BASE}/geo/simulation/consolidation`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ clay_thickness_m, drainage, cv_m2_yr, cc, e0, sigma0_kpa, delta_sigma_kpa }),

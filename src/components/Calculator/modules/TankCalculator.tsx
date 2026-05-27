@@ -1,5 +1,6 @@
 import type { CalculatorFormProps } from '../CalculatorTypes';
 import { FormField } from '../FormElements';
+import { EnvPanel } from '../../Environment/EnvPanel';
 
 export function TankCalculator({ inputs, onInputChange }: CalculatorFormProps) {
   return (
@@ -46,6 +47,7 @@ export function TankCalculator({ inputs, onInputChange }: CalculatorFormProps) {
           />
         </div>
       </div>
+      <EnvPanel inputs={inputs} />
     </div>
   );
 }

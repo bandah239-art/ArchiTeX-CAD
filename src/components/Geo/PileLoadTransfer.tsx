@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { API_BASE } from '../../services/apiConfig';
 
 interface Node {
   depth_m: number;
@@ -54,7 +55,7 @@ export function PileLoadTransfer({
     abortRef.current = ctrl;
     setLoading(true);
 
-    fetch('http://localhost:8000/geo/simulation/pile-load-transfer', {
+    fetch(`${API_BASE}/geo/simulation/pile-load-transfer`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ pile_diameter_m, pile_length_m, soil_cohesion_kpa, adhesion_factor, nc, applied_load_kn }),

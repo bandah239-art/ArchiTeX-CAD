@@ -219,26 +219,39 @@ function killPythonServer() {
 }
 
 async function getDevServerUrl() {
-  const ports = [5173, 5174, 5175];
+  // Prefer explicit port from environment (set by start-electron.mjs / electron:dev)
+  const envPort = process.env.VITE_DEV_PORT;
+  const ports = envPort ? [Number(envPort), 5173, 5174, 5175] : [5173, 5174, 5175];
+  // Deduplicate in case envPort matches one of the defaults
+  const uniquePorts = [...new Set(ports)];
   const maxAttempts = 45;
   const delay = 1000;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     safeLog(`[Electron] Checking dev server ports (attempt ${attempt}/${maxAttempts})...`);
-    for (const port of ports) {
+    for (const port of uniquePorts) {
       try {
         const ok = await new Promise((resolve) => {
           const req = http.get(`http://localhost:${port}`, (res) => {
-            resolve(res.statusCode === 200);
+            // Read the response body to verify it's actually a Vite dev server
+            let body = '';
+            res.on('data', (chunk) => { body += chunk.toString(); });
+            res.on('end', () => {
+              // Check for our app's root div or Vite's module script
+              const isVite = res.statusCode === 200 && (
+                body.includes('id="root"') || body.includes('/@vite/client')
+              );
+              resolve(isVite);
+            });
           });
           req.on('error', () => resolve(false));
-          req.setTimeout(800, () => {
+          req.setTimeout(2000, () => {
             req.destroy();
             resolve(false);
           });
         });
         if (ok) {
-          safeLog(`[Electron] Found active dev server on port ${port}`);
+          safeLog(`[Electron] Found active Vite dev server on port ${port}`);
           return `http://localhost:${port}`;
         }
       } catch {
@@ -250,7 +263,7 @@ async function getDevServerUrl() {
     }
   }
   safeLog('[Electron] No active dev server found, falling back to default.');
-  return 'http://localhost:5173';
+  return `http://localhost:${uniquePorts[0]}`;
 }
 
 function createWindow() {
@@ -279,12 +292,34 @@ function createWindow() {
 
   if (isDev) {
     getDevServerUrl().then((url) => {
-      mainWindow.loadURL(url);
+      safeLog(`[Electron] Loading dev URL: ${url}`);
+      mainWindow.loadURL(url).catch((err) => {
+        safeWarn(`[Electron] Failed to load dev URL ${url}:`, err.message);
+      });
       mainWindow.webContents.openDevTools({ mode: 'detach' });
     });
   } else {
-    mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
+    const prodPath = path.join(__dirname, '..', 'dist', 'index.html');
+    safeLog(`[Electron] Loading production file: ${prodPath}`);
+    mainWindow.loadFile(prodPath).catch((err) => {
+      safeWarn(`[Electron] Failed to load production file:`, err.message);
+    });
   }
+
+  // Catch renderer errors that cause white screens
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    safeWarn(`[Electron] Renderer process gone: ${details.reason} (exit code: ${details.exitCode})`);
+  });
+
+  mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
+    safeWarn(`[Electron] Page failed to load: ${errorDescription} (code: ${errorCode}, url: ${validatedURL})`);
+  });
+
+  mainWindow.webContents.on('console-message', (_event, level, message) => {
+    if (level >= 2) { // warning or error
+      safeLog(`[Renderer ${level === 3 ? 'ERROR' : 'WARN'}] ${message}`);
+    }
+  });
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
@@ -301,7 +336,24 @@ function createWindow() {
 ipcMain.handle('open-file-dialog', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openFile'],
-    filters: [{ name: 'IFC Files', extensions: ['ifc'] }],
+    filters: [
+      {
+        name: 'Supported CAD / GIS / BIM / Data Files',
+        extensions: [
+          'ifc', 'dwg', 'dxf',
+          'step', 'stp', 'stl', 'obj', 'gltf', 'glb', 'fbx', '3ds',
+          'geojson', 'json', 'shp',
+          'csv', 'xlsx', 'xls'
+        ]
+      },
+      { name: 'IFC BIM Models (*.ifc)', extensions: ['ifc'] },
+      { name: 'CAD Drawing Exchange (*.dwg, *.dxf)', extensions: ['dwg', 'dxf'] },
+      { name: '3D STEP Models (*.step, *.stp)', extensions: ['step', 'stp'] },
+      { name: '3D Meshes (*.stl, *.obj, *.gltf, *.glb, *.fbx, *.3ds)', extensions: ['stl', 'obj', 'gltf', 'glb', 'fbx', '3ds'] },
+      { name: 'GIS / GeoJSON / Shapefiles (*.geojson, *.json, *.shp)', extensions: ['geojson', 'json', 'shp'] },
+      { name: 'Spreadsheets (*.csv, *.xlsx, *.xls)', extensions: ['csv', 'xlsx', 'xls'] },
+      { name: 'All Files (*.*)', extensions: ['*'] }
+    ]
   });
   return result.canceled ? null : result.filePaths[0];
 });

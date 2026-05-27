@@ -1,5 +1,42 @@
 import { API_BASE } from './apiConfig';
 
+export interface CadParseResponse {
+  status: string;
+  engine?: string;
+  element_count?: number;
+  triangle_count?: number;
+  elements: CadMeshElement[];
+  bounds?: { min: [number, number, number]; max: [number, number, number] };
+  warnings?: string[];
+  error?: string;
+  cad?: Record<string, unknown>;
+}
+
+export interface CadEngineStatus {
+  ezdxf: boolean;
+  oda_file_converter: boolean;
+  oda_executable?: string | null;
+  dwg_hint?: string;
+}
+
+export interface CadMeshElement {
+  id: string;
+  expressId: number;
+  globalId?: string;
+  type: string;
+  name: string;
+  layer?: string;
+  entity_type?: string;
+  vertices: number[];
+  faces: number[];
+  length?: number;
+  width?: number;
+  height?: number;
+  volume?: number;
+  area?: number;
+  properties?: Record<string, unknown>;
+}
+
 export const bimGeometryAPI = {
   async status(): Promise<{ ifcopenshell: boolean; engines: { client: string; server: string } }> {
     const res = await fetch(`${API_BASE}/bim/status`);
@@ -22,6 +59,36 @@ export const bimGeometryAPI = {
     form.append('file', file);
     const res = await fetch(`${API_BASE}/bim/parse-ifc-upload`, { method: 'POST', body: form });
     if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  async cadStatus(): Promise<CadEngineStatus> {
+    const res = await fetch(`${API_BASE}/bim/cad/status`);
+    if (!res.ok) throw new Error('CAD parser status unavailable');
+    return res.json();
+  },
+
+  async parseCadPath(path: string): Promise<CadParseResponse> {
+    const res = await fetch(`${API_BASE}/bim/parse-cad-path`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(typeof err.detail === 'string' ? err.detail : res.statusText);
+    }
+    return res.json();
+  },
+
+  async parseCadUpload(file: File): Promise<CadParseResponse> {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetch(`${API_BASE}/bim/parse-cad-upload`, { method: 'POST', body: form });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(typeof err.detail === 'string' ? err.detail : res.statusText);
+    }
     return res.json();
   },
 

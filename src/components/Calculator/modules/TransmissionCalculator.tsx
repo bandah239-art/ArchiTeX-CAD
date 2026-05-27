@@ -1,6 +1,7 @@
 import { InputGroup } from '../InputGroup';
 import { Button } from '../../ui/Button';
 import { useCalculationStore } from '../../../store/calculationStore';
+import { EnergyExtendedPanel } from '../../Energy/EnergyExtendedPanel';
 
 interface TransmissionCalculatorProps {
   inputs: Record<string, unknown>;
@@ -53,6 +54,7 @@ export function TransmissionCalculator({ inputs, onInputChange }: TransmissionCa
       <Button onClick={() => void runCalculation()} disabled={isCalculating} className="w-full">
         {isCalculating ? 'Calculating...' : 'Calculate Sag-Tension'}
       </Button>
+      <EnergyExtendedPanel inputs={inputs} />
     </div>
   );
 }

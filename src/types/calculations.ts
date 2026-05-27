@@ -32,6 +32,7 @@ export interface CalculationResult {
   nodes?: any[];
   elements?: any[];
   displacements?: any[];
+  element_results?: any[];
   pressure_bearing?: CalculationResult;
   pressure_pavement?: CalculationResult;
   pressure_lateral?: CalculationResult;
@@ -192,7 +193,13 @@ export type CalculationModule =
   | 'geo_slope'
   | 'geo_consolidation'
   | 'geo_ground_improvement'
-  | 'geo_tunneling';
+  | 'geo_tunneling'
+  | 'circuit'
+  | 'wind_cfd'
+  | 'seismic'
+  | 'crack_width'
+  | 'water_hammer'
+  | 'winkler';
 
 export type RoadSubmodule = 'pavement' | 'drainage' | 'geometric_design' | 'traffic_load';
 

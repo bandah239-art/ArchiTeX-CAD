@@ -1,6 +1,7 @@
 import { InputGroup } from '../InputGroup';
 import { Button } from '../../ui/Button';
 import { useCalculationStore } from '../../../store/calculationStore';
+import { GeoMorePanel } from '../../Geo/GeoMorePanel';
 interface TunnelingCalculatorProps {
   inputs: Record<string, unknown>;
   onInputChange: (key: string, value: unknown) => void;
@@ -52,6 +53,7 @@ export function TunnelingCalculator({ inputs, onInputChange }: TunnelingCalculat
       <Button onClick={() => void runCalculation()} disabled={isCalculating} className="w-full">
         {isCalculating ? 'Calculating...' : 'Calculate RMR & Tunnel Support'}
       </Button>
+      <GeoMorePanel inputs={inputs} />
     </div>
   );
 }

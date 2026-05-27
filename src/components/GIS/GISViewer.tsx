@@ -1,12 +1,46 @@
 import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { useGeoStore } from '../../store/geoStore';
 
 export function GISViewer() {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstance = useRef<L.Map | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [results, setResults] = useState<any>(null);
+  const geoJsonLayerRef = useRef<L.GeoJSON | null>(null);
+  const importedGeoJson = useGeoStore((s) => s.importedGeoJson);
+
+  useEffect(() => {
+    if (!mapInstance.current) return;
+
+    if (geoJsonLayerRef.current) {
+      mapInstance.current.removeLayer(geoJsonLayerRef.current);
+      geoJsonLayerRef.current = null;
+    }
+
+    if (importedGeoJson) {
+      try {
+        const layer = L.geoJSON(importedGeoJson, {
+          style: {
+            color: '#10b981',
+            weight: 3,
+            opacity: 0.8,
+            fillColor: '#10b981',
+            fillOpacity: 0.2
+          }
+        }).addTo(mapInstance.current);
+        geoJsonLayerRef.current = layer;
+
+        const bounds = layer.getBounds();
+        if (bounds.isValid()) {
+          mapInstance.current.fitBounds(bounds);
+        }
+      } catch (err) {
+        console.error('Failed to render imported GeoJSON:', err);
+      }
+    }
+  }, [importedGeoJson]);
 
   useEffect(() => {
     if (!mapRef.current) return;

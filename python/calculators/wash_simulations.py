@@ -102,10 +102,9 @@ def simulate_pipe_pressure_profile(req: PipePressureRequest) -> dict:
     D_req = math.sqrt(4.0 * A_req / math.pi)
     D = next((s for s in _DN if s >= D_req), _DN[-1])
 
-    # Hazen–Williams: hf = 10.67 * L * Q_lps^1.852 / (C^1.852 * D_mm^4.87)
-    Q_lps = req.flow_rate_lps
-    D_mm  = D * 1000.0
-    hf_total = 10.67 * L * (Q_lps ** 1.852) / ((C ** 1.852) * (D_mm ** 4.87))
+    # Hazen–Williams: hf = 10.67 * L * Q^1.852 / (C^1.852 * D^4.87)
+    # where Q in m³/s, D in m
+    hf_total = 10.67 * L * (Q_m3s ** 1.852) / ((C ** 1.852) * (D ** 4.87))
     hf_per_m = hf_total / L
 
     # Pressure profile: source head must supply residual + friction loss
@@ -127,7 +126,7 @@ def simulate_pipe_pressure_profile(req: PipePressureRequest) -> dict:
         "status": "ok",
         "points": points,
         "summary": {
-            "pipe_diameter_mm": int(D_mm),
+            "pipe_diameter_mm": int(D * 1000),
             "velocity_mps": round(velocity, 3),
             "hf_total_m": round(hf_total, 2),
             "head_at_source_m": round(head_source, 2),

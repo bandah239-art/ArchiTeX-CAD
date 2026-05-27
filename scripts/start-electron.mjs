@@ -3,6 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 process.env.INFRA_PYTHON_EXTERNAL = '1';
+process.env.VITE_DEV_PORT = '5173';
 
 const projectRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const electronBin = path.join(projectRoot, 'node_modules', 'electron', 'cli.js');

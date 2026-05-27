@@ -1,15 +1,15 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
-import { API_BASE } from '../../services/apiConfig';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+// import { API_BASE } from '../../services/apiConfig'; // Deprecated, not used
 import { buildProceduralObject } from '../../services/proceduralBuilder';
 import { getViewer } from '../../services/viewerControls';
 import { useCalculationStore } from '../../store/calculationStore';
 import { useWorkspaceStore } from '../../store/workspaceStore';
 import type { CalculationModule } from '../../types/calculations';
 
-interface VoiceCommandResponse {
+interface ChatResponse {
+  reply: string;
   intent?: string;
-  spoken_response?: string;
-  payload?: {
+  action?: {
     calculator_id?: string;
     parameters?: Record<string, unknown>;
     action?: string;
@@ -19,8 +19,9 @@ interface VoiceCommandResponse {
     position?: Record<string, number>;
     panel?: string;
     view?: string;
-  };
+  } | null;
 }
+
 
 type SpeechRecognitionLike = {
   continuous: boolean;
@@ -59,35 +60,70 @@ function MicOffIcon() {
   );
 }
 
+import { emergingAPI } from '../../services/emergingAPI';
+
 export function VoiceAssistant() {
   const [isListening, setIsListening] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [robotResponse, setRobotResponse] = useState('');
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [typedInput, setTypedInput] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+  const voiceRef = useRef<SpeechSynthesisVoice | null>(null);
 
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const synthRef = useRef<SpeechSynthesis>(window.speechSynthesis);
   const activeUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
+  // Preload a voice as soon as synthesis is ready — fixes the Chrome/Electron
+  // bug where speak() fires and ends silently before voices are loaded.
+  useEffect(() => {
+    const synth = synthRef.current;
+    if (!synth) return;
+    const pickVoice = () => {
+      const voices = synth.getVoices();
+      if (!voices.length) return;
+      // Prefer a natural-sounding English voice
+      voiceRef.current =
+        voices.find((v) => v.lang.startsWith('en') && v.localService) ??
+        voices.find((v) => v.lang.startsWith('en')) ??
+        voices[0];
+    };
+    pickVoice();
+    synth.addEventListener('voiceschanged', pickVoice);
+    // Fallback: some Windows/Electron builds never fire voiceschanged
+    const t1 = setTimeout(pickVoice, 500);
+    const t2 = setTimeout(pickVoice, 2000);
+    return () => {
+      synth.removeEventListener('voiceschanged', pickVoice);
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, []);
+
   const speak = useCallback((text: string) => {
     if (!synthRef.current || !text) return;
     try {
       synthRef.current.cancel();
-      if (synthRef.current.paused) {
-        synthRef.current.resume();
-      }
+      // Resume if paused — needed on some Chromium builds
+      if (synthRef.current.paused) synthRef.current.resume();
+
       const utterance = new SpeechSynthesisUtterance(text);
-      activeUtteranceRef.current = utterance; // Prevents GC bug in Chrome/Electron
+      activeUtteranceRef.current = utterance; // Prevents GC silent-end bug in Chrome
       utterance.rate = 1.0;
       utterance.pitch = 1.0;
+      utterance.volume = 1.0;
+      if (voiceRef.current) utterance.voice = voiceRef.current;
+
       utterance.onstart = () => setIsSpeaking(true);
-      utterance.onend = () => {
-        setIsSpeaking(false);
-        activeUtteranceRef.current = null;
-      };
+      utterance.onend = () => { setIsSpeaking(false); activeUtteranceRef.current = null; };
       utterance.onerror = (e) => {
-        console.error('SpeechSynthesisUtterance error', e);
+        // 'interrupted' fires when cancel() is called before end — not a real error
+        if ((e as SpeechSynthesisErrorEvent).error !== 'interrupted') {
+          console.error('SpeechSynthesisUtterance error', e);
+        }
         setIsSpeaking(false);
         activeUtteranceRef.current = null;
       };
@@ -99,16 +135,16 @@ export function VoiceAssistant() {
     }
   }, []);
 
-  const executeResponse = useCallback((response: VoiceCommandResponse) => {
-    // Execute the action based on intent
-    if (response.intent === 'build_3d' && response.payload) {
+  const executeAction = useCallback((intent: string, action: ChatResponse['action']) => {
+    if (!action) return;
+    if (intent === 'build_3d') {
       buildProceduralObject(getViewer(), {
-        type: response.payload.type ?? 'box',
-        dimensions: response.payload.dimensions,
-        position: response.payload.position,
+        type: action.type ?? 'box',
+        dimensions: action.dimensions,
+        position: action.position,
       });
-    } else if (response.intent === 'calculate' && response.payload) {
-      const { calculator_id, parameters } = response.payload;
+    } else if (intent === 'calculate') {
+      const { calculator_id, parameters } = action;
       useWorkspaceStore.getState().openPanel('calculator');
       if (calculator_id) {
         useCalculationStore.getState().setModule(calculator_id as CalculationModule);
@@ -117,54 +153,45 @@ export function VoiceAssistant() {
           calc.setInputs({ ...calc.currentInputs, ...parameters });
         }
       }
-    } else if (response.intent === 'navigate' && response.payload?.panel) {
+    } else if (intent === 'navigate' && action.panel) {
       const store = useWorkspaceStore.getState();
-      store.openPanel(response.payload.panel as Parameters<typeof store.openPanel>[0]);
-    } else if (response.intent === 'switch_view' && response.payload?.view) {
-      const view = response.payload.view;
+      store.openPanel(action.panel as Parameters<typeof store.openPanel>[0]);
+    } else if (intent === 'switch_view' && action.view) {
+      const view = action.view;
       if (view === 'bim' || view === 'gis' || view === 'sld') {
         useWorkspaceStore.getState().setMainView(view);
       }
-    } else if (response.intent === 'os_command' && response.payload) {
-      const { action, target_path } = response.payload;
+    } else if (intent === 'os_command') {
       if (window.electronAPI?.osAction) {
-        void window.electronAPI.osAction(action ?? '', target_path);
+        void window.electronAPI.osAction(action.action ?? '', action.target_path);
       }
     }
   }, []);
 
-  const processVoiceCommand = useCallback(
-    async (text: string) => {
-      setIsProcessing(true);
-      setRobotResponse('');
-      try {
-        const res = await fetch(`${API_BASE}/ai/voice-command`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ command: text }),
-        });
+  // Define processVoiceCommand to use emergingAPI.voice
+  const processVoiceCommand = async (text: string) => {
+    if (!text.trim()) return;
+    setIsProcessing(true);
+    setRobotResponse('');
+    try {
+      const res = await emergingAPI.voice(text);
+      const reply = res.action ?? res.command ?? 'Processed';
+      setRobotResponse(reply);
+      speak(reply);
+    } catch (error) {
+      console.error('Voice command error:', error);
+      const errMsg = 'Voice command failed. Check backend.';
+      setRobotResponse(errMsg);
+      speak(errMsg);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+  // sendMessage forwards to processVoiceCommand for compatibility
+  const sendMessage = (text: string) => processVoiceCommand(text);
 
-        if (!res.ok) {
-          throw new Error(`Server returned ${res.status}`);
-        }
 
-        const response: VoiceCommandResponse = await res.json();
-        const reply = response.spoken_response || 'Done.';
-
-        setRobotResponse(reply);
-        speak(reply);
-        executeResponse(response);
-      } catch (error) {
-        console.error('Voice command error:', error);
-        const errMsg = 'I could not reach the server right now. Please make sure the backend is running.';
-        setRobotResponse(errMsg);
-        speak(errMsg);
-      } finally {
-        setIsProcessing(false);
-      }
-    },
-    [speak, executeResponse],
-  );
+  // Deprecated alias removed; sendMessage now uses processVoiceCommand directly
 
   // Speech Recognition setup
   useEffect(() => {
@@ -242,9 +269,16 @@ export function VoiceAssistant() {
     }
   };
 
-  if (!getSpeechRecognitionCtor()) {
-    return null;
-  }
+  const hasSpeech = !!getSpeechRecognitionCtor();
+
+  const handleTypedSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const text = typedInput.trim();
+    if (!text) return;
+    setTranscript(text);
+    setTypedInput('');
+    void sendMessage(text);
+  };
 
   return (
     <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end justify-end space-y-2 pointer-events-none">
@@ -268,7 +302,7 @@ export function VoiceAssistant() {
                       <span className="w-1 h-2 bg-indigo-400 rounded-full animate-pulse" style={{ animationDelay: '300ms' }} />
                     </span>
                   )}
-                  <p className="text-indigo-300">{robotResponse}</p>
+                  <p className="text-indigo-300 whitespace-pre-wrap">{robotResponse}</p>
                 </div>
               )}
             </>
@@ -276,21 +310,70 @@ export function VoiceAssistant() {
         </div>
       )}
 
-      {/* Mic FAB */}
-      <button
-        type="button"
-        onClick={toggleListen}
-        disabled={isProcessing}
-        className={`pointer-events-auto flex items-center justify-center w-14 h-14 rounded-full shadow-2xl transition-all duration-300 ${
-          isListening
-            ? 'bg-red-500 hover:bg-red-600 animate-pulse ring-4 ring-red-500/30'
-            : isProcessing
-              ? 'bg-slate-600 cursor-wait'
-              : 'bg-indigo-600 hover:bg-indigo-700 hover:scale-105'
-        }`}
-      >
-        {isListening ? <MicOffIcon /> : <MicIcon />}
-      </button>
+      {/* Text chat panel */}
+      {chatOpen && (
+        <form
+          onSubmit={handleTypedSubmit}
+          className="pointer-events-auto flex items-center gap-2 bg-slate-800/95 backdrop-blur border border-slate-700 rounded-xl px-3 py-2 shadow-xl w-72"
+        >
+          <input
+            ref={inputRef}
+            type="text"
+            value={typedInput}
+            onChange={(e) => setTypedInput(e.target.value)}
+            placeholder="Ask ARCH anything…"
+            disabled={isProcessing}
+            className="flex-1 bg-transparent text-slate-200 text-sm outline-none placeholder-slate-500 disabled:opacity-50"
+          />
+          <button
+            type="submit"
+            disabled={isProcessing || !typedInput.trim()}
+            className="text-indigo-400 hover:text-indigo-300 disabled:opacity-30 transition-colors"
+          >
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden>
+              <path strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z" />
+            </svg>
+          </button>
+        </form>
+      )}
+
+      {/* FAB row */}
+      <div className="pointer-events-auto flex items-center gap-2">
+        {/* Chat toggle button */}
+        <button
+          type="button"
+          onClick={() => {
+            setChatOpen((v) => !v);
+            setTimeout(() => inputRef.current?.focus(), 50);
+          }}
+          title="Type a message"
+          className={`flex items-center justify-center w-10 h-10 rounded-full shadow-xl transition-all duration-300 ${
+            chatOpen ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-700 hover:bg-slate-600'
+          }`}
+        >
+          <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden>
+            <path strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+          </svg>
+        </button>
+
+        {/* Mic FAB — only shown when speech recognition is available */}
+        {hasSpeech && (
+          <button
+            type="button"
+            onClick={toggleListen}
+            disabled={isProcessing}
+            className={`flex items-center justify-center w-14 h-14 rounded-full shadow-2xl transition-all duration-300 ${
+              isListening
+                ? 'bg-red-500 hover:bg-red-600 animate-pulse ring-4 ring-red-500/30'
+                : isProcessing
+                  ? 'bg-slate-600 cursor-wait'
+                  : 'bg-indigo-600 hover:bg-indigo-700 hover:scale-105'
+            }`}
+          >
+            {isListening ? <MicOffIcon /> : <MicIcon />}
+          </button>
+        )}
+      </div>
     </div>
   );
 }

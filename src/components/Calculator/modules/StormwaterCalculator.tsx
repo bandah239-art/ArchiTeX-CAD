@@ -1,6 +1,7 @@
 import { InputGroup } from '../InputGroup';
 import { Button } from '../../ui/Button';
 import { useCalculationStore } from '../../../store/calculationStore';
+import { RoadSimPanel } from '../../Road/RoadSimPanel';
 interface StormwaterCalculatorProps {
   inputs: Record<string, unknown>;
   onInputChange: (key: string, value: unknown) => void;
@@ -45,6 +46,7 @@ export function StormwaterCalculator({ inputs, onInputChange }: StormwaterCalcul
       <Button onClick={() => void runCalculation()} disabled={isCalculating} className="w-full">
         {isCalculating ? 'Calculating...' : 'Size Stormwater Pond'}
       </Button>
+      <RoadSimPanel inputs={inputs} />
     </div>
   );
 }

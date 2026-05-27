@@ -53,7 +53,9 @@ export function getUvicornLaunchConfig({ host, port, reload = false }) {
 
   const exe = resolvePythonExecutable();
   if (exe) {
-    return { cmd: exe, args: uvicornArgs, shell: false, exe };
+    // shell:true is more reliable for conda python.exe on Windows (nested npm/concurrently).
+    const shell = process.platform === 'win32';
+    return { cmd: exe, args: uvicornArgs, shell, exe };
   }
 
   if (process.platform === 'win32') {
@@ -68,7 +70,8 @@ export function getPipInstallConfig() {
   const pipArgs = ['-m', 'pip', 'install', '-r', 'requirements.txt'];
 
   if (exe) {
-    return { cmd: exe, args: pipArgs, shell: false, exe };
+    const shell = process.platform === 'win32';
+    return { cmd: exe, args: pipArgs, shell, exe };
   }
 
   if (process.platform === 'win32') {

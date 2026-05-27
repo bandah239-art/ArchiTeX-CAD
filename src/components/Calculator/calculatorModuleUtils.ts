@@ -2,6 +2,7 @@ import type { CalculationModule } from '../../types/calculations';
 
 /** Modules that render their own Calculate button (hide panel-level CALCULATE). */
 export const MODULES_WITH_INLINE_CALCULATE: CalculationModule[] = [
+  'fea',
   'energy_bess',
   'energy_microgrid',
   'energy_transmission',
@@ -21,4 +22,10 @@ export const MODULES_WITH_INLINE_CALCULATE: CalculationModule[] = [
   'geo_consolidation',
   'geo_ground_improvement',
   'geo_tunneling',
+  'circuit',
+  'wind_cfd',
+  'seismic',
+  'crack_width',
+  'water_hammer',
+  'winkler',
 ];

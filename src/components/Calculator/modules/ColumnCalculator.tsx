@@ -4,6 +4,9 @@ import {
   SLAB_STEEL_GRADES,
   LE_FACTORS,
 } from '../CalculatorTypes';
+import { NumField } from '../FormElements';
+import { StructuralMorePanel } from '../../Structural/StructuralMorePanel';
+import { ColumnCrossSection } from '../../Structural/ColumnCrossSection';
 
 export function ColumnCalculator({ inputs, onInputChange }: CalculatorFormProps) {
   return (
@@ -56,32 +59,13 @@ export function ColumnCalculator({ inputs, onInputChange }: CalculatorFormProps)
         options={LE_FACTORS}
         onChange={(v) => onInputChange('le_factor', Number(v))}
       />
+      <StructuralMorePanel inputs={inputs} />
+      <ColumnCrossSection b_mm={Number(inputs.width ?? 300)} h_mm={Number(inputs.depth ?? 300)} />
     </div>
   );
 }
 
-function Field({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: unknown;
-  onChange: (v: number) => void;
-}) {
-  return (
-    <div>
-      <label className="block text-xs text-gray-400 mb-1">{label}</label>
-      <input
-        type="number"
-        step="any"
-        value={value as number}
-        onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
-        className="w-full px-2 py-1.5 text-sm bg-infra-darker border border-infra-accent/40 rounded text-white focus:outline-none focus:border-infra-highlight/60"
-      />
-    </div>
-  );
-}
+const Field = NumField;
 
 function SelectField({
   label,

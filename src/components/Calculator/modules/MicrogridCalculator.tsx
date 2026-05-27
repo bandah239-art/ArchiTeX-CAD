@@ -1,6 +1,7 @@
 import { InputGroup } from '../InputGroup';
 import { Button } from '../../ui/Button';
 import { useCalculationStore } from '../../../store/calculationStore';
+import { EnergyExtendedPanel } from '../../Energy/EnergyExtendedPanel';
 
 interface MicrogridCalculatorProps {
   inputs: Record<string, unknown>;
@@ -56,6 +57,7 @@ export function MicrogridCalculator({ inputs, onInputChange }: MicrogridCalculat
       <Button onClick={() => void runCalculation()} disabled={isCalculating} className="w-full">
         {isCalculating ? 'Calculating...' : 'Size Microgrid Cable'}
       </Button>
+      <EnergyExtendedPanel inputs={inputs} />
     </div>
   );
 }

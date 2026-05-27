@@ -37,6 +37,8 @@ interface GeoState {
   error: string | null;
   floodResult: Record<string, unknown> | null;
   isFloodSimulating: boolean;
+  importedGeoJson: any | null;
+  setImportedGeoJson: (data: any | null) => void;
   setLatitude: (v: number) => void;
   setLongitude: (v: number) => void;
   setCountryCode: (code: string) => void;
@@ -87,6 +89,8 @@ export const useGeoStore = create<GeoState>((set, get) => ({
   error: null,
   floodResult: null,
   isFloodSimulating: false,
+  importedGeoJson: null,
+  setImportedGeoJson: (data) => set({ importedGeoJson: data }),
 
   setLatitude: (v) => set({ latitude: v }),
   setLongitude: (v) => set({ longitude: v }),

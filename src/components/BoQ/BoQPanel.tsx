@@ -84,113 +84,140 @@ export function BoQPanel() {
         />
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4">
-        <h3 className="text-xs font-semibold text-gray-400 uppercase mb-2">Project Elements</h3>
-        <div className="flex gap-2 mb-2">
-          <button
-            type="button"
-            onClick={handleImportBim}
-            disabled={isImportingBim}
-            className="flex-1 py-1.5 text-xs border border-infra-accent/50 hover:bg-infra-accent/20 rounded disabled:opacity-50"
-          >
-            {isImportingBim ? 'Importing...' : 'Import from BIM'}
-          </button>
-          <button
-            type="button"
-            onClick={() => loadDemoProject()}
-            className="flex-1 py-1.5 text-xs border border-infra-accent/50 hover:bg-infra-accent/20 rounded"
-          >
-            Load Demo
-          </button>
-        </div>
-        <div className="space-y-2">
-          {elements.map((el) => (
-            <div
-              key={el.ref}
-              className="p-3 bg-infra-darker border border-infra-accent/30 rounded text-xs text-gray-300"
-            >
-              <div className="flex justify-between items-start gap-2">
-                <div>
-                  <span className="text-green-400 mr-1">✓</span>
-                  <span className="text-white font-medium">{el.description}</span>
-                  <span className="text-gray-500 ml-1">({el.element_count} no.)</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => removeElement(el.ref)}
-                  className="text-gray-500 hover:text-red-400"
+      <div className="flex-1 overflow-y-auto p-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+          {/* Left Column: Project Elements List & Actions */}
+          <div className="space-y-6 bg-infra-dark/30 p-5 rounded-xl border border-infra-accent/20">
+            <div className="flex justify-between items-center pb-2 border-b border-infra-accent/20">
+              <h3 className="text-xs font-bold text-infra-highlight uppercase tracking-wider">Project Elements Schedule</h3>
+              <span className="text-[10px] text-gray-500 font-mono">BIM Extraction Active</span>
+            </div>
+            
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleImportBim}
+                disabled={isImportingBim}
+                className="flex-1 py-2 text-xs border border-infra-accent/50 hover:bg-infra-accent/20 rounded-lg disabled:opacity-50 text-white font-medium"
+              >
+                🔄 Pull from BIM Model
+              </button>
+              <button
+                type="button"
+                onClick={() => loadDemoProject()}
+                className="flex-1 py-2 text-xs border border-infra-accent/50 hover:bg-infra-accent/20 rounded-lg text-white font-medium"
+              >
+                💡 Load Demo Items
+              </button>
+            </div>
+
+            <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+              {elements.map((el) => (
+                <div
+                  key={el.ref}
+                  className="p-3 bg-infra-darker border border-infra-accent/20 hover:border-infra-accent/40 rounded-lg text-xs text-gray-300 transition-all flex justify-between items-start gap-4"
                 >
-                  ×
-                </button>
-              </div>
-              <div className="mt-1 text-gray-400">→ {el.summary_text ?? 'Quantities pending'}</div>
-            </div>
-          ))}
-        </div>
-
-        <button
-          type="button"
-          onClick={() => generateBoQ()}
-          disabled={isGenerating}
-          className="w-full mt-4 py-2 bg-infra-highlight hover:bg-infra-highlight/80 disabled:opacity-50 text-white text-sm font-semibold rounded"
-        >
-          {isGenerating ? 'Generating BoQ...' : 'GENERATE BoQ'}
-        </button>
-
-        {error && (
-          <div className="mt-3 p-3 bg-red-900/30 border border-red-700/50 rounded text-xs text-red-300">
-            {error}
-          </div>
-        )}
-
-        {summary && (
-          <div className="mt-6 border-t border-infra-accent/30 pt-4">
-            <h3 className="text-xs font-semibold text-gray-400 uppercase mb-3">Summary</h3>
-            <div className="space-y-1 text-sm text-gray-300">
-              {Object.entries(compiledBoQ?.section_totals ?? {}).map(([key, val]) =>
-                val.mid > 0 ? (
-                  <div key={key} className="flex justify-between">
-                    <span>Section {key}</span>
-                    <span>USD {val.mid.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <span className="text-emerald-400">✓</span>
+                      <span className="text-white font-semibold">{el.ref}: {el.description}</span>
+                    </div>
+                    <div className="text-gray-400 pl-4">{el.summary_text ?? 'Quantities pending calculations'}</div>
                   </div>
-                ) : null
-              )}
-              <div className="border-t border-infra-accent/30 pt-2 mt-2 flex justify-between font-semibold text-white">
-                <span>TOTAL</span>
-                <span>
-                  USD {summary.total_project_estimate_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                </span>
-              </div>
-              <div className="flex justify-between text-infra-highlight text-xs">
-                <span>{summary.local_currency}</span>
-                <span>{summary.total_local_currency.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
-              </div>
-              <div className="text-xs text-gray-500 mt-1">
-                Range: USD {summary.total_project_range_usd[0].toLocaleString()} –{' '}
-                {summary.total_project_range_usd[1].toLocaleString()}
-              </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] px-2 py-0.5 bg-black/40 border border-infra-accent/20 rounded font-mono text-gray-400">{el.element_count} pcs</span>
+                    <button
+                      type="button"
+                      onClick={() => removeElement(el.ref)}
+                      className="text-gray-500 hover:text-red-400 text-lg leading-none"
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
 
-            <div className="flex gap-2 mt-4">
-              <button
-                type="button"
-                onClick={() => exportExcel()}
-                disabled={isExporting}
-                className="flex-1 py-2 text-xs border border-infra-accent/50 hover:bg-infra-accent/20 rounded"
-              >
-                Export Excel
-              </button>
-              <button
-                type="button"
-                onClick={() => exportPdf()}
-                disabled={isExporting}
-                className="flex-1 py-2 text-xs border border-infra-accent/50 hover:bg-infra-accent/20 rounded"
-              >
-                Export PDF
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => generateBoQ()}
+              disabled={isGenerating}
+              className="w-full py-3 bg-infra-highlight hover:bg-infra-highlight/80 disabled:opacity-50 text-white text-sm font-semibold rounded-lg shadow-lg hover:shadow-infra-highlight/20 transition-all"
+            >
+              {isGenerating ? 'Analyzing quantities & unit rates...' : 'COMPILE & GENERATE BILL OF QUANTITIES'}
+            </button>
+
+            {error && (
+              <div className="mt-3 p-3 bg-red-900/30 border border-red-700/50 rounded text-xs text-red-300">
+                {error}
+              </div>
+            )}
           </div>
-        )}
+
+          {/* Right Column: Compiled Summary Breakdown */}
+          <div className="space-y-6">
+            {summary ? (
+              <div className="bg-[#16213e]/90 p-5 rounded-xl border border-infra-accent/30 shadow-xl">
+                <div className="flex justify-between items-center mb-4 pb-2 border-b border-infra-accent/20">
+                  <h3 className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Quantities Cost Estimation</h3>
+                  <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded font-mono uppercase">Local Indexed</span>
+                </div>
+
+                <div className="space-y-2 text-sm text-gray-300">
+                  {Object.entries(compiledBoQ?.section_totals ?? {}).map(([key, val]) =>
+                    val.mid > 0 ? (
+                      <div key={key} className="flex justify-between py-1 border-b border-infra-accent/10">
+                        <span>Section {key}</span>
+                        <span className="font-mono">USD {val.mid.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                      </div>
+                    ) : null
+                  )}
+                  
+                  <div className="pt-3 mt-4 flex justify-between font-bold text-white text-base">
+                    <span>ESTIMATED TOTAL COST</span>
+                    <span className="font-mono text-emerald-400">
+                      USD {summary.total_project_estimate_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    </span>
+                  </div>
+                  
+                  <div className="flex justify-between text-infra-highlight text-xs py-1 border-t border-infra-accent/20">
+                    <span>Local Currency Equivalent ({summary.local_currency})</span>
+                    <span className="font-mono">{summary.total_local_currency.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                  </div>
+                  
+                  <div className="text-xs text-gray-500 mt-2 text-center bg-black/30 p-2 rounded border border-gray-800/40">
+                    Expected pricing range: <span className="font-mono text-gray-300">USD {summary.total_project_range_usd[0].toLocaleString()}</span> – <span className="font-mono text-gray-300">{summary.total_project_range_usd[1].toLocaleString()}</span>
+                  </div>
+                </div>
+
+                <div className="flex gap-4 mt-6 pt-4 border-t border-infra-accent/20">
+                  <button
+                    type="button"
+                    onClick={() => exportExcel()}
+                    disabled={isExporting}
+                    className="flex-1 py-2 text-xs border border-infra-accent/50 hover:bg-infra-accent/20 rounded-lg text-white font-medium shadow-md transition-all"
+                  >
+                    📊 Export Excel Spreadsheet
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => exportPdf()}
+                    disabled={isExporting}
+                    className="flex-1 py-2 text-xs border border-infra-accent/50 hover:bg-infra-accent/20 rounded-lg text-white font-medium shadow-md transition-all"
+                  >
+                    📄 Export PDF Report
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="p-8 border-2 border-dashed border-infra-accent/30 rounded-xl flex flex-col items-center justify-center text-center text-gray-500 h-64 bg-[#16213e]/20">
+                <span className="text-4xl mb-3">📊</span>
+                <p className="text-sm font-medium">Awaiting BoQ Compilation</p>
+                <p className="text-xs text-gray-400 mt-1 max-w-xs">Load or import project elements, then compile the BoQ to view the cost estimate summaries and breakdowns.</p>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

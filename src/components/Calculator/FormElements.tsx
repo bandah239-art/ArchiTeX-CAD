@@ -1,3 +1,63 @@
+import { useState, useEffect } from 'react';
+
+const CLS =
+  'w-full px-2 py-1.5 text-sm bg-infra-darker border border-infra-accent/40 rounded text-white focus:outline-none focus:border-infra-highlight/60';
+
+function toStr(v: unknown): string {
+  if (v == null || v === '') return '';
+  const n = Number(v);
+  return isNaN(n) ? '' : String(n);
+}
+
+/**
+ * Inner numeric input that keeps local display state so the user can type
+ * freely (clear, type decimals, negatives) without React resetting the field.
+ */
+export function NumericInput({
+  value,
+  onChange,
+  step,
+  className,
+}: {
+  value: unknown;
+  onChange: (v: number) => void;
+  step?: string;
+  className?: string;
+}) {
+  const [display, setDisplay] = useState(() => toStr(value));
+  const [focused, setFocused] = useState(false);
+
+  useEffect(() => {
+    if (!focused) setDisplay(toStr(value));
+  }, [value, focused]);
+
+  return (
+    <input
+      type="number"
+      step={step ?? 'any'}
+      value={display}
+      onFocus={() => setFocused(true)}
+      onBlur={(e) => {
+        setFocused(false);
+        const n = parseFloat(e.target.value);
+        if (!isNaN(n)) {
+          onChange(n);
+        } else {
+          const fallback = Number(value) || 0;
+          setDisplay(String(fallback));
+          onChange(fallback);
+        }
+      }}
+      onChange={(e) => {
+        setDisplay(e.target.value);
+        const n = parseFloat(e.target.value);
+        if (!isNaN(n)) onChange(n);
+      }}
+      className={className ?? CLS}
+    />
+  );
+}
+
 export function NumField({
   label,
   value,
@@ -10,12 +70,7 @@ export function NumField({
   return (
     <div>
       <label className="block text-xs text-gray-400 mb-1">{label}</label>
-      <input
-        type="number"
-        value={value as number}
-        onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
-        className="w-full px-2 py-1.5 text-sm bg-infra-darker border border-infra-accent/40 rounded text-white focus:outline-none focus:border-infra-highlight/60"
-      />
+      <NumericInput value={value} onChange={onChange} />
     </div>
   );
 }
@@ -37,7 +92,7 @@ export function SelectField({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full px-2 py-1.5 text-sm bg-infra-darker border border-infra-accent/40 rounded text-white focus:outline-none focus:border-infra-highlight/60"
+        className={CLS}
       >
         {options.map((o) => (
           <option key={o.value} value={o.value}>
@@ -65,15 +120,17 @@ export function FormField({
   return (
     <div>
       <label className="block text-xs text-gray-400 mb-1">{label}</label>
-      <input
-        type={type}
-        value={value}
-        step={step}
-        onChange={(e) =>
-          onChange(type === 'number' ? parseFloat(e.target.value) || 0 : e.target.value)
-        }
-        className="w-full px-2 py-1.5 text-sm bg-infra-darker border border-infra-accent/40 rounded text-white focus:outline-none focus:border-infra-highlight/60"
-      />
+      {type === 'number' ? (
+        <NumericInput value={value} onChange={(n) => onChange(n)} step={step} />
+      ) : (
+        <input
+          type="text"
+          value={value}
+          step={step}
+          onChange={(e) => onChange(e.target.value)}
+          className={CLS}
+        />
+      )}
     </div>
   );
 }

@@ -208,6 +208,76 @@ def solve_2d_frame(nodes: list[dict], elements: list[dict], loads: list[dict], s
     }
 
 
+def assemble_frame_stiffness(inputs: dict) -> tuple:
+    """
+    Build the clean global stiffness matrix and boundary DOF list from the same
+    portal-frame geometry used by run_fea_calculation.  Returns:
+        (K_global, nodes, elements, boundary_dofs)
+    K_global has NO penalty terms — suitable for generalized eigenvalue problems.
+    """
+    height = float(inputs.get("height", 4.0))
+    span = float(inputs.get("span", 6.0))
+    support_type = str(inputs.get("support_type", "fixed"))
+    E = float(inputs.get("E", 2.0e11))
+    A = float(inputs.get("A", 0.01))
+    I_val = float(inputs.get("I", 1.0e-5))
+
+    nodes = [
+        {"id": 1, "x": 0.0, "y": 0.0},
+        {"id": 2, "x": 0.0, "y": height},
+        {"id": 3, "x": span, "y": height},
+        {"id": 4, "x": span, "y": 0.0},
+    ]
+    elements = [
+        {"id": 1, "node_i": 1, "node_j": 2, "E": E, "A": A, "I": I_val, "udl": 0.0},
+        {"id": 2, "node_i": 2, "node_j": 3, "E": E, "A": A, "I": I_val, "udl": 0.0},
+        {"id": 3, "node_i": 3, "node_j": 4, "E": E, "A": A, "I": I_val, "udl": 0.0},
+    ]
+
+    num_nodes = len(nodes)
+    ndof = 3 * num_nodes
+    node_idx = {n["id"]: i for i, n in enumerate(nodes)}
+    K = np.zeros((ndof, ndof))
+
+    for el in elements:
+        ni = node_idx[el["node_i"]]
+        nj = node_idx[el["node_j"]]
+        xi, yi = nodes[ni]["x"], nodes[ni]["y"]
+        xj, yj = nodes[nj]["x"], nodes[nj]["y"]
+        L = np.hypot(xj - xi, yj - yi)
+        if L < 1e-6:
+            continue
+        c, s = (xj - xi) / L, (yj - yi) / L
+        EA, EI = el["E"] * el["A"], el["E"] * el["I"]
+        k_loc = np.array([
+            [EA/L, 0, 0, -EA/L, 0, 0],
+            [0, 12*EI/L**3, 6*EI/L**2, 0, -12*EI/L**3, 6*EI/L**2],
+            [0, 6*EI/L**2, 4*EI/L, 0, -6*EI/L**2, 2*EI/L],
+            [-EA/L, 0, 0, EA/L, 0, 0],
+            [0, -12*EI/L**3, -6*EI/L**2, 0, 12*EI/L**3, -6*EI/L**2],
+            [0, 6*EI/L**2, 2*EI/L, 0, -6*EI/L**2, 4*EI/L],
+        ])
+        T = np.array([
+            [c, s, 0, 0, 0, 0], [-s, c, 0, 0, 0, 0], [0, 0, 1, 0, 0, 0],
+            [0, 0, 0, c, s, 0], [0, 0, 0, -s, c, 0], [0, 0, 0, 0, 0, 1],
+        ])
+        k_glob = T.T @ k_loc @ T
+        dofs = [3*ni, 3*ni+1, 3*ni+2, 3*nj, 3*nj+1, 3*nj+2]
+        for r in range(6):
+            for col in range(6):
+                K[dofs[r], dofs[col]] += k_glob[r, col]
+
+    is_fixed = (support_type == "fixed")
+    boundary_dofs: list[int] = []
+    for sup_nid, flags in [(1, (True, True, is_fixed)), (4, (True, True, is_fixed))]:
+        i = node_idx[sup_nid]
+        if flags[0]: boundary_dofs.append(3*i)
+        if flags[1]: boundary_dofs.append(3*i+1)
+        if flags[2]: boundary_dofs.append(3*i+2)
+
+    return K, nodes, elements, boundary_dofs
+
+
 def run_fea_calculation(inputs: dict) -> dict:
     height = float(inputs.get("height", 4.0))
     span = float(inputs.get("span", 6.0))

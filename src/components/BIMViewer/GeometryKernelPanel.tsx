@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { geometryExtensionsAPI, type GeometryExtensionsStatus } from '../../services/geometryExtensionsAPI';
+import { CadEngineStatusIndicator } from './CadEngineStatus';
 
 export function GeometryKernelPanel() {
+  void CadEngineStatusIndicator;
   const [status, setStatus] = useState<GeometryExtensionsStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,6 +39,8 @@ export function GeometryKernelPanel() {
           value={status.engines.autocad_native ? 'Available' : 'Stub (build bridge)'}
         />
       </div>
+
+      <CadEngineStatusIndicator variant="panel" className="mb-4" />
 
       <h3 className="text-[10px] font-semibold text-gray-400 uppercase mb-2">Capabilities</h3>
       <ul className="text-[10px] text-gray-500 space-y-1 list-disc list-inside">

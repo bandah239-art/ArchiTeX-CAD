@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from calculations.utils.formatters import round_value, select_bar_diameter
-from calculations.utils.validators import validate_beam_inputs
+from calculations.utils.validators import validate_beam_inputs, variable_line_load
 
 # Eurocode 2 constants
 K_PRIME = 0.167  # Limit for no compression steel
@@ -64,7 +64,7 @@ def calculate_beam(inputs: dict[str, Any]) -> dict[str, Any]:
     span = inputs["span"]
     support = inputs.get("support_condition", "simply_supported")
     gk = inputs["dead_load"]
-    qk = inputs["imposed_load"]
+    qk = variable_line_load(inputs)
     b = inputs["width"]
     h = inputs["depth"]
     fck = inputs["fck"]

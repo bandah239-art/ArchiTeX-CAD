@@ -1,4 +1,5 @@
 import type { CalculatorFormProps } from '../CalculatorTypes';
+import { NumField } from '../FormElements';
 
 const LOAD_TYPES = [
   { value: 'udl', label: 'UDL (kN/m)' },
@@ -33,19 +34,6 @@ export function LoadCalculator({ inputs, onInputChange }: CalculatorFormProps) {
   );
 }
 
-function NumField({ label, value, onChange }: { label: string; value: unknown; onChange: (v: number) => void }) {
-  return (
-    <div>
-      <label className="block text-xs text-gray-400 mb-1">{label}</label>
-      <input
-        type="number"
-        value={value as number}
-        onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
-        className="w-full px-2 py-1.5 text-sm bg-infra-darker border border-infra-accent/40 rounded text-white focus:outline-none focus:border-infra-highlight/60"
-      />
-    </div>
-  );
-}
 
 function SelectField({
   label,

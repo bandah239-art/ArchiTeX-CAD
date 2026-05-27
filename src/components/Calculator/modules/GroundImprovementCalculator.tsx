@@ -1,6 +1,7 @@
 import { InputGroup } from '../InputGroup';
 import { Button } from '../../ui/Button';
 import { useCalculationStore } from '../../../store/calculationStore';
+import { GeoMorePanel } from '../../Geo/GeoMorePanel';
 interface GroundImprovementCalculatorProps {
   inputs: Record<string, unknown>;
   onInputChange: (key: string, value: unknown) => void;
@@ -55,6 +56,7 @@ export function GroundImprovementCalculator({ inputs, onInputChange }: GroundImp
       <Button onClick={() => void runCalculation()} disabled={isCalculating} className="w-full">
         {isCalculating ? 'Calculating...' : 'Design Stone Columns'}
       </Button>
+      <GeoMorePanel inputs={inputs} />
     </div>
   );
 }

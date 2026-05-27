@@ -1,6 +1,7 @@
 import { InputGroup } from '../InputGroup';
 import { Button } from '../../ui/Button';
 import { useCalculationStore } from '../../../store/calculationStore';
+import { WashSimulationPanel } from '../../WASH/WashSimulationPanel';
 
 interface WaterTowerCalculatorProps {
   inputs: Record<string, unknown>;
@@ -53,6 +54,7 @@ export function WaterTowerCalculator({ inputs, onInputChange }: WaterTowerCalcul
       <Button onClick={() => void runCalculation()} disabled={isCalculating} className="w-full">
         {isCalculating ? 'Calculating...' : 'Size Water Tower & Pump'}
       </Button>
+      <WashSimulationPanel inputs={inputs} />
     </div>
   );
 }

@@ -1,5 +1,7 @@
 import type { CalculatorFormProps } from '../CalculatorTypes';
 import type { RoadSubmodule } from '../../../types/calculations';
+import { NumField } from '../FormElements';
+import { RoadSimPanel } from '../../Road/RoadSimPanel';
 
 const ROAD_SUBMODULES: { id: RoadSubmodule; label: string }[] = [
   { id: 'pavement', label: 'Pavement Design' },
@@ -65,6 +67,7 @@ export function RoadCalculator({ inputs, onInputChange }: CalculatorFormProps) {
       {submodule === 'drainage' && <DrainageForm inputs={inputs} onInputChange={onInputChange} />}
       {submodule === 'geometric_design' && <GeometricDesignForm inputs={inputs} onInputChange={onInputChange} />}
       {submodule === 'traffic_load' && <TrafficLoadForm inputs={inputs} onInputChange={onInputChange} />}
+      <RoadSimPanel inputs={inputs} />
     </div>
   );
 }
@@ -127,19 +130,6 @@ function DrainageForm({ inputs, onInputChange }: CalculatorFormProps) {
   );
 }
 
-function NumField({ label, value, onChange }: { label: string; value: unknown; onChange: (v: number) => void }) {
-  return (
-    <div>
-      <label className="block text-xs text-gray-400 mb-1">{label}</label>
-      <input
-        type="number"
-        value={value as number}
-        onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
-        className="w-full px-2 py-1.5 text-sm bg-infra-darker border border-infra-accent/40 rounded text-white focus:outline-none focus:border-infra-highlight/60"
-      />
-    </div>
-  );
-}
 
 function TextField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   return (

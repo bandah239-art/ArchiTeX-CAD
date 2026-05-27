@@ -1,6 +1,7 @@
 import { InputGroup } from '../InputGroup';
 import { Button } from '../../ui/Button';
 import { useCalculationStore } from '../../../store/calculationStore';
+import { EnvPanel } from '../../Environment/EnvPanel';
 interface IrrigationCalculatorProps {
   inputs: Record<string, unknown>;
   onInputChange: (key: string, value: unknown) => void;
@@ -45,6 +46,7 @@ export function IrrigationCalculator({ inputs, onInputChange }: IrrigationCalcul
       <Button onClick={() => void runCalculation()} disabled={isCalculating} className="w-full">
         {isCalculating ? 'Calculating...' : 'Calculate Irrigation'}
       </Button>
+      <EnvPanel inputs={inputs} />
     </div>
   );
 }

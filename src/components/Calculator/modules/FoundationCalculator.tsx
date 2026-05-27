@@ -1,5 +1,7 @@
 import type { CalculatorFormProps } from '../CalculatorTypes';
 import { CONCRETE_GRADES, STEEL_GRADES } from '../CalculatorTypes';
+import { NumField } from '../FormElements';
+import { StructuralSimulationPanel } from '../../Structural/StructuralSimulationPanel';
 
 const FOUNDATION_TYPES = [
   { value: 'pad', label: 'Pad Foundation' },
@@ -35,23 +37,12 @@ export function FoundationCalculator({ inputs, onInputChange }: CalculatorFormPr
       <NumField label="Column Depth (mm)" value={inputs.column_depth ?? 300} onChange={(v) => onInputChange('column_depth', v)} />
       <SelectField label="Concrete Grade (fck)" value={String(inputs.fck ?? 25)} options={CONCRETE_GRADES} onChange={(v) => onInputChange('fck', v)} />
       <SelectField label="Steel Grade (fyk)" value={String(inputs.fyk ?? 500)} options={STEEL_GRADES} onChange={(v) => onInputChange('fyk', v)} />
+      
+      <StructuralSimulationPanel inputs={inputs} />
     </div>
   );
 }
 
-function NumField({ label, value, onChange }: { label: string; value: unknown; onChange: (v: number) => void }) {
-  return (
-    <div>
-      <label className="block text-xs text-gray-400 mb-1">{label}</label>
-      <input
-        type="number"
-        value={value as number}
-        onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
-        className="w-full px-2 py-1.5 text-sm bg-infra-darker border border-infra-accent/40 rounded text-white focus:outline-none focus:border-infra-highlight/60"
-      />
-    </div>
-  );
-}
 
 function SelectField({
   label,

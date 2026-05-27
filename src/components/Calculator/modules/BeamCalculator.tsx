@@ -6,21 +6,23 @@ import {
   DESIGN_CODES,
   SUPPORT_CONDITIONS,
 } from '../CalculatorTypes';
+import { StructuralSimulationPanel } from '../../Structural/StructuralSimulationPanel';
+import { NumField } from '../FormElements';
 
 export function BeamCalculator({ inputs, onInputChange }: CalculatorFormProps) {
   return (
     <div className="space-y-3">
-      <Field label="Span (m)" type="number" value={inputs.span ?? 6} onChange={(v) => onInputChange('span', v)} />
+      <NumField label="Span (m)" value={inputs.span ?? 6} onChange={(v) => onInputChange('span', v)} />
       <SelectField
         label="Support Condition"
         value={(inputs.support_condition as string) ?? 'simply_supported'}
         options={SUPPORT_CONDITIONS}
         onChange={(v) => onInputChange('support_condition', v)}
       />
-      <Field label="Dead Load (kN/m)" type="number" value={inputs.dead_load ?? 15} onChange={(v) => onInputChange('dead_load', v)} />
-      <Field label="Imposed Load (kN/m)" type="number" value={inputs.imposed_load ?? 10} onChange={(v) => onInputChange('imposed_load', v)} />
-      <Field label="Beam Width (mm)" type="number" value={inputs.width ?? 300} onChange={(v) => onInputChange('width', v)} />
-      <Field label="Beam Depth (mm)" type="number" value={inputs.depth ?? 500} onChange={(v) => onInputChange('depth', v)} />
+      <NumField label="Dead Load (kN/m)" value={inputs.dead_load ?? 15} onChange={(v) => onInputChange('dead_load', v)} />
+      <NumField label="Imposed Load (kN/m)" value={inputs.imposed_load ?? 10} onChange={(v) => onInputChange('imposed_load', v)} />
+      <NumField label="Beam Width (mm)" value={inputs.width ?? 300} onChange={(v) => onInputChange('width', v)} />
+      <NumField label="Beam Depth (mm)" value={inputs.depth ?? 500} onChange={(v) => onInputChange('depth', v)} />
       <SelectField
         label="Concrete Grade (fck)"
         value={String(inputs.fck ?? 30)}
@@ -45,33 +47,12 @@ export function BeamCalculator({ inputs, onInputChange }: CalculatorFormProps) {
         options={DESIGN_CODES.map((c) => ({ value: c, label: c }))}
         onChange={(v) => onInputChange('design_code', v)}
       />
+
+      <StructuralSimulationPanel inputs={inputs} />
     </div>
   );
 }
 
-function Field({
-  label,
-  type,
-  value,
-  onChange,
-}: {
-  label: string;
-  type: string;
-  value: unknown;
-  onChange: (v: number) => void;
-}) {
-  return (
-    <div>
-      <label className="block text-xs text-gray-400 mb-1">{label}</label>
-      <input
-        type={type}
-        value={value as number}
-        onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
-        className="w-full px-2 py-1.5 text-sm bg-infra-darker border border-infra-accent/40 rounded text-white focus:outline-none focus:border-infra-highlight/60"
-      />
-    </div>
-  );
-}
 
 function SelectField({
   label,

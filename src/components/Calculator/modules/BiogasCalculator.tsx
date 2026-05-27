@@ -1,6 +1,7 @@
 import { InputGroup } from '../InputGroup';
 import { Button } from '../../ui/Button';
 import { useCalculationStore } from '../../../store/calculationStore';
+import { EnergyExtendedPanel } from '../../Energy/EnergyExtendedPanel';
 interface BiogasCalculatorProps {
   inputs: Record<string, unknown>;
   onInputChange: (key: string, value: unknown) => void;
@@ -45,6 +46,7 @@ export function BiogasCalculator({ inputs, onInputChange }: BiogasCalculatorProp
       <Button onClick={() => void runCalculation()} disabled={isCalculating} className="w-full">
         {isCalculating ? 'Calculating...' : 'Size Biogas Digester'}
       </Button>
+      <EnergyExtendedPanel inputs={inputs} />
     </div>
   );
 }

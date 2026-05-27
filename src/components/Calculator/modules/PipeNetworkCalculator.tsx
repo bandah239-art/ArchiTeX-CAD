@@ -2,6 +2,7 @@ import { InputGroup } from '../InputGroup';
 import { Button } from '../../ui/Button';
 import { useCalculationStore } from '../../../store/calculationStore';
 import type { CalculatorFormProps } from '../CalculatorTypes';
+import { WashSimulationPanel } from '../../WASH/WashSimulationPanel';
 
 /** Hazen–Williams pipe sizing (EPANET-style) via /wash/epanet. */
 export function PipeNetworkCalculator({ inputs, onInputChange }: CalculatorFormProps) {
@@ -53,6 +54,7 @@ export function PipeNetworkCalculator({ inputs, onInputChange }: CalculatorFormP
       <Button onClick={() => runCalculation()} disabled={isCalculating} className="w-full">
         {isCalculating ? 'Calculating...' : 'CALCULATE PIPE SIZE'}
       </Button>
+      <WashSimulationPanel inputs={inputs} />
     </div>
   );
 }
