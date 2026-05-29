@@ -198,11 +198,19 @@ def calculate_loads(inputs: dict[str, Any]) -> dict[str, Any]:
         }
     ]
 
+    uls_rows = gen["uls_combinations"]
+    combo_1 = uls_rows[0]["result"] if len(uls_rows) > 0 else 0
+    combo_2 = uls_rows[1]["result"] if len(uls_rows) > 1 else 0
+    combo_3 = uls_rows[2]["result"] if len(uls_rows) > 2 else 0
+
     return {
         "status": "pass",
         "summary": {
             "governing_uls_kn": gov["value"],
             "governing_combination": f"Combo {gov['combo']}",
+            "combo_1_gravity": combo_1,
+            "combo_2_wind_unfav": combo_2,
+            "combo_3_wind_fav": combo_3,
             "sls_characteristic": sls_char["result"] if sls_char else 0,
             "sls_frequent": sls_freq["result"] if sls_freq else 0,
             "sls_quasi_permanent": sls_qp["result"] if sls_qp else 0,

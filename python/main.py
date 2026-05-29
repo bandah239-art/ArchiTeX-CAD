@@ -186,6 +186,10 @@ from calculations.fea.modal_analysis import run_modal_analysis
 from calculations.seismic.response_spectrum import run_seismic_spectrum, modal_seismic_response
 from calculations.structural.crack_width import run_crack_width
 from calculations.structural.winkler import run_winkler
+from calculations.structural.fire_and_anchorage import (
+    check_beam_fire, check_slab_fire, check_column_fire,
+    anchorage_length, lap_length,
+)
 from calculations.wash.water_hammer import run_water_hammer
 from calculations.circuit.spice_solver import solve_dc, solve_ac_sweep, solve_transient
 from calculations.wind.panel_method import run_panel_cfd, building_shapes
@@ -904,6 +908,8 @@ class BoreholeInput(BaseModel):
     friction_losses_m: float = 5
     residual_pressure_m: float = 15
     country: str = "Zambia"
+    daily_demand_m3: float | None = None
+    aquifer_yield_lps: float | None = None
 
 
 class SewerDesignInput(BaseModel):
@@ -1052,70 +1058,70 @@ def health():
 def wash_water_demand_endpoint(inputs: WashDemandInput):
     try:
         return wrap_calculation_result(calculate_water_demand(inputs.model_dump()))
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/wash/pipe-network")
 def wash_pipe_network_endpoint(inputs: PipeNetworkInput):
     try:
         return wrap_calculation_result(analyze_pipe_network(inputs.model_dump()))
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/wash/sewer-design")
 def wash_sewer_design_endpoint(inputs: SewerDesignInput):
     try:
         return wrap_calculation_result(calculate_sewer_design(inputs.model_dump()))
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/wash/borehole")
 def wash_borehole_endpoint(inputs: BoreholeInput):
     try:
         return wrap_calculation_result(calculate_borehole(inputs.model_dump()))
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/wash/treatment-plant")
 def wash_treatment_plant_endpoint(inputs: TreatmentPlantInput):
     try:
         return wrap_calculation_result(calculate_treatment_plant(inputs.model_dump()))
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/geo/bearing-capacity")
 def geo_bearing_capacity_endpoint(inputs: GeoBearingCapacityInput):
     try:
         return wrap_calculation_result(calculate_bearing_capacity(inputs.model_dump()))
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/geo/settlement")
 def geo_settlement_endpoint(inputs: GeoSettlementInput):
     try:
         return wrap_calculation_result(calculate_settlement(inputs.model_dump()))
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/geo/slope-stability")
 def geo_slope_stability_endpoint(inputs: GeoSlopeStabilityInput):
     try:
         return wrap_calculation_result(calculate_slope_stability(inputs.model_dump()))
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/geo/site-classification")
 def geo_site_classification_endpoint(inputs: GeoSiteClassificationInput):
     try:
         return wrap_calculation_result(calculate_site_classification(inputs.model_dump()))
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/calculate/fea")
 def calculate_fea_endpoint(inputs: FeaInputs):
     try:
         return wrap_calculation_result(run_fea_calculation(inputs.model_dump()))
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -1284,14 +1290,14 @@ def calculate_foundation_endpoint(inputs: FoundationInputs):
         except Exception:
             pass
         return result
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/calculate/bearing")
 def calculate_bearing_endpoint(inputs: BearingInputs):
     try:
         return wrap_calculation_result(calculate_bearing(inputs.model_dump()))
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -1299,7 +1305,7 @@ def calculate_bearing_endpoint(inputs: BearingInputs):
 def calculate_steel_endpoint(inputs: SteelInputs):
     try:
         return wrap_calculation_result(calculate_steel_beam(inputs.model_dump()))
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -1307,7 +1313,7 @@ def calculate_steel_endpoint(inputs: SteelInputs):
 def calculate_timber_endpoint(inputs: TimberInputs):
     try:
         return wrap_calculation_result(calculate_timber_beam(inputs.model_dump()))
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -1315,7 +1321,7 @@ def calculate_timber_endpoint(inputs: TimberInputs):
 def materials_recommend_endpoint(inputs: MaterialSelectorInputs):
     try:
         return recommend_material(inputs.model_dump())
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/vision/process-image")
@@ -1361,7 +1367,7 @@ def vision_generate_report(inputs: dict):
 def calculate_loads_endpoint(inputs: LoadInputs):
     try:
         return wrap_calculation_result(calculate_loads(inputs.model_dump()))
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -1371,7 +1377,7 @@ def calculate_load_combinations_endpoint(inputs: LoadCombinationsInput):
         # Return raw format — frontend LoadCombinations component reads
         # governing_uls, governing_sls, feed_to_calculators directly
         return generate_load_combinations(inputs.model_dump())
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -1422,7 +1428,7 @@ class PressurePayload(BaseModel):
 def _pressure_endpoint(fn, inputs: PressurePayload):
     try:
         return wrap_calculation_result(fn(inputs.model_dump()))
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -1485,7 +1491,7 @@ def pressure_tank(inputs: PressurePayload):
 def calculate_wind_endpoint(inputs: WindInputs):
     try:
         return wrap_calculation_result(calculate_wind_loads(inputs.model_dump()))
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -1493,7 +1499,7 @@ def calculate_wind_endpoint(inputs: WindInputs):
 def calculate_carbon_endpoint(inputs: CarbonInputs):
     try:
         return wrap_calculation_result(calculate_construction_carbon(inputs.model_dump()))
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -1501,7 +1507,7 @@ def calculate_carbon_endpoint(inputs: CarbonInputs):
 def calculate_carbon_credits_endpoint(inputs: CarbonCreditInputs):
     try:
         return wrap_calculation_result(calculate_carbon_credits(inputs.model_dump()))
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -1509,7 +1515,7 @@ def calculate_carbon_credits_endpoint(inputs: CarbonCreditInputs):
 def simulate_flood_endpoint(inputs: FloodInputs):
     try:
         return simulate_flood_inundation(inputs.model_dump())
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -1517,7 +1523,7 @@ def simulate_flood_endpoint(inputs: FloodInputs):
 def bim_export_ifc(inputs: IfcExportInput):
     try:
         return export_ifc_from_elements(inputs.model_dump())
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -1525,28 +1531,28 @@ def bim_export_ifc(inputs: IfcExportInput):
 def calculate_pavement_endpoint(inputs: PavementInputs):
     try:
         return wrap_calculation_result(calculate_pavement(inputs.model_dump()))
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/calculate/road/drainage")
 def calculate_drainage_endpoint(inputs: DrainageInputs):
     try:
         return wrap_calculation_result(calculate_drainage(inputs.model_dump()))
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/roads/geometric-design")
 def calculate_geometric_design_endpoint(inputs: GeometricDesignInputs):
     try:
         return wrap_calculation_result(calculate_geometric_design(inputs.model_dump()))
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/roads/traffic-load")
 def calculate_traffic_load_endpoint(inputs: TrafficLoadInputs):
     try:
         return wrap_calculation_result(calculate_traffic_load(inputs.model_dump()))
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -1554,7 +1560,7 @@ def calculate_traffic_load_endpoint(inputs: TrafficLoadInputs):
 def boq_extract_quantities(inputs: ExtractQuantitiesInput):
     try:
         return extract_quantities(inputs.model_dump())
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -1562,7 +1568,7 @@ def boq_extract_quantities(inputs: ExtractQuantitiesInput):
 def boq_compile(inputs: BoQCompileInput):
     try:
         return compile_boq(inputs.model_dump())
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -1605,7 +1611,7 @@ def boq_zambia_rates():
 def geo_site_analysis(inputs: GeoSiteInput):
     try:
         return run_site_analysis(inputs.model_dump())
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -1613,7 +1619,7 @@ def geo_site_analysis(inputs: GeoSiteInput):
 def geo_geocode(inputs: GeoGeocodeInput):
     try:
         return {"results": geocode_search(inputs.query)}
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -1621,7 +1627,7 @@ def geo_geocode(inputs: GeoGeocodeInput):
 def geo_reverse_geocode(inputs: GeoReverseInput):
     try:
         return reverse_geocode(inputs.latitude, inputs.longitude)
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -1629,7 +1635,7 @@ def geo_reverse_geocode(inputs: GeoReverseInput):
 def geo_site_budget(inputs: GeoSiteBudgetInput):
     try:
         return compute_site_budget(inputs.model_dump())
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -1637,7 +1643,7 @@ def geo_site_budget(inputs: GeoSiteBudgetInput):
 def geo_terrain(inputs: GeoTerrainInput):
     try:
         return analyse_terrain(inputs.model_dump())
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -1645,7 +1651,7 @@ def geo_terrain(inputs: GeoTerrainInput):
 def geo_soil(inputs: GeoSoilInput):
     try:
         return analyse_soil(inputs.model_dump())
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -1653,7 +1659,7 @@ def geo_soil(inputs: GeoSoilInput):
 def geo_climate(inputs: GeoClimateInput):
     try:
         return analyse_climate(inputs.model_dump())
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -1661,7 +1667,7 @@ def geo_climate(inputs: GeoClimateInput):
 def geo_seismic(inputs: GeoSeismicInput):
     try:
         return analyse_seismic(inputs.model_dump())
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -1669,7 +1675,7 @@ def geo_seismic(inputs: GeoSeismicInput):
 def geo_site_report(inputs: GeoReportInput):
     try:
         return generate_site_report(inputs.model_dump())
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -1687,7 +1693,7 @@ def geo_cache_clear():
 def boq_extract_from_bim(inputs: BimExtractInput):
     try:
         return extract_from_bim(inputs.model_dump())
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -1768,7 +1774,7 @@ def bim_parse_ifc_path(inputs: BimParsePathInput):
         return result
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -1780,7 +1786,7 @@ async def bim_parse_ifc_upload(file: UploadFile = File(...)):
         if result.get("status") == "error":
             raise HTTPException(status_code=503, detail=result.get("error", "Parse failed"))
         return result
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -1821,7 +1827,7 @@ def bim_geometry_boolean(inputs: GeometryBooleanInput):
         if result.get("status") == "error":
             raise HTTPException(status_code=400, detail=result.get("error", "Boolean failed"))
         return result
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -1834,7 +1840,7 @@ def bim_plan_takeoff(inputs: BimParsePathInput):
         return result
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -1842,7 +1848,7 @@ def bim_plan_takeoff(inputs: BimParsePathInput):
 def bim_geometry_intersection(inputs: GeometryBooleanInput):
     try:
         return mesh_intersection_volume(inputs.model_dump())
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -1892,7 +1898,7 @@ def ai_chat(req: ChatRequest):
 def ai_generate_design(inputs: AiDesignInput):
     try:
         return generate_design(inputs.model_dump())
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -1900,7 +1906,7 @@ def ai_generate_design(inputs: AiDesignInput):
 def ai_generate_variants(inputs: AiVariantInput):
     try:
         return generate_variants(inputs.model_dump())
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -1908,7 +1914,7 @@ def ai_generate_variants(inputs: AiVariantInput):
 def ai_push_to_calculators(inputs: AiPushInput):
     try:
         return push_to_calculators(inputs.model_dump())
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -1916,7 +1922,7 @@ def ai_push_to_calculators(inputs: AiPushInput):
 def ai_generate_proposal(inputs: AiProposalInput):
     try:
         return generate_proposal(inputs.model_dump())
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -1924,7 +1930,7 @@ def ai_generate_proposal(inputs: AiProposalInput):
 def re_value_plot(inputs: PlotValuationInput):
     try:
         return value_plot(inputs.model_dump())
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -1932,7 +1938,7 @@ def re_value_plot(inputs: PlotValuationInput):
 def re_feasibility(inputs: FeasibilityInput):
     try:
         return run_feasibility(inputs.model_dump())
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -1940,7 +1946,7 @@ def re_feasibility(inputs: FeasibilityInput):
 def re_optimise_use(inputs: LandUseInput):
     try:
         return optimise_land_use(inputs.model_dump())
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -1948,7 +1954,7 @@ def re_optimise_use(inputs: LandUseInput):
 def re_mortgage(inputs: MortgageInput):
     try:
         return wrap_calculation_result(calculate_mortgage(inputs.model_dump()))
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -1957,7 +1963,7 @@ def gov_portfolio_summary():
     init_db()
     try:
         return portfolio_summary()
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -1970,7 +1976,7 @@ def gov_seed_projects():
 def gov_create_project(inputs: GovProjectInput):
     try:
         return create_project(inputs.model_dump())
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -1989,7 +1995,7 @@ def gov_get_project(project_id: str):
         return result
     except HTTPException:
         raise
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -2002,7 +2008,7 @@ def gov_update_project(project_id: str, inputs: GovProjectInput):
         return result
     except HTTPException:
         raise
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -2010,7 +2016,7 @@ def gov_update_project(project_id: str, inputs: GovProjectInput):
 def gov_add_snapshot(project_id: str, inputs: GovSnapshotInput):
     try:
         return add_snapshot(project_id, inputs.model_dump())
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -2018,7 +2024,7 @@ def gov_add_snapshot(project_id: str, inputs: GovSnapshotInput):
 def gov_add_variation(project_id: str, inputs: GovVariationInput):
     try:
         return add_variation(project_id, inputs.model_dump())
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -2026,7 +2032,7 @@ def gov_add_variation(project_id: str, inputs: GovVariationInput):
 def gov_certificate(project_id: str, inputs: GovCertificateInput):
     try:
         return generate_certificate(project_id, inputs.model_dump())
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -2034,7 +2040,7 @@ def gov_certificate(project_id: str, inputs: GovCertificateInput):
 def gov_timeline(project_id: str):
     try:
         return generate_s_curve(project_id)
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -2042,7 +2048,7 @@ def gov_timeline(project_id: str):
 def gov_cashflow(project_id: str):
     try:
         return cashflow_projection(project_id)
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -2050,7 +2056,7 @@ def gov_cashflow(project_id: str):
 def gov_report(report_type: str, inputs: GovReportInput):
     try:
         return generate_report(report_type, inputs.model_dump())
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -2058,7 +2064,7 @@ def gov_report(report_type: str, inputs: GovReportInput):
 def doc_tender(inputs: TenderInput):
     try:
         return generate_tender(inputs.model_dump())
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -2066,7 +2072,7 @@ def doc_tender(inputs: TenderInput):
 def doc_calc_report(inputs: CalcReportInput):
     try:
         return generate_calculation_report(inputs.model_dump())
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -2074,7 +2080,7 @@ def doc_calc_report(inputs: CalcReportInput):
 def doc_eia(inputs: EiaScreeningInput):
     try:
         return screen_eia(inputs.model_dump())
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -2089,7 +2095,7 @@ def mobile_quick_calc(inputs: MobileQuickCalcInput):
         if d["calc_type"] == "beam":
             return quick_beam_check(d["span_m"], d["depth_mm"])
         raise ValueError(f"Unknown calc_type: {d['calc_type']}")
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -2099,7 +2105,7 @@ def sync_receive(inputs: SyncReceiveInput):
         payload = inputs.model_dump()
         payload.update(payload.pop("data", {}))
         return receive_sync_item(payload)
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -2114,7 +2120,7 @@ def sync_items():
 def wash_demand(inputs: WashDemandInput):
     try:
         return wrap_calculation_result(calculate_water_demand(inputs.model_dump()))
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -2122,7 +2128,7 @@ def wash_demand(inputs: WashDemandInput):
 def wash_borehole(inputs: BoreholeInput):
     try:
         return wrap_calculation_result(calculate_borehole(inputs.model_dump()))
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -2130,7 +2136,7 @@ def wash_borehole(inputs: BoreholeInput):
 def wash_sewerage(inputs: SewerDesignInput):
     try:
         return wrap_calculation_result(calculate_sewer_design(inputs.model_dump()))
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -2138,7 +2144,7 @@ def wash_sewerage(inputs: SewerDesignInput):
 def energy_solar(inputs: SolarPvInput):
     try:
         return wrap_calculation_result(calculate_solar_pv(inputs.model_dump()))
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -2146,7 +2152,7 @@ def energy_solar(inputs: SolarPvInput):
 def energy_battery(inputs: BatteryInput):
     try:
         return wrap_calculation_result(calculate_battery(inputs.model_dump()))
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -2191,7 +2197,7 @@ async def collab_websocket(websocket: WebSocket, project_id: str, user_id: str):
 def twin_register(inputs: TwinAssetInput):
     try:
         return register_asset(inputs.model_dump())
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -2215,7 +2221,7 @@ def twin_get_asset(asset_id: str):
 def twin_ingest(inputs: SensorReadingInput):
     try:
         return ingest_reading(inputs.model_dump())
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -2242,7 +2248,7 @@ def twin_seed():
 def schedule_build_from_bim(inputs: ScheduleBuildInput):
     try:
         return build_schedule_from_bim(inputs.model_dump())
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -2251,7 +2257,7 @@ def schedule_build_from_bim(inputs: ScheduleBuildInput):
 def optimize_structural_endpoint(inputs: OptimizerInput):
     try:
         return optimize_structural_layout(inputs.model_dump())
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -2259,7 +2265,7 @@ def optimize_structural_endpoint(inputs: OptimizerInput):
 def optimize_solar_endpoint(inputs: SolarOptimizerInput):
     try:
         return optimize_solar_orientation(inputs.model_dump())
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -2268,7 +2274,7 @@ def optimize_solar_endpoint(inputs: SolarOptimizerInput):
 def sync_batch_endpoint(inputs: SyncBatchInput):
     try:
         return process_sync_batch(inputs.model_dump())
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -2298,7 +2304,7 @@ def project_meta_save(inputs: ProjectMetaInput):
 def documents_esg_report(inputs: EsgReportInput):
     try:
         return generate_esg_report(inputs.model_dump())
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -2348,7 +2354,7 @@ def emerging_ar(inputs: EmergingInput):
 def simulate_thermal_endpoint(inputs: EmergingInput):
     try:
         return simulate_thermal(inputs.payload)
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -2356,7 +2362,7 @@ def simulate_thermal_endpoint(inputs: EmergingInput):
 def simulate_seismic_endpoint(inputs: SeismicAnalysisInput):
     try:
         return simulate_seismic_response(inputs.model_dump())
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 class GenerativeBIMRequest(BaseModel):
@@ -3233,6 +3239,59 @@ def compare_boq(req: BoQVerifyRequest):
         "audit_hash": audit_hash,
         "tolerance_pct": req.tolerance_pct,
     }
+
+
+# ---------------------------------------------------------------------------
+# Fire Resistance & Anchorage (BS 8110)
+# ---------------------------------------------------------------------------
+
+class FireAnchorageRequest(BaseModel):
+    check_type: str = Field("beam", pattern="^(beam|slab|column)$")
+    cover_mm: float = Field(30.0, ge=0)
+    b_mm: float = Field(250.0, gt=0)
+    h_mm: float = Field(450.0, gt=0)
+    fire_period_hours: float = Field(1.0, gt=0)
+    support_condition: str = Field("simply_supported")
+    bar_dia_mm: float = Field(16.0, gt=0)
+    fy_mpa: float = Field(460.0, gt=0)
+    fcu_mpa: float = Field(25.0, gt=0)
+    zone: str = Field("tension", pattern="^(tension|compression)$")
+
+@app.post("/structural/fire-anchorage")
+def structural_fire_anchorage(req: FireAnchorageRequest):
+    try:
+        if req.check_type == "beam":
+            status, msg, req_cover, req_dim = check_beam_fire(
+                req.cover_mm, req.b_mm, req.fire_period_hours, req.support_condition
+            )
+        elif req.check_type == "slab":
+            status, msg, req_cover, req_dim = check_slab_fire(
+                req.cover_mm, req.b_mm, req.fire_period_hours, req.support_condition
+            )
+        else:
+            status, msg, req_cover, req_dim = check_column_fire(
+                req.cover_mm, req.b_mm, req.h_mm, req.fire_period_hours
+            )
+
+        la_t = anchorage_length(req.bar_dia_mm, req.fy_mpa, req.fcu_mpa, "tension")
+        la_c = anchorage_length(req.bar_dia_mm, req.fy_mpa, req.fcu_mpa, "compression")
+        ll_t = lap_length(req.bar_dia_mm, req.fy_mpa, req.fcu_mpa, "tension")
+        ll_c = lap_length(req.bar_dia_mm, req.fy_mpa, req.fcu_mpa, "compression")
+
+        return {
+            "fire_check": {
+                "status": status,
+                "message": msg,
+                "req_cover": req_cover,
+                "req_dimension": req_dim,
+            },
+            "anchorage_tension_mm": round(la_t, 1),
+            "anchorage_compression_mm": round(la_c, 1),
+            "lap_tension_mm": round(ll_t, 1),
+            "lap_compression_mm": round(ll_c, 1),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 if __name__ == "__main__":

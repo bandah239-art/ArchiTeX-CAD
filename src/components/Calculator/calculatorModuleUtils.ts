@@ -34,4 +34,9 @@ export const MODULES_WITH_INLINE_CALCULATE: CalculationModule[] = [
   'crack_width',
   'water_hammer',
   'winkler',
+  'fire_anchorage',
+  'load_takedown',
+  'boq_verifier',
+  'zambia_site',
+  'eiz_memo',
 ];

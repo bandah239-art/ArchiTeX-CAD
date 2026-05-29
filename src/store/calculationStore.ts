@@ -469,6 +469,22 @@ const DEFAULT_INPUTS: Record<CalculationModule, Record<string, unknown>> = {
     },
     project_id: 'default',
   },
+  fire_anchorage: {
+    check_type: 'beam',
+    cover_mm: 30,
+    b_mm: 250,
+    h_mm: 450,
+    fire_period_hours: 1.0,
+    support_condition: 'simply_supported',
+    bar_dia_mm: 16,
+    fy_mpa: 460,
+    fcu_mpa: 25,
+    zone: 'tension',
+  },
+  load_takedown: {},
+  boq_verifier: {},
+  zambia_site: { latitude: -15.4167, longitude: 28.2833 },
+  eiz_memo: {},
 };
 
 function asCalculationResult(raw: unknown, fallbackTitle: string): CalculationResult {

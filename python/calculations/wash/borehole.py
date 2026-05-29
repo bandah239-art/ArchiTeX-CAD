@@ -59,6 +59,22 @@ def calculate_borehole(inputs: dict[str, Any]) -> dict[str, Any]:
         warnings.append(f"Drawdown ({drawdown_m:.1f}m) exceeds 80% of aquifer thickness ({max_allowable_drawdown:.1f}m)")
         status = "warning"
 
+    daily_demand = inputs.get("daily_demand_m3")
+    aquifer_yield_lps = inputs.get("aquifer_yield_lps")
+    
+    if daily_demand is not None:
+        daily_demand = float(daily_demand)
+    else:
+        daily_demand = 50.0
+
+    if aquifer_yield_lps is not None:
+        aquifer_yield_lps = float(aquifer_yield_lps)
+    else:
+        aquifer_yield_lps = 3.0
+
+    aquifer_yield_m3d = aquifer_yield_lps * 86.4
+    adequate_yield = aquifer_yield_m3d >= daily_demand
+
     return {
         "status": status,
         "summary": {
@@ -68,6 +84,7 @@ def calculate_borehole(inputs: dict[str, Any]) -> dict[str, Any]:
             "drawdown_m": round_value(drawdown_m, 2),
             "specific_capacity_m3d_m": round_value(specific_capacity, 2),
             "total_dynamic_head_m": round_value(tdh, 2),
+            "adequate_yield": adequate_yield,
         },
         "steps": [
             {

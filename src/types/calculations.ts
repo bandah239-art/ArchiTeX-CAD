@@ -201,7 +201,12 @@ export type CalculationModule =
   | 'water_hammer'
   | 'winkler'
   | 'masonry'
-  | 'black_cotton';
+  | 'black_cotton'
+  | 'fire_anchorage'
+  | 'load_takedown'
+  | 'boq_verifier'
+  | 'zambia_site'
+  | 'eiz_memo';
 
 export type RoadSubmodule = 'pavement' | 'drainage' | 'geometric_design' | 'traffic_load';
 

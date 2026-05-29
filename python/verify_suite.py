@@ -8,8 +8,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from calculations.structural.foundation import calculate_foundation
 from calculations.loads.load_combinations import calculate_loads
-from calculations.civil.pavement import calculate_pavement
-from calculations.civil.drainage import calculate_drainage
+from calculations.roads.flexible_pavement import calculate_pavement
+from calculations.roads.hydrology import calculate_drainage
 
 
 def run_foundation():

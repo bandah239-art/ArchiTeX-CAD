@@ -43,6 +43,11 @@ import { WaterHammerCalculator } from './modules/WaterHammerCalculator';
 import { WinklerCalculator } from './modules/WinklerCalculator';
 import { MasonryCalculator } from './modules/MasonryCalculator';
 import { BlackCottonCalculator } from './modules/BlackCottonCalculator';
+import { FireAnchorageCalculator } from './modules/FireAnchorageCalculator';
+import { LoadTakedownCalculator } from './modules/LoadTakedownCalculator';
+import { BoQVerifierCalculator } from './modules/BoQVerifierCalculator';
+import { ZambiaSiteCalculator } from './modules/ZambiaSiteCalculator';
+import { EIZMemoCalculator } from './modules/EIZMemoCalculator';
 import { MODULES_WITH_INLINE_CALCULATE } from './calculatorModuleUtils';
 import { ResultsDisplay, PressureBearingSection } from './ResultsDisplay';
 import { PressurePanel } from './pressure/PressurePanel';
@@ -100,9 +105,13 @@ const MODULES_BY_CATEGORY: Record<CalcCategory, { id: CalculationModule; label: 
     { id: 'fea',               label: 'FEA Analysis'        },
     { id: 'crack_width',       label: 'Crack Width'         },
     { id: 'winkler',           label: 'Winkler Foundation'  },
+    { id: 'fire_anchorage',    label: 'Fire & Anchorage'    },
+    { id: 'load_takedown',     label: 'Load Takedown'       },
     { id: 'road',              label: 'Road / Pavement'     },
     { id: 'pressure',          label: 'Pressure Diagrams'   },
     { id: 'materials',         label: 'Materials Library'   },
+    { id: 'boq_verifier',      label: 'BoQ Verifier'        },
+    { id: 'eiz_memo',          label: 'EIZ Memo Export'     },
   ],
   electrical: [
     { id: 'energy_bess',         label: 'Solar & BESS'          },
@@ -136,6 +145,7 @@ const MODULES_BY_CATEGORY: Record<CalcCategory, { id: CalculationModule; label: 
     { id: 'geo_tunneling',          label: 'Tunneling / RMR'       },
     { id: 'seismic',                label: 'Seismic Analysis EC8'  },
     { id: 'black_cotton',           label: 'Black Cotton Soil'     },
+    { id: 'zambia_site',            label: 'Zambia Site Data'      },
   ],
 };
 
@@ -218,6 +228,11 @@ export function CalculatorPanel() {
       case 'winkler':                return <WinklerCalculator {...props} />;
       case 'masonry':                return <MasonryCalculator {...props} />;
       case 'black_cotton':           return <BlackCottonCalculator {...props} />;
+      case 'fire_anchorage':         return <FireAnchorageCalculator />;
+      case 'load_takedown':          return <LoadTakedownCalculator />;
+      case 'boq_verifier':           return <BoQVerifierCalculator />;
+      case 'zambia_site':            return <ZambiaSiteCalculator />;
+      case 'eiz_memo':               return <EIZMemoCalculator />;
       default:                       return null;
     }
   };
