@@ -1,23 +1,469 @@
 import { useEffect, useState } from 'react';
 import { emergingAPI } from '../../services/emergingAPI';
 
+const inputCls = 'px-2 py-1.5 text-xs bg-infra-darker border border-infra-accent/40 rounded text-white w-full';
+const labelCls = 'block text-gray-400 mb-0.5';
+const btnCls = 'w-full py-2 bg-infra-highlight text-white text-xs font-bold rounded uppercase tracking-wider disabled:opacity-50';
+const sectionCls = 'bg-infra-darker/60 rounded border border-infra-accent/20 overflow-hidden';
+const summaryBaseCls = 'flex items-center justify-between px-3 py-2 cursor-pointer select-none text-gray-300 font-semibold text-xs uppercase tracking-wide hover:text-white';
+const resultsCls = 'p-2 bg-black/30 rounded text-[10px] text-gray-300 overflow-x-auto whitespace-pre-wrap break-words';
+
+function SectionHeader({ label, open }: { label: string; open: boolean }) {
+  return (
+    <div className={summaryBaseCls}>
+      <span>{label}</span>
+      <span className="text-infra-accent/60">{open ? '▲' : '▼'}</span>
+    </div>
+  );
+}
+
+function Toggle({ label, children }: { label: string; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className={sectionCls}>
+      <button type="button" className="w-full text-left" onClick={() => setOpen(o => !o)}>
+        <SectionHeader label={label} open={open} />
+      </button>
+      {open && <div className="px-3 pb-3 pt-1 space-y-2">{children}</div>}
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className={`${labelCls} text-xs`}>{label}</label>
+      {children}
+    </div>
+  );
+}
+
+function ResultBox({ data }: { data: Record<string, unknown> | null }) {
+  if (!data) return null;
+  return <pre className={resultsCls}>{JSON.stringify(data, null, 2)}</pre>;
+}
+
+function ErrorMsg({ msg }: { msg: string | null }) {
+  if (!msg) return null;
+  return <p className="text-red-400 text-[10px] mt-1">{msg}</p>;
+}
+
+function ThermalSection() {
+  const [floor_area_m2, setFloorArea] = useState('150');
+  const [u_wall, setUWall] = useState('0.35');
+  const [u_roof, setURoof] = useState('0.25');
+  const [u_floor, setUFloor] = useState('0.45');
+  const [glazing_ratio, setGlazing] = useState('0.3');
+  const [location, setLocation] = useState('Lusaka');
+  const [occupancy, setOccupancy] = useState('residential');
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<Record<string, unknown> | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const run = async () => {
+    setLoading(true); setErr(null);
+    try {
+      const r = await emergingAPI.thermal({ floor_area_m2: +floor_area_m2, u_wall: +u_wall, u_roof: +u_roof, u_floor: +u_floor, glazing_ratio: +glazing_ratio, location, occupancy });
+      setResult(r);
+    } catch (e: unknown) { setErr(e instanceof Error ? e.message : String(e)); }
+    finally { setLoading(false); }
+  };
+
+  const keys = ['annual_heating_kwh', 'annual_cooling_kwh', 'peak_load_kw', 'energy_label', 'eui_kwh_m2'];
+  const display = result ? Object.fromEntries(keys.filter(k => k in result).map(k => [k, result[k]])) : null;
+
+  return (
+    <Toggle label="Thermal Building Simulation">
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Floor area (m²)"><input type="number" value={floor_area_m2} onChange={e => setFloorArea(e.target.value)} className={inputCls} /></Field>
+        <Field label="Wall U-value (W/m²K)"><input type="number" step="0.01" value={u_wall} onChange={e => setUWall(e.target.value)} className={inputCls} /></Field>
+        <Field label="Roof U-value"><input type="number" step="0.01" value={u_roof} onChange={e => setURoof(e.target.value)} className={inputCls} /></Field>
+        <Field label="Floor U-value"><input type="number" step="0.01" value={u_floor} onChange={e => setUFloor(e.target.value)} className={inputCls} /></Field>
+        <Field label="Glazing ratio"><input type="number" step="0.01" value={glazing_ratio} onChange={e => setGlazing(e.target.value)} className={inputCls} /></Field>
+        <Field label="Location"><input type="text" value={location} onChange={e => setLocation(e.target.value)} className={inputCls} /></Field>
+        <Field label="Occupancy">
+          <select value={occupancy} onChange={e => setOccupancy(e.target.value)} className={inputCls}>
+            <option value="residential">Residential</option>
+            <option value="office">Office</option>
+            <option value="school">School</option>
+          </select>
+        </Field>
+      </div>
+      <button type="button" onClick={run} disabled={loading} className={btnCls}>{loading ? 'Simulating…' : 'Run Thermal Simulation'}</button>
+      <ErrorMsg msg={err} />
+      {display && (
+        <div className="grid grid-cols-2 gap-1 mt-1">
+          {Object.entries(display).map(([k, v]) => (
+            <div key={k} className="flex justify-between bg-black/20 rounded px-2 py-1">
+              <span className="text-gray-400 text-[10px]">{k.replace(/_/g, ' ')}</span>
+              <span className="text-emerald-400 text-[10px] font-bold">{String(v)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </Toggle>
+  );
+}
+
+function DisasterSection() {
+  const [disaster_type, setType] = useState('flood');
+  const [affected_population, setPop] = useState('5000');
+  const [location, setLoc] = useState('Lusaka');
+  const [infrastructure_type, setInfra] = useState('all');
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<Record<string, unknown> | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const run = async () => {
+    setLoading(true); setErr(null);
+    try {
+      const r = await emergingAPI.disaster({ disaster_type, affected_population: +affected_population, location, infrastructure_type });
+      setResult(r);
+    } catch (e: unknown) { setErr(e instanceof Error ? e.message : String(e)); }
+    finally { setLoading(false); }
+  };
+
+  const plan = result?.response_plan as string | undefined;
+  const actions = result?.priority_actions as string[] | undefined;
+
+  return (
+    <Toggle label="Disaster Response Plan">
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Disaster type">
+          <select value={disaster_type} onChange={e => setType(e.target.value)} className={inputCls}>
+            <option value="flood">Flood</option>
+            <option value="earthquake">Earthquake</option>
+            <option value="fire">Fire</option>
+            <option value="wind_storm">Wind Storm</option>
+          </select>
+        </Field>
+        <Field label="Affected population"><input type="number" value={affected_population} onChange={e => setPop(e.target.value)} className={inputCls} /></Field>
+        <Field label="Location"><input type="text" value={location} onChange={e => setLoc(e.target.value)} className={inputCls} /></Field>
+        <Field label="Infrastructure type">
+          <select value={infrastructure_type} onChange={e => setInfra(e.target.value)} className={inputCls}>
+            <option value="roads">Roads</option>
+            <option value="bridges">Bridges</option>
+            <option value="water">Water</option>
+            <option value="all">All</option>
+          </select>
+        </Field>
+      </div>
+      <button type="button" onClick={run} disabled={loading} className={btnCls}>{loading ? 'Planning…' : 'Generate Response Plan'}</button>
+      <ErrorMsg msg={err} />
+      {plan && <p className="text-gray-300 text-[10px] mt-1 leading-relaxed">{plan}</p>}
+      {actions && actions.length > 0 && (
+        <div className="mt-1 space-y-0.5">
+          <p className="text-gray-400 text-[10px] font-semibold uppercase">Priority Actions</p>
+          {actions.map((a, i) => (
+            <div key={i} className="flex gap-2 text-[10px] text-gray-300 bg-black/20 rounded px-2 py-1">
+              <span className="text-infra-accent font-bold">{i + 1}.</span><span>{a}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {result && !plan && !actions && <ResultBox data={result} />}
+    </Toggle>
+  );
+}
+
+function DroneSection() {
+  const [area_ha, setArea] = useState('2.0');
+  const [altitude_m, setAlt] = useState('120');
+  const [overlap_pct, setOverlap] = useState('80');
+  const [gsd_cm, setGsd] = useState('3');
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<Record<string, unknown> | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const run = async () => {
+    setLoading(true); setErr(null);
+    try {
+      const r = await emergingAPI.drone({ area_ha: +area_ha, altitude_m: +altitude_m, overlap_pct: +overlap_pct, gsd_cm: +gsd_cm });
+      setResult(r);
+    } catch (e: unknown) { setErr(e instanceof Error ? e.message : String(e)); }
+    finally { setLoading(false); }
+  };
+
+  const keys = ['estimated_photos', 'flight_time_min', 'storage_gb', 'accuracy_cm', 'point_cloud_density'];
+  const display = result ? Object.fromEntries(keys.filter(k => k in result).map(k => [k, result[k]])) : null;
+
+  return (
+    <Toggle label="Drone Photogrammetry">
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Survey area (ha)"><input type="number" step="0.1" value={area_ha} onChange={e => setArea(e.target.value)} className={inputCls} /></Field>
+        <Field label="Flight altitude (m)"><input type="number" value={altitude_m} onChange={e => setAlt(e.target.value)} className={inputCls} /></Field>
+        <Field label="Overlap (%)"><input type="number" value={overlap_pct} onChange={e => setOverlap(e.target.value)} className={inputCls} /></Field>
+        <Field label="GSD (cm)"><input type="number" step="0.5" value={gsd_cm} onChange={e => setGsd(e.target.value)} className={inputCls} /></Field>
+      </div>
+      <button type="button" onClick={run} disabled={loading} className={btnCls}>{loading ? 'Processing…' : 'Process Survey'}</button>
+      <ErrorMsg msg={err} />
+      {display && (
+        <div className="grid grid-cols-2 gap-1 mt-1">
+          {Object.entries(display).map(([k, v]) => (
+            <div key={k} className="flex justify-between bg-black/20 rounded px-2 py-1">
+              <span className="text-gray-400 text-[10px]">{k.replace(/_/g, ' ')}</span>
+              <span className="text-sky-400 text-[10px] font-bold">{String(v)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </Toggle>
+  );
+}
+
+function BlockchainSection() {
+  const [document_type, setDocType] = useState('calculation');
+  const [reference, setRef] = useState('');
+  const [description, setDesc] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<Record<string, unknown> | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const run = async () => {
+    setLoading(true); setErr(null);
+    try {
+      const r = await emergingAPI.blockchain({ document_type, reference, description });
+      setResult(r);
+    } catch (e: unknown) { setErr(e instanceof Error ? e.message : String(e)); }
+    finally { setLoading(false); }
+  };
+
+  const keys = ['hash', 'timestamp', 'chain', 'status'];
+  const display = result ? Object.fromEntries(keys.filter(k => k in result).map(k => [k, result[k]])) : null;
+
+  return (
+    <Toggle label="Blockchain Document Anchoring">
+      <Field label="Document type">
+        <select value={document_type} onChange={e => setDocType(e.target.value)} className={inputCls}>
+          <option value="calculation">Calculation</option>
+          <option value="tender">Tender</option>
+          <option value="certificate">Certificate</option>
+          <option value="drawing">Drawing</option>
+        </select>
+      </Field>
+      <Field label="Reference"><input type="text" value={reference} onChange={e => setRef(e.target.value)} placeholder="e.g. CALC-2024-001" className={inputCls} /></Field>
+      <Field label="Description"><input type="text" value={description} onChange={e => setDesc(e.target.value)} placeholder="Brief document description" className={inputCls} /></Field>
+      <button type="button" onClick={run} disabled={loading} className={btnCls}>{loading ? 'Anchoring…' : 'Anchor to Blockchain'}</button>
+      <ErrorMsg msg={err} />
+      {display && (
+        <div className="mt-1 space-y-0.5">
+          {Object.entries(display).map(([k, v]) => (
+            <div key={k} className="flex justify-between bg-black/20 rounded px-2 py-1">
+              <span className="text-gray-400 text-[10px]">{k}</span>
+              <span className="text-amber-400 text-[10px] font-mono truncate max-w-[60%]">{String(v)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </Toggle>
+  );
+}
+
+function CVSafetySection() {
+  const [site_type, setSiteType] = useState('construction');
+  const [worker_count, setWorkers] = useState('10');
+  const [activities, setActivities] = useState('General construction');
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<Record<string, unknown> | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const run = async () => {
+    setLoading(true); setErr(null);
+    try {
+      const r = await emergingAPI.cvSafety({ site_type, worker_count: +worker_count, activities });
+      setResult(r);
+    } catch (e: unknown) { setErr(e instanceof Error ? e.message : String(e)); }
+    finally { setLoading(false); }
+  };
+
+  const risk = result?.risk_level as string | undefined;
+  const violations = result?.violations as string[] | undefined;
+  const recommendations = result?.recommendations as string[] | undefined;
+
+  const riskColor = risk === 'high' || risk === 'critical' ? 'text-red-400' : risk === 'medium' ? 'text-amber-400' : 'text-emerald-400';
+
+  return (
+    <Toggle label="CV Safety Scan">
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Site type">
+          <select value={site_type} onChange={e => setSiteType(e.target.value)} className={inputCls}>
+            <option value="construction">Construction</option>
+            <option value="demolition">Demolition</option>
+            <option value="confined_space">Confined Space</option>
+            <option value="height_work">Height Work</option>
+          </select>
+        </Field>
+        <Field label="Worker count"><input type="number" value={worker_count} onChange={e => setWorkers(e.target.value)} className={inputCls} /></Field>
+        <div className="col-span-2">
+          <Field label="Activities"><input type="text" value={activities} onChange={e => setActivities(e.target.value)} className={inputCls} /></Field>
+        </div>
+      </div>
+      <button type="button" onClick={run} disabled={loading} className={btnCls}>{loading ? 'Scanning…' : 'Run Safety Scan'}</button>
+      <ErrorMsg msg={err} />
+      {risk && <p className={`text-[10px] font-bold mt-1 ${riskColor}`}>Risk level: {risk.toUpperCase()}</p>}
+      {violations && violations.length > 0 && (
+        <div className="mt-1 space-y-0.5">
+          <p className="text-red-400 text-[10px] font-semibold uppercase">Violations</p>
+          {violations.map((v, i) => <div key={i} className="text-[10px] text-red-300 bg-red-900/20 rounded px-2 py-1">{v}</div>)}
+        </div>
+      )}
+      {recommendations && recommendations.length > 0 && (
+        <div className="mt-1 space-y-0.5">
+          <p className="text-emerald-400 text-[10px] font-semibold uppercase">Recommendations</p>
+          {recommendations.map((r, i) => <div key={i} className="text-[10px] text-emerald-300 bg-emerald-900/20 rounded px-2 py-1">{r}</div>)}
+        </div>
+      )}
+      {result && !risk && !violations && <ResultBox data={result} />}
+    </Toggle>
+  );
+}
+
+function ARSceneSection() {
+  const [scene_type, setScene] = useState('structural_overlay');
+  const [project_ref, setRef] = useState('PRJ-001');
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<Record<string, unknown> | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const run = async () => {
+    setLoading(true); setErr(null);
+    try {
+      const r = await emergingAPI.arScene({ scene_type, project_ref });
+      setResult(r);
+    } catch (e: unknown) { setErr(e instanceof Error ? e.message : String(e)); }
+    finally { setLoading(false); }
+  };
+
+  const markers = result?.ar_markers as unknown[] | undefined;
+  const layers = result?.overlay_layers;
+  const instructions = result?.instructions as string | undefined;
+
+  return (
+    <Toggle label="AR Mobile Scene">
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Scene type">
+          <select value={scene_type} onChange={e => setScene(e.target.value)} className={inputCls}>
+            <option value="structural_overlay">Structural Overlay</option>
+            <option value="utility_mapping">Utility Mapping</option>
+            <option value="progress_check">Progress Check</option>
+          </select>
+        </Field>
+        <Field label="Project ref"><input type="text" value={project_ref} onChange={e => setRef(e.target.value)} className={inputCls} /></Field>
+      </div>
+      <button type="button" onClick={run} disabled={loading} className={btnCls}>{loading ? 'Building scene…' : 'Build AR Scene'}</button>
+      <ErrorMsg msg={err} />
+      {instructions && <p className="text-gray-300 text-[10px] mt-1 italic">{instructions}</p>}
+      {layers !== undefined && (
+        <div className="flex justify-between bg-black/20 rounded px-2 py-1 mt-1">
+          <span className="text-gray-400 text-[10px]">overlay layers</span>
+          <span className="text-sky-400 text-[10px] font-bold">{String(layers)}</span>
+        </div>
+      )}
+      {markers && markers.length > 0 && (
+        <div className="mt-1">
+          <p className="text-gray-400 text-[10px] font-semibold uppercase mb-0.5">AR Markers</p>
+          <pre className={resultsCls}>{JSON.stringify(markers, null, 2)}</pre>
+        </div>
+      )}
+      {result && !instructions && !layers && !markers && <ResultBox data={result} />}
+    </Toggle>
+  );
+}
+
+function SeismicSection() {
+  const [analysis_type, setAnalysis] = useState('modal');
+  const [pga_g, setPga] = useState('0.04');
+  const [n_storeys, setStoreys] = useState('4');
+  const [storey_height_m, setHeight] = useState('3.0');
+  const [site_class, setSite] = useState('C');
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<Record<string, unknown> | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const run = async () => {
+    setLoading(true); setErr(null);
+    try {
+      const r = await emergingAPI.seismic({ analysis_type, pga_g: +pga_g, n_storeys: +n_storeys, storey_height_m: +storey_height_m, site_class });
+      setResult(r);
+    } catch (e: unknown) { setErr(e instanceof Error ? e.message : String(e)); }
+    finally { setLoading(false); }
+  };
+
+  const summaryKeys = ['base_shear_kn', 'max_displacement_mm', 'fundamental_period_s', 'damage_state'];
+  const summary = result ? Object.fromEntries(summaryKeys.filter(k => k in result).map(k => [k, result[k]])) : null;
+  const modes = result?.modes as Record<string, unknown>[] | undefined;
+
+  const dmgColor = (s: string) => s === 'none' ? 'text-emerald-400' : s === 'minor' ? 'text-yellow-400' : s === 'moderate' ? 'text-amber-400' : 'text-red-400';
+
+  return (
+    <Toggle label="Seismic Response Simulation">
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Analysis type">
+          <select value={analysis_type} onChange={e => setAnalysis(e.target.value)} className={inputCls}>
+            <option value="modal">Modal</option>
+            <option value="time_history">Time History</option>
+            <option value="pushover">Pushover</option>
+          </select>
+        </Field>
+        <Field label="PGA (g)"><input type="number" step="0.01" value={pga_g} onChange={e => setPga(e.target.value)} className={inputCls} /></Field>
+        <Field label="No. of storeys"><input type="number" value={n_storeys} onChange={e => setStoreys(e.target.value)} className={inputCls} /></Field>
+        <Field label="Storey height (m)"><input type="number" step="0.1" value={storey_height_m} onChange={e => setHeight(e.target.value)} className={inputCls} /></Field>
+        <Field label="Site class">
+          <select value={site_class} onChange={e => setSite(e.target.value)} className={inputCls}>
+            {['A', 'B', 'C', 'D', 'E'].map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </Field>
+      </div>
+      <button type="button" onClick={run} disabled={loading} className={btnCls}>{loading ? 'Analysing…' : 'Run Seismic Analysis'}</button>
+      <ErrorMsg msg={err} />
+      {summary && (
+        <div className="grid grid-cols-2 gap-1 mt-1">
+          {Object.entries(summary).map(([k, v]) => (
+            <div key={k} className="flex justify-between bg-black/20 rounded px-2 py-1">
+              <span className="text-gray-400 text-[10px]">{k.replace(/_/g, ' ')}</span>
+              <span className={`text-[10px] font-bold ${k === 'damage_state' ? dmgColor(String(v)) : 'text-violet-400'}`}>{String(v)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {modes && modes.length > 0 && (
+        <div className="mt-1 overflow-x-auto">
+          <p className="text-gray-400 text-[10px] font-semibold uppercase mb-0.5">Mode Table</p>
+          <table className="w-full text-[10px]">
+            <thead>
+              <tr className="text-gray-500 border-b border-infra-accent/20">
+                {Object.keys(modes[0]).map(h => <th key={h} className="text-left px-1 py-0.5">{h.replace(/_/g, ' ')}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {modes.map((row, i) => (
+                <tr key={i} className="border-b border-infra-accent/10 text-gray-300">
+                  {Object.values(row).map((v, j) => <td key={j} className="px-1 py-0.5">{String(v)}</td>)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Toggle>
+  );
+}
+
 export function EmergingTechPanel() {
   const [marketplace, setMarketplace] = useState<Record<string, unknown> | null>(null);
   const [satellite, setSatellite] = useState<Record<string, unknown> | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [satLoading, setSatLoading] = useState(false);
 
   useEffect(() => {
     emergingAPI.marketplace('ZM').then(setMarketplace).catch(() => null);
   }, []);
 
   const runSatellite = async () => {
-    setLoading(true);
+    setSatLoading(true);
     try {
       const r = await emergingAPI.satellite({ latitude: -15.3875, longitude: 28.3228 });
       setSatellite(r);
-    } finally {
-      setLoading(false);
-    }
+    } finally { setSatLoading(false); }
   };
 
   const listings = (marketplace?.listings as Record<string, unknown>[]) ?? [];
@@ -27,39 +473,39 @@ export function EmergingTechPanel() {
       <div className="p-4 border-b border-infra-accent/30">
         <h2 className="text-sm font-bold text-white uppercase tracking-wide">Emerging Technology</h2>
       </div>
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
-        <section>
-          <h3 className="text-gray-400 uppercase font-semibold mb-2">Marketplace</h3>
-          {listings.map((l) => (
-            <div key={String(l.id)} className="flex justify-between py-1.5 border-b border-infra-accent/10 text-gray-300">
-              <span>{String(l.title)}</span>
-              <span className="text-emerald-400">${String(l.price_usd)}/{String(l.unit)}</span>
-            </div>
-          ))}
-        </section>
+      <div className="flex-1 overflow-y-auto p-4 space-y-3 text-xs">
+        <div className={sectionCls}>
+          <p className={`${summaryBaseCls} cursor-default`}>Marketplace</p>
+          <div className="px-3 pb-3 pt-1">
+            {listings.length === 0 && <p className="text-gray-500 text-[10px]">Loading…</p>}
+            {listings.map((l) => (
+              <div key={String(l.id)} className="flex justify-between py-1.5 border-b border-infra-accent/10 text-gray-300">
+                <span>{String(l.title)}</span>
+                <span className="text-emerald-400">${String(l.price_usd)}/{String(l.unit)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
 
-        <section>
-          <h3 className="text-gray-400 uppercase font-semibold mb-2">Satellite AI</h3>
-          <button type="button" onClick={runSatellite} disabled={loading} className="w-full py-1.5 border border-infra-accent/40 rounded mb-2">
-            {loading ? 'Analysing…' : 'Run land-cover analysis (Lusaka demo)'}
-          </button>
-          {satellite && (
-            <pre className="p-2 bg-infra-darker rounded text-[10px] text-gray-400 overflow-x-auto">
-              {JSON.stringify(satellite.land_cover, null, 2)}
-            </pre>
-          )}
-        </section>
+        <div className={sectionCls}>
+          <p className={`${summaryBaseCls} cursor-default`}>Satellite AI</p>
+          <div className="px-3 pb-3 pt-1 space-y-2">
+            <button type="button" onClick={runSatellite} disabled={satLoading} className={btnCls}>
+              {satLoading ? 'Analysing…' : 'Run land-cover analysis (Lusaka demo)'}
+            </button>
+            {satellite && (
+              <pre className={resultsCls}>{JSON.stringify(satellite.land_cover, null, 2)}</pre>
+            )}
+          </div>
+        </div>
 
-        <section className="text-gray-500 space-y-1">
-          <div>⛓ Blockchain anchoring — POST /emerging/blockchain/anchor</div>
-          <div>🆘 Disaster response — POST /emerging/disaster/plan</div>
-          <div>🚁 Drone photogrammetry — POST /emerging/drone/process</div>
-          <div>🎤 Voice control — POST /emerging/voice/command</div>
-          <div>👷 CV safety — POST /emerging/cv/safety</div>
-          <div>📱 AR mobile — POST /emerging/ar/scene</div>
-          <div>🌡 Thermal sim — POST /simulate/thermal</div>
-          <div>📳 Seismic sim — POST /simulate/seismic</div>
-        </section>
+        <ThermalSection />
+        <DisasterSection />
+        <DroneSection />
+        <BlockchainSection />
+        <CVSafetySection />
+        <ARSceneSection />
+        <SeismicSection />
       </div>
     </div>
   );

@@ -206,7 +206,8 @@ export type CalculationModule =
   | 'load_takedown'
   | 'boq_verifier'
   | 'zambia_site'
-  | 'eiz_memo';
+  | 'eiz_memo'
+  | 'power_systems';
 
 export type RoadSubmodule = 'pavement' | 'drainage' | 'geometric_design' | 'traffic_load';
 

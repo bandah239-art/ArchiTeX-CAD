@@ -48,6 +48,7 @@ import { LoadTakedownCalculator } from './modules/LoadTakedownCalculator';
 import { BoQVerifierCalculator } from './modules/BoQVerifierCalculator';
 import { ZambiaSiteCalculator } from './modules/ZambiaSiteCalculator';
 import { EIZMemoCalculator } from './modules/EIZMemoCalculator';
+import { PowerSystemsCalculator } from './modules/PowerSystemsCalculator';
 import { MODULES_WITH_INLINE_CALCULATE } from './calculatorModuleUtils';
 import { ResultsDisplay, PressureBearingSection } from './ResultsDisplay';
 import { PressurePanel } from './pressure/PressurePanel';
@@ -123,6 +124,7 @@ const MODULES_BY_CATEGORY: Record<CalcCategory, { id: CalculationModule; label: 
     { id: 'energy_grid_fault',   label: 'Grid Fault Analysis'    },
     { id: 'circuit',             label: 'Circuit / SPICE'        },
     { id: 'wind_cfd',            label: 'Wind CFD Panel Method'  },
+    { id: 'power_systems',       label: 'Power Systems'          },
   ],
   wash: [
     { id: 'wash',               label: 'Water Demand'           },
@@ -233,6 +235,7 @@ export function CalculatorPanel() {
       case 'boq_verifier':           return <BoQVerifierCalculator />;
       case 'zambia_site':            return <ZambiaSiteCalculator />;
       case 'eiz_memo':               return <EIZMemoCalculator />;
+      case 'power_systems':          return <PowerSystemsCalculator {...props} />;
       default:                       return null;
     }
   };

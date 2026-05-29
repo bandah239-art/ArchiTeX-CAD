@@ -485,6 +485,13 @@ const DEFAULT_INPUTS: Record<CalculationModule, Record<string, unknown>> = {
   boq_verifier: {},
   zambia_site: { latitude: -15.4167, longitude: 28.2833 },
   eiz_memo: {},
+  power_systems: {
+    system_voltage_kv: 11,
+    source_impedance_ohm: 0.05,
+    cable_length_km: 1.0,
+    cable_r_ohm_km: 0.32,
+    cable_x_ohm_km: 0.08,
+  },
 };
 
 function asCalculationResult(raw: unknown, fallbackTitle: string): CalculationResult {

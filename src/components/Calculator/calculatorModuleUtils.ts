@@ -39,4 +39,5 @@ export const MODULES_WITH_INLINE_CALCULATE: CalculationModule[] = [
   'boq_verifier',
   'zambia_site',
   'eiz_memo',
+  'power_systems',
 ];
