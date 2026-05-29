@@ -17,7 +17,9 @@
     "electron:build": "npm run native:rebuild && npm run build && electron-builder",
     "python:install": "node scripts/install-python-deps.mjs",
     "python:dev": "node scripts/start-python.mjs",
-    "python:status": "node -e \"fetch('http://127.0.0.1:8000/health').then(r=>r.json()).then(d=>console.log('Python server OK:',d)).catch(()=>console.log('Python server offline'))\""
+    "python:status": "node -e \"fetch('http://127.0.0.1:8000/health').then(r=>r.json()).then(d=>console.log('Python server OK:',d)).catch(()=>console.log('Python server offline'))\"",
+    "test:unit": "vitest",
+    "test:unit:run": "vitest run"
   },
   "dependencies": {
     "@infraafrica/shared": "file:packages/shared",

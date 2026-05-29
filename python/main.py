@@ -18,7 +18,7 @@ from calculations.roads.gravel_road import run_gravel_road_design
 from calculations.site.zambia_site_data import get_zambia_site_data
 from calculations.geotechnical.borehole import run_borehole_design
 from calculations.project import project_store
-from calculations.reporting.eiz_memo import generate_eiz_memo
+from calculations.reporting.eiz_memo import default_memo_date, generate_eiz_memo, normalize_calculation_sections
 from calculations.structural.bearings import calculate_bearing
 from calculations.structural.steel import calculate_steel_beam
 from calculations.structural.timber import calculate_timber_beam
@@ -232,18 +232,56 @@ from simulations.seismic.seismic_response import simulate_seismic_response
 from calculations.generative.optimizer import optimize_structural_layout, optimize_solar_orientation
 from sync.desktop_sync import process_sync_batch
 
-app = FastAPI(title="ARCHITEX-CAD Calculation Engine")
+app = FastAPI(
+    title="ARCHITEX-CAD Calculation Engine",
+    version="1.0.0",
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
+    openapi_url="/api/openapi.json",
+)
+
+# CORS — desktop Electron renderer + local dev only
+_ALLOWED_ORIGINS = [
+    "http://localhost:5173",   # Vite dev
+    "http://localhost:4173",   # Vite preview
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:4173",
+    "app://.",                 # Electron production renderer
+]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=_ALLOWED_ORIGINS,
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-Request-ID"],
 )
 
+# Security headers for all responses
+@app.middleware("http")
+async def security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
 from cad.occ_routes import router as occ_router
+from routers.government import router as government_router
+from routers.real_estate import router as real_estate_router
+from routers.intelligence import router as intelligence_router
+from routers.documents import router as documents_router
+from routers.emerging import router as emerging_router
+
 app.include_router(occ_router)
+app.include_router(government_router)
+app.include_router(real_estate_router)
+app.include_router(intelligence_router)
+app.include_router(documents_router)
+app.include_router(emerging_router)
 
 
 class FeaInputs(BaseModel):
@@ -1927,194 +1965,6 @@ def ai_generate_proposal(inputs: AiProposalInput):
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@app.post("/real-estate/value-plot")
-def re_value_plot(inputs: PlotValuationInput):
-    try:
-        return value_plot(inputs.model_dump())
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@app.post("/real-estate/feasibility")
-def re_feasibility(inputs: FeasibilityInput):
-    try:
-        return run_feasibility(inputs.model_dump())
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@app.post("/real-estate/optimise-use")
-def re_optimise_use(inputs: LandUseInput):
-    try:
-        return optimise_land_use(inputs.model_dump())
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@app.post("/real-estate/mortgage")
-def re_mortgage(inputs: MortgageInput):
-    try:
-        return wrap_calculation_result(calculate_mortgage(inputs.model_dump()))
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@app.get("/government/portfolio-summary")
-def gov_portfolio_summary():
-    init_db()
-    try:
-        return portfolio_summary()
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@app.post("/government/projects/seed")
-def gov_seed_projects():
-    return {"projects": seed_demo_projects()}
-
-
-@app.post("/government/projects")
-def gov_create_project(inputs: GovProjectInput):
-    try:
-        return create_project(inputs.model_dump())
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@app.get("/government/projects")
-def gov_list_projects():
-    init_db()
-    return {"projects": list_projects()}
-
-
-@app.get("/government/projects/{project_id}")
-def gov_get_project(project_id: str):
-    try:
-        result = get_project_detail(project_id)
-        if result.get("error"):
-            raise HTTPException(status_code=404, detail=result["error"])
-        return result
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@app.put("/government/projects/{project_id}")
-def gov_update_project(project_id: str, inputs: GovProjectInput):
-    try:
-        result = update_project(project_id, inputs.model_dump())
-        if not result:
-            raise HTTPException(status_code=404, detail="Project not found")
-        return result
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@app.post("/government/projects/{project_id}/snapshot")
-def gov_add_snapshot(project_id: str, inputs: GovSnapshotInput):
-    try:
-        return add_snapshot(project_id, inputs.model_dump())
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@app.post("/government/projects/{project_id}/variation")
-def gov_add_variation(project_id: str, inputs: GovVariationInput):
-    try:
-        return add_variation(project_id, inputs.model_dump())
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@app.post("/government/projects/{project_id}/certificate")
-def gov_certificate(project_id: str, inputs: GovCertificateInput):
-    try:
-        return generate_certificate(project_id, inputs.model_dump())
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@app.get("/government/projects/{project_id}/timeline")
-def gov_timeline(project_id: str):
-    try:
-        return generate_s_curve(project_id)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@app.get("/government/projects/{project_id}/cashflow")
-def gov_cashflow(project_id: str):
-    try:
-        return cashflow_projection(project_id)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@app.post("/government/reports/{report_type}")
-def gov_report(report_type: str, inputs: GovReportInput):
-    try:
-        return generate_report(report_type, inputs.model_dump())
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@app.post("/documents/generate-tender")
-def doc_tender(inputs: TenderInput):
-    try:
-        return generate_tender(inputs.model_dump())
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@app.post("/documents/calculation-report")
-def doc_calc_report(inputs: CalcReportInput):
-    try:
-        return generate_calculation_report(inputs.model_dump())
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@app.post("/documents/eia-screening")
-def doc_eia(inputs: EiaScreeningInput):
-    try:
-        return screen_eia(inputs.model_dump())
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@app.post("/mobile/quick-calc")
-def mobile_quick_calc(inputs: MobileQuickCalcInput):
-    try:
-        d = inputs.model_dump()
-        if d["calc_type"] == "concrete":
-            return concrete_mix(d["grade"], d["volume_m3"])
-        if d["calc_type"] == "rebar":
-            return rebar_weight(d["bar_size"], d["length_m"], d["quantity"])
-        if d["calc_type"] == "beam":
-            return quick_beam_check(d["span_m"], d["depth_mm"])
-        raise ValueError(f"Unknown calc_type: {d['calc_type']}")
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@app.post("/sync/receive")
-def sync_receive(inputs: SyncReceiveInput):
-    try:
-        payload = inputs.model_dump()
-        payload.update(payload.pop("data", {}))
-        return receive_sync_item(payload)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@app.get("/sync/items")
-def sync_items():
-    return {"items": list_sync_items()}
-
-
 # --- TIER 2: WASH + Energy + Collaboration ---
 
 @app.post("/calculate/wash/demand")
@@ -2156,226 +2006,6 @@ def energy_battery(inputs: BatteryInput):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-
-@app.get("/collaboration/rooms/{project_id}")
-def collab_room_status(project_id: str):
-    return room_status(project_id)
-
-
-@app.post("/collaboration/rooms/{project_id}/join")
-def collab_join(project_id: str, inputs: CollabJoinInput):
-    return join_room(project_id, inputs.user_id, inputs.user_name)
-
-
-@app.post("/collaboration/rooms/{project_id}/leave")
-def collab_leave(project_id: str, inputs: CollabJoinInput):
-    return leave_room(project_id, inputs.user_id)
-
-
-@app.websocket("/collaboration/ws/{project_id}/{user_id}")
-async def collab_websocket(websocket: WebSocket, project_id: str, user_id: str):
-    await websocket.accept()
-    register(project_id, user_id, websocket)
-    try:
-        while True:
-            raw = await websocket.receive_text()
-            response = handle_message(project_id, user_id, raw)
-            if response:
-                await websocket.send_json(response)
-                if response.get("type") == "event":
-                    await broadcast(project_id, response, exclude_user=user_id)
-                elif response.get("type") == "room_state":
-                    await broadcast(project_id, response, exclude_user=user_id)
-    except WebSocketDisconnect:
-        leave_room(project_id, user_id)
-        unregister(project_id, user_id)
-        await broadcast(project_id, {"type": "room_state", "data": room_status(project_id)})
-
-
-# --- TIER 3: Digital Twin + Predictive Maintenance ---
-
-@app.post("/intelligence/twin/assets")
-def twin_register(inputs: TwinAssetInput):
-    try:
-        return register_asset(inputs.model_dump())
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@app.get("/intelligence/twin/assets")
-def twin_list_assets(project_id: str = ""):
-    assets = list_assets(project_id)
-    if not assets:
-        assets = seed_demo_assets()
-    return {"assets": assets}
-
-
-@app.get("/intelligence/twin/assets/{asset_id}")
-def twin_get_asset(asset_id: str):
-    asset = get_asset(asset_id)
-    if not asset:
-        raise HTTPException(status_code=404, detail="Asset not found")
-    return asset
-
-
-@app.post("/intelligence/twin/ingest")
-def twin_ingest(inputs: SensorReadingInput):
-    try:
-        return ingest_reading(inputs.model_dump())
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@app.get("/intelligence/predictive/{asset_id}")
-def predictive_asset(asset_id: str):
-    result = analyse_asset(asset_id)
-    if result.get("error"):
-        raise HTTPException(status_code=404, detail=result["error"])
-    return result
-
-
-@app.get("/intelligence/predictive")
-def predictive_portfolio(project_id: str = ""):
-    return analyse_portfolio(project_id)
-
-
-@app.post("/intelligence/twin/seed")
-def twin_seed():
-    return {"assets": seed_demo_assets()}
-
-
-# --- 4D/5D Scheduling ---
-@app.post("/schedule/build-from-bim")
-def schedule_build_from_bim(inputs: ScheduleBuildInput):
-    try:
-        return build_schedule_from_bim(inputs.model_dump())
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-# --- Generative design optimizer ---
-@app.post("/optimize/structural")
-def optimize_structural_endpoint(inputs: OptimizerInput):
-    try:
-        return optimize_structural_layout(inputs.model_dump())
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@app.post("/optimize/solar")
-def optimize_solar_endpoint(inputs: SolarOptimizerInput):
-    try:
-        return optimize_solar_orientation(inputs.model_dump())
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-# --- Desktop offline sync ---
-@app.post("/sync/batch")
-def sync_batch_endpoint(inputs: SyncBatchInput):
-    try:
-        return process_sync_batch(inputs.model_dump())
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-# --- Offline cache ---
-@app.get("/cache/calc/status")
-def calc_cache_status_endpoint():
-    return calc_cache_status()
-
-
-@app.post("/cache/calc/clear")
-def calc_cache_clear_endpoint():
-    return clear_calc_cache()
-
-
-@app.get("/cache/project")
-def project_meta_load():
-    return load_project_meta()
-
-
-@app.post("/cache/project")
-def project_meta_save(inputs: ProjectMetaInput):
-    return save_project_meta(inputs.model_dump())
-
-
-# --- ESG documents ---
-@app.post("/documents/esg-report")
-def documents_esg_report(inputs: EsgReportInput):
-    try:
-        return generate_esg_report(inputs.model_dump())
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-# --- Emerging tech platform ---
-@app.post("/emerging/blockchain/anchor")
-def emerging_blockchain(inputs: EmergingInput):
-    return blockchain_anchor(inputs.payload)
-
-
-@app.get("/emerging/marketplace")
-def emerging_marketplace(country_code: str = "ZM"):
-    return marketplace_listings({"country_code": country_code})
-
-
-@app.post("/emerging/disaster/plan")
-def emerging_disaster(inputs: EmergingInput):
-    return disaster_response_plan(inputs.payload)
-
-
-@app.post("/emerging/satellite/analyse")
-def emerging_satellite(inputs: EmergingInput):
-    return satellite_analysis(inputs.payload)
-
-
-@app.post("/emerging/drone/process")
-def emerging_drone(inputs: EmergingInput):
-    return drone_photogrammetry(inputs.payload)
-
-
-@app.post("/emerging/voice/command")
-def emerging_voice(inputs: EmergingInput):
-    return voice_command(inputs.payload)
-
-
-@app.post("/emerging/cv/safety")
-def emerging_cv_safety(inputs: EmergingInput):
-    return cv_safety_scan(inputs.payload)
-
-
-@app.post("/emerging/ar/scene")
-def emerging_ar(inputs: EmergingInput):
-    return ar_mobile_scene(inputs.payload)
-
-
-# --- Physics simulations ---
-@app.post("/simulate/thermal")
-def simulate_thermal_endpoint(inputs: EmergingInput):
-    try:
-        return simulate_thermal(inputs.payload)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@app.post("/simulate/seismic")
-def simulate_seismic_endpoint(inputs: SeismicAnalysisInput):
-    try:
-        return simulate_seismic_response(inputs.model_dump())
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-class GenerativeBIMRequest(BaseModel):
-    prompt: str = Field(..., description="Prompt for structural frame generation")
-
-@app.post("/generate/bim")
-async def generate_bim_endpoint(payload: GenerativeBIMRequest):
-    try:
-        result = generate_bim_from_text(payload.prompt)
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/geo/terrain-analytics")
 def geo_terrain_analytics_endpoint(req: TerrainAnalyticsRequest):
@@ -3124,11 +2754,11 @@ def project_export_eiz_endpoint(payload: dict[str, Any]):
         calc_title = payload.get("calc_title", "Calculation Report Memo")
         calc_ref = payload.get("calc_ref", "INFRA-01")
         rev = payload.get("revision", "1")
-        date_str = payload.get("date", datetime.now(timezone.utc).strftime("%Y-%m-%d"))
+        date_str = payload.get("date") or default_memo_date()
         client = payload.get("client_name", "GRZ")
         auth = payload.get("local_authority", "Lusaka City Council")
-        
-        sections = payload.get("calculation_sections", [])
+
+        sections = normalize_calculation_sections(payload.get("calculation_sections", []))
         
         pdf_bytes = generate_eiz_memo(
             project_name=p_name,

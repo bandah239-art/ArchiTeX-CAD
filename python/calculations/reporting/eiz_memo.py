@@ -41,7 +41,9 @@ def draw_eiz_decorations(canvas, doc, project_name, project_location, engineer_n
     canvas.setFont("Helvetica-Bold", 7)
     canvas.setFillColor(colors.HexColor("#64748b"))
     canvas.drawString(stamp_x + 5, h_top - 12, "EIZ STAMP FIELD")
-    canvas.rect(stamp_x + 8, h_bottom + 8, stamp_width - 16, h_top - h_bottom - 26, strokeColor=colors.HexColor("#cbd5e1"), strokeWidth=0.5)
+    canvas.setStrokeColor(colors.HexColor("#cbd5e1"))
+    canvas.setLineWidth(0.5)
+    canvas.rect(stamp_x + 8, h_bottom + 8, stamp_width - 16, h_top - h_bottom - 26, stroke=1, fill=0)
     
     # Logo text / Brand
     canvas.setFont("Helvetica-Bold", 12)
@@ -82,6 +84,34 @@ def draw_eiz_decorations(canvas, doc, project_name, project_location, engineer_n
     canvas.restoreState()
 
 
+def default_memo_date() -> str:
+    """ISO date string for memo header (UTC)."""
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
+def normalize_calculation_sections(sections: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Accept API shapes from EIZ calculator UI and project workspace."""
+    normalized: list[dict[str, Any]] = []
+    for sec in sections or []:
+        if not isinstance(sec, dict):
+            continue
+        if sec.get("content_type"):
+            normalized.append(sec)
+            continue
+        title = sec.get("title", "")
+        if "content" in sec:
+            normalized.append(
+                {"title": title, "content_type": "text", "data": sec.get("content", "")}
+            )
+        elif "formula_steps" in sec:
+            normalized.append(
+                {"title": title, "content_type": "table", "data": sec.get("formula_steps", [])}
+            )
+        elif "data" in sec:
+            normalized.append(sec)
+    return normalized
+
+
 def generate_eiz_memo(
     project_name: str,
     project_location: str,
@@ -97,6 +127,10 @@ def generate_eiz_memo(
     logo_path=None,
 ) -> bytes:
     """Generate regulatory calculation memo PDF matching Lusaka council submission guidelines."""
+    if not date or not str(date).strip():
+        date = default_memo_date()
+    calculation_sections = normalize_calculation_sections(calculation_sections)
+
     buffer = io.BytesIO()
     
     # Set top margin large enough to clear the 90-point header block

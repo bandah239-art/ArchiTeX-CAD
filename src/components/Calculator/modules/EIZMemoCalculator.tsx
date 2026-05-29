@@ -53,10 +53,18 @@ export function EIZMemoCalculator() {
           revision,
           date,
           calc_title: `${projectName} — Structural Calculation Memo`,
-          calculation_sections: sections,
+          calculation_sections: sections.map((s) => ({
+            title: s.title,
+            content_type: 'text',
+            data: s.content,
+          })),
         }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => null);
+        const detail = errBody?.detail;
+        throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail ?? errBody) || res.statusText);
+      }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
