@@ -62,15 +62,41 @@ export function NumField({
   label,
   value,
   onChange,
+  warnLow,
+  warnHigh,
+  warnMsg,
 }: {
   label: string;
   value: unknown;
   onChange: (v: number) => void;
+  warnLow?: number;
+  warnHigh?: number;
+  warnMsg?: string;
 }) {
+  const n = Number(value);
+  const outOfRange =
+    (!isNaN(n) && warnLow !== undefined && n < warnLow) ||
+    (!isNaN(n) && warnHigh !== undefined && n > warnHigh);
+  const hint =
+    outOfRange
+      ? warnMsg ?? `Typical range: ${warnLow ?? ''}–${warnHigh ?? ''}`
+      : undefined;
+
   return (
     <div>
       <label className="block text-xs text-gray-400 mb-1">{label}</label>
-      <NumericInput value={value} onChange={onChange} />
+      <NumericInput
+        value={value}
+        onChange={onChange}
+        className={`w-full px-2 py-1.5 text-sm bg-infra-darker border rounded text-white focus:outline-none transition-colors ${
+          outOfRange
+            ? 'border-amber-500/70 focus:border-amber-400'
+            : 'border-infra-accent/40 focus:border-infra-highlight/60'
+        }`}
+      />
+      {hint && (
+        <p className="text-[10px] text-amber-400 mt-0.5">⚠ {hint}</p>
+      )}
     </div>
   );
 }

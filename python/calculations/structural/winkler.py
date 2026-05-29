@@ -106,6 +106,20 @@ def run_winkler(
 
     EI in kN·m², ks in kN/m³ — internally consistent unit system (kN, m).
     """
+    # ── Input validation ──────────────────────────────────────────────────────
+    if ks_knm3 <= 0:
+        raise ValueError(
+            f"Modulus of subgrade reaction ks = {ks_knm3} kN/m³ must be > 0. "
+            "Typical values: loose sand 10 000–20 000 kN/m³; stiff clay 20 000–80 000 kN/m³; "
+            "rock 80 000–200 000 kN/m³. A zero value means no foundation resistance."
+        )
+    if EI_knm2 <= 0:
+        raise ValueError(f"Flexural rigidity EI = {EI_knm2} kN·m² must be > 0.")
+    if L_m <= 0:
+        raise ValueError(f"Beam length L = {L_m} m must be > 0.")
+    if B_m <= 0:
+        raise ValueError(f"Beam width B = {B_m} m must be > 0.")
+
     L_el = L_m / n_el
     n_nodes = n_el + 1
 

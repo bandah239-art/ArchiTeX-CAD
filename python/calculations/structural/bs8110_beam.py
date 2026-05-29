@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from calculations.utils.formatters import round_value
+from calculations.utils.validators import validate_material_grades, validate_cover_feasibility
 from calculations.structural.fire_and_anchorage import (
     check_beam_fire,
     anchorage_length,
@@ -52,13 +53,17 @@ def run_bs8110_beam(
     fire_period_hours: float = 1.0,
 ) -> dict[str, Any]:
     """Run beam design calculation per BS 8110-1:1997."""
+    # ── Pre-calculation validation ────────────────────────────────────────────
+    validate_material_grades(fcu_mpa, fy_mpa)
+    d = validate_cover_feasibility(cover_mm, h_mm, bar_dia_mm, link_dia_mm)
+
     steps = []
     warnings = []
     errors = []
     status = "pass"
 
     # ── Step 1: Effective depth d ─────────────────────────────────────────────
-    d = h_mm - cover_mm - link_dia_mm - (bar_dia_mm / 2)
+    # d already computed and validated above
     steps.append(
         _step(
             1,

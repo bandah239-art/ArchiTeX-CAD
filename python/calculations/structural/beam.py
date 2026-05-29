@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from calculations.utils.formatters import round_value, select_bar_diameter
-from calculations.utils.validators import validate_beam_inputs, variable_line_load
+from calculations.utils.validators import validate_beam_inputs, variable_line_load, validate_cover_feasibility
 
 # Eurocode 2 constants
 K_PRIME = 0.167  # Limit for no compression steel
@@ -121,7 +121,7 @@ def calculate_beam(inputs: dict[str, Any]) -> dict[str, Any]:
     c_nom_total = c_nom + delta_c_dev
     phi_link = 8
     phi_bar = 16
-    d = h - c_nom_total - phi_link - phi_bar / 2
+    d = validate_cover_feasibility(c_nom_total, h, phi_bar, phi_link)
 
     steps.append(
         _step(

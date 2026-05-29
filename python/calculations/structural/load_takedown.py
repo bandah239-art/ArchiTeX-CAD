@@ -13,6 +13,22 @@ def run_load_takedown(building: dict[str, Any]) -> dict[str, Any]:
     walls = building.get("walls", [])
     columns = building.get("columns", [])
     foundation = building.get("foundation", {})
+
+    # ── Input validation ──────────────────────────────────────────────────────
+    for i, floor in enumerate(floors):
+        gx = float(floor.get("grid_x_m", 0))
+        gy = float(floor.get("grid_y_m", 0))
+        if gx <= 0 or gy <= 0:
+            raise ValueError(
+                f"Floor {i + 1} (level {floor.get('level_m', '?')} m): "
+                f"grid_x_m={gx}, grid_y_m={gy} must both be > 0. "
+                "A zero grid dimension makes tributary area zero and loads disappear."
+            )
+        t = float(floor.get("slab_thickness_mm", 0))
+        if t <= 0:
+            raise ValueError(
+                f"Floor {i + 1}: slab_thickness_mm={t} must be > 0."
+            )
     
     q_allowable = float(foundation.get("soil_bearing_capacity_kpa", 150.0))
     

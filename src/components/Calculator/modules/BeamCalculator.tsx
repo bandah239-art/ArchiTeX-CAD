@@ -117,24 +117,24 @@ export function BeamCalculator({ inputs, onInputChange }: CalculatorFormProps) {
       <div className="p-3 bg-infra-darker/60 rounded border border-infra-accent/20">
         <h4 className="text-xs font-bold text-white mb-2">Geometry & Loading</h4>
         <div className="grid grid-cols-2 gap-3">
-          <NumField label="Span (m)" value={inputs.span ?? 6} onChange={(v) => onInputChange('span', v)} />
+          <NumField label="Span (m)" value={inputs.span ?? 6} onChange={(v) => onInputChange('span', v)} warnLow={1} warnHigh={20} warnMsg="Typical beam span 1–20 m" />
           <SelectField label="Support Condition" value={String(inputs.support_condition ?? 'simply_supported')} options={SUPPORTS} onChange={(v) => onInputChange('support_condition', v)} />
-          <NumField label="Dead Load Gk (kN/m)" value={inputs.dead_load ?? 15} onChange={(v) => onInputChange('dead_load', v)} />
-          <NumField label="Imposed Load Qk (kN/m)" value={inputs.live_load ?? 10} onChange={(v) => onInputChange('live_load', v)} />
-          <NumField label="Width b (mm)" value={inputs.width ?? 300} onChange={(v) => onInputChange('width', v)} />
-          <NumField label="Total Depth h (mm)" value={inputs.depth ?? 500} onChange={(v) => onInputChange('depth', v)} />
+          <NumField label="Dead Load Gk (kN/m)" value={inputs.dead_load ?? 15} onChange={(v) => onInputChange('dead_load', v)} warnLow={0.5} warnHigh={100} warnMsg="Unusually high dead load — check units (kN/m, not kN/m²)" />
+          <NumField label="Imposed Load Qk (kN/m)" value={inputs.live_load ?? 10} onChange={(v) => onInputChange('live_load', v)} warnLow={0} warnHigh={60} warnMsg="Unusually high imposed load — check units" />
+          <NumField label="Width b (mm)" value={inputs.width ?? 300} onChange={(v) => onInputChange('width', v)} warnLow={150} warnHigh={750} warnMsg="Typical beam width 150–750 mm" />
+          <NumField label="Total Depth h (mm)" value={inputs.depth ?? 500} onChange={(v) => onInputChange('depth', v)} warnLow={150} warnHigh={1500} warnMsg="Typical beam depth 150–1500 mm" />
         </div>
       </div>
 
       <div className="p-3 bg-infra-darker/60 rounded border border-infra-accent/20">
         <h4 className="text-xs font-bold text-white mb-2">Reinforcement Detail</h4>
         <div className="grid grid-cols-2 gap-3">
-          <NumField label="Cover (mm)" value={inputs.cover_mm ?? 30} onChange={(v) => onInputChange('cover_mm', v)} />
+          <NumField label="Cover (mm)" value={inputs.cover_mm ?? 30} onChange={(v) => onInputChange('cover_mm', v)} warnLow={20} warnHigh={75} warnMsg="BS 8110 cover: 20–75 mm typical" />
           <SelectField label="Main Bar Diameter" value={String(inputs.bar_dia_mm ?? 16)} options={BAR_DIAS} onChange={(v) => onInputChange('bar_dia_mm', Number(v))} />
-          <NumField label="Tension Bars (n)" value={inputs.n_bars_tension ?? 3} onChange={(v) => onInputChange('n_bars_tension', Math.round(v))} />
-          <NumField label="Compression Bars (n)" value={inputs.n_bars_compression ?? 2} onChange={(v) => onInputChange('n_bars_compression', Math.round(v))} />
+          <NumField label="Tension Bars (n)" value={inputs.n_bars_tension ?? 3} onChange={(v) => onInputChange('n_bars_tension', Math.round(v))} warnLow={1} warnHigh={10} warnMsg="More than 10 bars is unusual — verify spacing" />
+          <NumField label="Compression Bars (n)" value={inputs.n_bars_compression ?? 2} onChange={(v) => onInputChange('n_bars_compression', Math.round(v))} warnLow={0} warnHigh={8} warnMsg="More than 8 compression bars is unusual" />
           <SelectField label="Link Diameter" value={String(inputs.link_dia_mm ?? 8)} options={LINK_DIAS} onChange={(v) => onInputChange('link_dia_mm', Number(v))} />
-          <NumField label="Link Spacing (mm)" value={inputs.link_spacing_mm ?? 175} onChange={(v) => onInputChange('link_spacing_mm', v)} />
+          <NumField label="Link Spacing (mm)" value={inputs.link_spacing_mm ?? 175} onChange={(v) => onInputChange('link_spacing_mm', v)} warnLow={75} warnHigh={300} warnMsg="BS 8110: link spacing ≤ 0.75d and ≤ 300 mm" />
         </div>
       </div>
 

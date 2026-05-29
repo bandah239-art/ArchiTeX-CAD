@@ -16,6 +16,16 @@ def calculate_borehole(inputs: dict[str, Any]) -> dict[str, Any]:
     aquifer_thickness = float(inputs.get("aquifer_thickness_m", 20))
     static_lift = float(inputs.get("static_lift_m", 30))
 
+    # ── Input guards ─────────────────────────────────────────────────────────
+    if radius_m <= 0:
+        raise ValueError(f"Borehole radius must be > 0 m, got {radius_m}")
+    if storage_coeff <= 0:
+        raise ValueError(f"Storage coefficient must be > 0, got {storage_coeff}")
+    if transmissivity <= 0:
+        raise ValueError(f"Transmissivity must be > 0 m²/d, got {transmissivity}")
+    if time_days <= 0:
+        raise ValueError(f"Pumping time must be > 0 days, got {time_days}")
+
     # Calculate u for Cooper-Jacob check
     # u = r²S / 4Tt
     u = (radius_m**2 * storage_coeff) / (4 * transmissivity * time_days)
@@ -25,17 +35,24 @@ def calculate_borehole(inputs: dict[str, Any]) -> dict[str, Any]:
         # s = (2.303Q/4πT) × log10(2.25Tt/r²S)
         term1 = (2.303 * q_m3_day) / (4 * math.pi * transmissivity)
         term2 = (2.25 * transmissivity * time_days) / (radius_m**2 * storage_coeff)
+        if term2 <= 0:
+            raise ValueError(
+                f"Cooper-Jacob log argument ≤ 0 (term2={term2:.4g}). "
+                "Check transmissivity, time, radius, and storage coefficient."
+            )
         drawdown_m = term1 * math.log10(term2)
         equation_used = "Cooper-Jacob"
         formula_str = "s = (2.303Q/4πT) × log10(2.25Tt/r²S)"
     else:
-        # For simplicity without scipy.special.expn, we use an approximation or fallback to C-J
-        # The prompt says: Cooper-Jacob simplification (u < 0.05). If not, we just use the approximation
-        # W(u) ~ -0.5772 - ln(u) for small u. 
-        # Since this is a specialized calculator, we will use Cooper-Jacob but warn if u >= 0.05
+        # Cooper-Jacob outside strict validity (u ≥ 0.05); W(u) ≈ -0.5772 − ln(u)
         term1 = (2.303 * q_m3_day) / (4 * math.pi * transmissivity)
         term2 = (2.25 * transmissivity * time_days) / (radius_m**2 * storage_coeff)
-        drawdown_m = term1 * math.log10(term2) if term2 > 0 else 0
+        if term2 <= 0:
+            raise ValueError(
+                f"Cooper-Jacob log argument ≤ 0 (term2={term2:.4g}). "
+                "Check transmissivity, time, radius, and storage coefficient."
+            )
+        drawdown_m = term1 * math.log10(term2)
         equation_used = "Cooper-Jacob (outside validity range u < 0.05)"
         formula_str = "s = (2.303Q/4πT) × log10(2.25Tt/r²S)"
 

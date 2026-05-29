@@ -17,6 +17,19 @@ export function ReportExporter({ result }: ReportExporterProps) {
     designBrief: ''
   });
 
+  // Hard gate: block export when any step has failed or there are errors
+  const hasFail = result.status === 'fail' || (result.errors && result.errors.length > 0);
+  const hasUnreviewedFail = result.steps?.some(
+    (s) => s.status === 'fail' && (!s.review_status || s.review_status === 'pending')
+  );
+  const exportBlocked = hasFail || hasUnreviewedFail;
+
+  const blockReason = result.status === 'fail'
+    ? 'Calculation has FAIL status — resolve all errors before exporting.'
+    : hasUnreviewedFail
+      ? 'One or more FAIL steps have not been reviewed. Accept or override before exporting.'
+      : '';
+
   const handleExportPdf = () => {
     setShowModal(true);
   };
@@ -33,16 +46,26 @@ export function ReportExporter({ result }: ReportExporterProps) {
 
   return (
     <>
-      <div className="flex gap-2 mt-4">
+      {exportBlocked && (
+        <div className="mt-3 p-2 bg-red-900/30 border border-red-700/50 rounded text-xs text-red-300 flex items-start gap-1.5">
+          <span className="font-bold shrink-0">⛔</span>
+          <span>{blockReason}</span>
+        </div>
+      )}
+      <div className="flex gap-2 mt-2">
         <button
           onClick={handleExportPdf}
-          className="flex-1 py-2 text-xs border border-infra-accent/50 hover:bg-infra-accent/20 rounded transition-colors"
+          disabled={exportBlocked}
+          title={exportBlocked ? blockReason : 'Export calculation report as PDF'}
+          className="flex-1 py-2 text-xs border border-infra-accent/50 hover:bg-infra-accent/20 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           Export PDF
         </button>
         <button
           onClick={() => exportToExcel(result)}
-          className="flex-1 py-2 text-xs border border-infra-accent/50 hover:bg-infra-accent/20 rounded transition-colors"
+          disabled={exportBlocked}
+          title={exportBlocked ? blockReason : 'Export to Excel'}
+          className="flex-1 py-2 text-xs border border-infra-accent/50 hover:bg-infra-accent/20 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           Export Excel
         </button>

@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from calculations.utils.formatters import round_value
+from calculations.utils.validators import validate_material_grades
 from calculations.structural.fire_and_anchorage import check_column_fire, anchorage_length
 
 
@@ -64,6 +65,7 @@ def run_bs8110_column(
     fire_period_hours: float = 1.0,
 ) -> dict[str, Any]:
     """Run column design calculations per BS 8110-1:1997."""
+    validate_material_grades(fcu_mpa, fy_mpa)
     steps = []
     warnings = []
     errors = []
