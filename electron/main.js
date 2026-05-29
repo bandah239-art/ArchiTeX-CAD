@@ -290,29 +290,118 @@ function createWindow() {
     ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset' } : {}),
   });
 
+  let windowShown = false;
+
+  /** Ensure the window becomes visible exactly once, regardless of load outcome. */
+  function ensureWindowVisible() {
+    if (windowShown || !mainWindow || mainWindow.isDestroyed()) return;
+    windowShown = true;
+    mainWindow.show();
+  }
+
+  /**
+   * Display a user-friendly error page when loading fails.
+   * Keeps the window visible so the user knows something went wrong.
+   */
+  function showErrorPage(title, detail) {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    const safeTitle = (title || 'Load Error').replace(/[<>&"']/g, '');
+    const safeDetail = (detail || '').replace(/[<>&"']/g, '');
+    mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(`
+      <!DOCTYPE html>
+      <html><head><meta charset="utf-8"><title>ARCHITEX-CAD</title>
+      <style>
+        body { margin:0; display:flex; align-items:center; justify-content:center;
+               height:100vh; background:#0f1117; color:#e2e8f0;
+               font-family:system-ui,-apple-system,sans-serif; text-align:center; }
+        .card { padding:3rem; max-width:520px; }
+        h1 { font-size:1.5rem; color:#f87171; margin-bottom:0.5rem; }
+        p  { font-size:0.95rem; color:#94a3b8; line-height:1.6; }
+        code { background:#1e293b; padding:0.15rem 0.4rem; border-radius:4px; font-size:0.85rem; }
+        button { margin-top:1.5rem; padding:0.6rem 1.6rem; border:none; border-radius:6px;
+                 background:#3b82f6; color:#fff; font-size:0.9rem; cursor:pointer; }
+        button:hover { background:#2563eb; }
+      </style></head><body>
+      <div class="card">
+        <h1>${safeTitle}</h1>
+        <p>${safeDetail}</p>
+        <button onclick="location.reload()">Retry</button>
+      </div></body></html>
+    `)}`).catch(() => {});
+    ensureWindowVisible();
+  }
+
+  // Dev-mode retry state
+  let devLoadRetries = 0;
+  const MAX_DEV_RETRIES = 3;
+  const DEV_RETRY_DELAY = 2000;
+  let currentDevUrl = null;
+
   if (isDev) {
     getDevServerUrl().then((url) => {
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      currentDevUrl = url;
       safeLog(`[Electron] Loading dev URL: ${url}`);
       mainWindow.loadURL(url).catch((err) => {
         safeWarn(`[Electron] Failed to load dev URL ${url}:`, err.message);
+        // did-fail-load handler will take care of retry / error page
       });
       mainWindow.webContents.openDevTools({ mode: 'detach' });
+    }).catch((err) => {
+      safeWarn(`[Electron] getDevServerUrl() rejected:`, err.message);
+      showErrorPage(
+        'Dev Server Unreachable',
+        'Could not connect to the Vite dev server.<br>Run <code>npm run dev</code> first, then restart Electron.',
+      );
     });
   } else {
     const prodPath = path.join(__dirname, '..', 'dist', 'index.html');
     safeLog(`[Electron] Loading production file: ${prodPath}`);
-    mainWindow.loadFile(prodPath).catch((err) => {
-      safeWarn(`[Electron] Failed to load production file:`, err.message);
-    });
+    if (!fs.existsSync(prodPath)) {
+      safeWarn(`[Electron] Production build not found at ${prodPath}`);
+      // Defer showing the error page until after 'ready-to-show' listeners are wired
+      setTimeout(() => {
+        showErrorPage(
+          'Build Not Found',
+          `Expected production build at:<br><code>${prodPath}</code><br>Run <code>npm run build</code> first.`,
+        );
+      }, 100);
+    } else {
+      mainWindow.loadFile(prodPath).catch((err) => {
+        safeWarn(`[Electron] Failed to load production file:`, err.message);
+        showErrorPage('Failed to Load', err.message);
+      });
+    }
   }
 
-  // Catch renderer errors that cause white screens
+  // Catch renderer crashes that cause white screens
   mainWindow.webContents.on('render-process-gone', (_event, details) => {
     safeWarn(`[Electron] Renderer process gone: ${details.reason} (exit code: ${details.exitCode})`);
+    showErrorPage(
+      'Renderer Crashed',
+      `The renderer process terminated unexpectedly.<br>Reason: <code>${details.reason}</code>`,
+    );
   });
 
   mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
     safeWarn(`[Electron] Page failed to load: ${errorDescription} (code: ${errorCode}, url: ${validatedURL})`);
+
+    // Ignore sub-frame / aborted loads
+    if (errorCode === -3) return; // ERR_ABORTED — normal during navigation
+
+    if (isDev && currentDevUrl && devLoadRetries < MAX_DEV_RETRIES) {
+      devLoadRetries++;
+      safeLog(`[Electron] Retrying dev URL in ${DEV_RETRY_DELAY}ms (attempt ${devLoadRetries}/${MAX_DEV_RETRIES})...`);
+      setTimeout(() => {
+        if (!mainWindow || mainWindow.isDestroyed()) return;
+        mainWindow.loadURL(currentDevUrl).catch(() => {});
+      }, DEV_RETRY_DELAY);
+    } else {
+      showErrorPage(
+        'Page Failed to Load',
+        `${errorDescription || 'Unknown error'} (code ${errorCode})<br>URL: <code>${validatedURL || 'N/A'}</code>`,
+      );
+    }
   });
 
   mainWindow.webContents.on('console-message', (_event, level, message) => {
@@ -322,8 +411,17 @@ function createWindow() {
   });
 
   mainWindow.once('ready-to-show', () => {
-    mainWindow.show();
+    ensureWindowVisible();
   });
+
+  // Safety timeout: if the window still hasn't shown after 15 seconds, force-show it.
+  // This prevents the app from appearing frozen/hung when loading stalls.
+  setTimeout(() => {
+    if (!windowShown) {
+      safeWarn('[Electron] Safety timeout reached — force-showing window.');
+      ensureWindowVisible();
+    }
+  }, 15_000);
 
   mainWindow.on('closed', () => {
     mainWindow = null;
@@ -398,6 +496,12 @@ ipcMain.handle('python-server-status', async () => {
       resolve({ running: false });
     });
   });
+});
+
+ipcMain.handle('restart-python-server', async () => {
+  killPythonServer();
+  spawnPythonServer();
+  return { success: true };
 });
 
 // Offline sync IPC

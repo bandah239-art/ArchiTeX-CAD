@@ -94,7 +94,6 @@ export function CrackWidthCalculator({ inputs, onInputChange }: CrackWidthCalcul
   }
 
   const s = result?.summary;
-  const wk = s ? Number(s.wk_mm) : null;
   const limit = s ? Number(s.wk_limit_mm) : null;
   const util = s ? Number(s.utilisation_pct) : null;
 

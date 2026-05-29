@@ -382,8 +382,27 @@ def render_calculation_pdf(result: dict[str, Any], title: str = "Calculation Rep
     styles = getSampleStyleSheet()
     
     # Custom styles
-    title_style = styles["Heading1"]
-    h2_style = styles["Heading2"]
+    title_style = ParagraphStyle(
+        "ReportTitle",
+        parent=styles["Heading1"],
+        fontSize=16,
+        spaceAfter=12,
+        alignment=1, # Center
+        textColor=colors.HexColor("#1a2744"),
+        fontName="Helvetica-Bold"
+    )
+    h2_style = ParagraphStyle(
+        "Heading2",
+        parent=styles["Heading2"],
+        fontSize=12,
+        textColor=colors.HexColor("#1a2744"),
+        spaceBefore=10,
+        spaceAfter=6,
+        fontName="Helvetica-Bold",
+        borderPadding=(0, 0, 2, 0),
+        borderColor=colors.HexColor("#1a2744"),
+        borderWidth=1
+    )
     normal_style = styles["Normal"]
     
     step_title_style = ParagraphStyle(
@@ -411,11 +430,42 @@ def render_calculation_pdf(result: dict[str, Any], title: str = "Calculation Rep
     
     elements = []
     
-    # Title
+    # 1. Project Details Header
+    eng_name = result.get("engineer_name", "UNVERIFIED")
+    eiz_no = result.get("eiz_number", "")
+    proj_ref = result.get("project_ref", "N/A")
+    date_str = datetime.now().strftime("%d %B %Y")
+    module_name = str(result.get("module", "General")).upper()
+    
+    header_data = [
+        [Paragraph("<b>PROJECT:</b>", normal_style), Paragraph(proj_ref, normal_style), Paragraph("<b>DATE:</b>", normal_style), Paragraph(date_str, normal_style)],
+        [Paragraph("<b>ENGINEER:</b>", normal_style), Paragraph(eng_name, normal_style), Paragraph("<b>EIZ NO:</b>", normal_style), Paragraph(eiz_no, normal_style)],
+        [Paragraph("<b>ELEMENT:</b>", normal_style), Paragraph(module_name, normal_style), Paragraph("<b>STATUS:</b>", normal_style), Paragraph(result.get("status", "UNKNOWN").upper(), normal_style)]
+    ]
+    t_header = Table(header_data, colWidths=[2.5*cm, 7.5*cm, 2.5*cm, 4.5*cm])
+    t_header.setStyle(TableStyle([
+        ('BOX', (0,0), (-1,-1), 1.0, colors.HexColor("#1a2744")),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#cbd5e1")),
+        ('BACKGROUND', (0,0), (0,-1), colors.HexColor("#f1f5f9")),
+        ('BACKGROUND', (2,0), (2,-1), colors.HexColor("#f1f5f9")),
+        ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('TOPPADDING', (0,0), (-1,-1), 4),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+    ]))
+    
     elements.append(Paragraph(title, title_style))
+    elements.append(t_header)
     elements.append(Spacer(1, 0.5 * cm))
     
-    # Review Warnings (Prominent Red Callout Box if reviews are pending or flagged exists)
+    # 2. Design Brief Summary
+    design_brief = result.get("design_brief", "")
+    if design_brief:
+        elements.append(Paragraph("1. Design Brief", h2_style))
+        elements.append(Paragraph(design_brief, normal_style))
+        elements.append(Spacer(1, 0.5 * cm))
+
+    # Review Warnings
     review_summary = result.get("review_summary") or {}
     has_pending = review_summary.get("pending", 0) > 0
     has_flagged = review_summary.get("flagged", 0) > 0
@@ -423,10 +473,10 @@ def render_calculation_pdf(result: dict[str, Any], title: str = "Calculation Rep
     if has_pending or has_flagged:
         warn_text = "<b>WARNING:</b> This report contains calculations that "
         if has_flagged:
-            warn_text += "have been <b>FLAGGED AS DEFECTIVE/FAILED</b> by reviewing engineers. "
+            warn_text += "have been <b>FLAGGED AS DEFECTIVE/FAILED</b>. "
         if has_pending:
             warn_text += f"have <b>{review_summary.get('pending')} PENDING REVIEWS</b>. "
-        warn_text += "DO NOT USE FOR CONSTRUCTION OR PRODUCTION USE."
+        warn_text += "DO NOT USE FOR CONSTRUCTION."
         
         warn_box = Table([[Paragraph(warn_text, ParagraphStyle("WarnText", parent=normal_style, textColor=colors.HexColor("#991b1b"), fontSize=9))]], colWidths=[17*cm])
         warn_box.setStyle(TableStyle([
@@ -439,9 +489,32 @@ def render_calculation_pdf(result: dict[str, Any], title: str = "Calculation Rep
         elements.append(warn_box)
         elements.append(Spacer(1, 0.5 * cm))
     
-    # Summary
+    # 3. Pass/Fail Compliance Summary
+    elements.append(Paragraph("2. Compliance Summary", h2_style))
+    overall_status = result.get("status", "failed").lower()
+    if overall_status == "passed" and not has_flagged and not has_pending:
+        comp_text = "<b>COMPLIANT</b>: The structural element satisfies all checked requirements of the referenced design codes."
+        comp_color = "#15803d"
+        comp_bg = "#f0fdf4"
+    else:
+        comp_text = "<b>NON-COMPLIANT / PENDING</b>: The element fails one or more checks, or requires pending reviews."
+        comp_color = "#b91c1c"
+        comp_bg = "#fef2f2"
+        
+    comp_box = Table([[Paragraph(comp_text, ParagraphStyle("Comp", parent=normal_style, textColor=colors.HexColor(comp_color)))]], colWidths=[17*cm])
+    comp_box.setStyle(TableStyle([
+        ('BOX', (0,0), (-1,-1), 1, colors.HexColor(comp_color)),
+        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor(comp_bg)),
+        ('LEFTPADDING', (0,0), (-1,-1), 10),
+        ('TOPPADDING', (0,0), (-1,-1), 6),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 6),
+    ]))
+    elements.append(comp_box)
+    elements.append(Spacer(1, 0.5 * cm))
+    
+    # Summary Parameters
     if "summary" in result and result["summary"]:
-        elements.append(Paragraph("Summary Parameters", h2_style))
+        elements.append(Paragraph("3. Input Parameters", h2_style))
         summary_data = []
         for k, v in result["summary"].items():
             if isinstance(v, dict) and "value" in v:
@@ -468,31 +541,15 @@ def render_calculation_pdf(result: dict[str, Any], title: str = "Calculation Rep
     try:
         diag = create_module_drawing(result)
         if diag:
-            elements.append(Paragraph("System Visualisation Diagram", h2_style))
+            elements.append(Paragraph("4. System Visualisation", h2_style))
             elements.append(diag)
             elements.append(Spacer(1, 0.5 * cm))
     except Exception:
         pass
 
-    # Review Summary
-    if "review_summary" in result:
-        elements.append(Paragraph("Engineer Review Audit Trail Summary", h2_style))
-        rs = result["review_summary"]
-        text = f"<b>Accepted:</b> {rs.get('accepted', 0)} | <b>Overridden:</b> {rs.get('overridden', 0)} | <b>Flagged:</b> {rs.get('flagged', 0)} | <b>Pending:</b> {rs.get('pending', 0)}"
-        elements.append(Paragraph(text, normal_style))
-        elements.append(Spacer(1, 0.5 * cm))
-    
-    # Warnings (Other warnings)
-    clean_warnings = [w for w in result.get("warnings", []) if "not yet reviewed" not in w]
-    if clean_warnings:
-        elements.append(Paragraph("Engineered Limit Warnings", h2_style))
-        for w in clean_warnings:
-            elements.append(Paragraph(f"• {w}", ParagraphStyle("Warn", parent=normal_style, textColor=colors.HexColor("#b45309"))))
-        elements.append(Spacer(1, 0.5 * cm))
-        
-    # Steps
+    # 4. Calculation Trace
     if "steps" in result and result["steps"]:
-        elements.append(Paragraph("Calculation Verification Steps", h2_style))
+        elements.append(Paragraph("5. Calculation Trace", h2_style))
         for step in result["steps"]:
             # Title
             step_num = step.get("step_number", "?")
@@ -511,30 +568,8 @@ def render_calculation_pdf(result: dict[str, Any], title: str = "Calculation Rep
             details_data.append([Paragraph("Result:", normal_style), Paragraph(f"<b>{res_val} {unit}</b>", result_style)])
             
             if step.get("reference"):
-                details_data.append([Paragraph("Reference:", normal_style), Paragraph(step["reference"], ParagraphStyle("Ref", parent=normal_style, fontSize=8, textColor=colors.HexColor("#475569")))])
-                
-            # Engineer Review details
-            review_status = step.get("review_status", "pending")
-            review_text = ""
-            review_color = "#64748b"
-            
-            if review_status == "accepted":
-                review_text = "<b>[ACCEPTED]</b> Conforms to code and limits."
-                review_color = "#15803d"
-            elif review_status == "overridden":
-                review_text = f"<b>[OVERRIDDEN]</b> Platform was: {step.get('platform_result', step.get('result'))}. Reason: {step.get('override_reason', 'None specified')}"
-                review_color = "#b45309"
-            elif review_status == "flagged":
-                review_text = f"<b>[FLAGGED]</b> Defect found. Note: {step.get('flag_note', 'None specified')}"
-                review_color = "#b91c1c"
-            else:
-                review_text = "<b>[PENDING REVIEW]</b> Awaiting verification."
-                review_color = "#64748b"
-                
-            details_data.append([
-                Paragraph("Review Status:", normal_style),
-                Paragraph(review_text, ParagraphStyle("RevDetails", parent=normal_style, textColor=colors.HexColor(review_color), fontSize=8.5))
-            ])
+                # E.g. "BS 8110-1:1997 Clause 3.4.4.1"
+                details_data.append([Paragraph("Code Ref:", normal_style), Paragraph(step["reference"], ParagraphStyle("Ref", parent=normal_style, fontSize=8, textColor=colors.HexColor("#475569"), fontName="Helvetica-BoldOblique"))])
                 
             t2 = Table(details_data, colWidths=[3*cm, 14*cm])
             t2.setStyle(TableStyle([
@@ -545,30 +580,57 @@ def render_calculation_pdf(result: dict[str, Any], title: str = "Calculation Rep
             elements.append(t2)
             elements.append(Spacer(1, 0.3 * cm))
             
-    # Digital Seal / Cryptographic Block
+    # 5. Engineer Declaration Block
     elements.append(Spacer(1, 1 * cm))
-    elements.append(Paragraph("Cryptographic Validation Seal", h2_style))
+    elements.append(Paragraph("6. Engineer's Declaration", h2_style))
+    decl_text = ("I certify that these calculations have been prepared by me or under my direct supervision, "
+                 "and that they conform to the requirements of the stated design codes and standard engineering practice.")
+    elements.append(Paragraph(decl_text, normal_style))
+    elements.append(Spacer(1, 0.5 * cm))
+    
+    decl_data = [
+        [Paragraph("<b>Signature:</b>", normal_style), "", Paragraph("<b>Date:</b>", normal_style), Paragraph(date_str, normal_style)],
+        ["", "", "", ""],
+        [Paragraph("<b>Name:</b>", normal_style), Paragraph(eng_name, normal_style), Paragraph("<b>EIZ Reg No:</b>", normal_style), Paragraph(eiz_no, normal_style)]
+    ]
+    t_decl = Table(decl_data, colWidths=[2.5*cm, 7*cm, 2.5*cm, 5*cm])
+    t_decl.setStyle(TableStyle([
+        ('LINEBOTTOM', (1,0), (1,0), 1, colors.black), # Signature line
+        ('LINEBOTTOM', (3,0), (3,0), 1, colors.black), # Date line
+        ('VALIGN', (0,0), (-1,-1), 'BOTTOM'),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 5),
+    ]))
+    elements.append(t_decl)
+    
+    # 6. InFra_TeCh Verification Stamp
+    elements.append(Spacer(1, 1 * cm))
+    
+    import hashlib
+    import json
+    # Generate deterministic hash for the payload
+    payload_str = json.dumps({k: v for k, v in result.items() if k not in ["warnings"]}, sort_keys=True)
+    calc_hash = hashlib.sha256(payload_str.encode()).hexdigest()[:16].upper()
     
     timestamp = datetime.now(timezone.utc).isoformat()
-    doc_id = f"INFRA-{int(time.time())}"
     
-    eng_reviewer = result.get("engineer_name") or "UNVERIFIED DESIGN"
-    sig_status = "VALID - DIGITALLY SEALED" if result.get("engineer_name") else "UNVERIFIED - PENDING SIGNATURE"
-    sig_color = "#15803d" if result.get("engineer_name") else "#b91c1c"
+    sig_status = "VALID - ARCHITEX-CAD SEALED" if eng_name != "UNVERIFIED" else "UNVERIFIED - PENDING SIGNATURE"
+    sig_color = "#15803d" if eng_name != "UNVERIFIED" else "#b91c1c"
     
     seal_data = [
-        [Paragraph("Document ID:", normal_style), Paragraph(doc_id, formula_style)],
+        [Paragraph("<b>InFra_TeCh VERIFICATION STAMP</b>", ParagraphStyle("S", parent=normal_style, fontName="Helvetica-Bold", textColor=colors.HexColor(sig_color))), ""],
+        [Paragraph("Calc Hash:", normal_style), Paragraph(calc_hash, formula_style)],
         [Paragraph("Timestamp:", normal_style), Paragraph(timestamp, formula_style)],
-        [Paragraph("Reviewer Credentials:", normal_style), Paragraph(eng_reviewer, ParagraphStyle("Creds", parent=normal_style, fontName="Helvetica-Bold", fontSize=8.5))],
-        [Paragraph("Verification Status:", normal_style), Paragraph(sig_status, ParagraphStyle("Valid", parent=normal_style, textColor=colors.HexColor(sig_color), fontName="Helvetica-Bold"))]
+        [Paragraph("Status:", normal_style), Paragraph(sig_status, ParagraphStyle("Valid", parent=normal_style, textColor=colors.HexColor(sig_color), fontName="Helvetica-Bold"))]
     ]
     t_seal = Table(seal_data, colWidths=[4.5*cm, 12.5*cm])
     t_seal.setStyle(TableStyle([
         ('BOX', (0,0), (-1,-1), 1.5, colors.HexColor(sig_color)),
-        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor("#f0fdf4") if result.get("engineer_name") else colors.HexColor("#fff5f5")),
+        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor("#f0fdf4") if eng_name != "UNVERIFIED" else colors.HexColor("#fff5f5")),
+        ('SPAN', (0,0), (1,0)),
+        ('ALIGN', (0,0), (1,0), 'CENTER'),
         ('LEFTPADDING', (0,0), (-1,-1), 8),
-        ('TOPPADDING', (0,0), (-1,-1), 8),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 8),
+        ('TOPPADDING', (0,0), (-1,-1), 6),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 6),
     ]))
     elements.append(t_seal)
             

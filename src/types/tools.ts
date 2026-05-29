@@ -25,7 +25,8 @@ export type DrawTool =
   | 'revcloud'
   | 'move'
   | 'rotate'
-  | 'extrude';
+  | 'extrude'
+  | 'draw.text';
 
 export type OrthoView = 'front' | 'back' | 'left' | 'right' | 'top' | 'bottom';
 

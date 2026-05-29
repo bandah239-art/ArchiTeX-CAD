@@ -88,17 +88,18 @@ def drone_photogrammetry(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def voice_command(payload: dict[str, Any]) -> dict[str, Any]:
-    text = payload.get("transcript", "").lower()
-    actions = []
-    if "open" in text and "ifc" in text:
-        actions.append({"action": "open_ifc"})
-    if "generate" in text and "boq" in text:
-        actions.append({"action": "import_bim_boq"})
-    if "wind" in text:
-        actions.append({"action": "open_calculator", "module": "wind"})
-    if "plan" in text or "schedule" in text:
-        actions.append({"action": "open_panel", "panel": "schedule"})
-    return {"status": "complete", "transcript": payload.get("transcript", ""), "actions": actions or [{"action": "none"}]}
+    from ai.voice_agent import process_voice_command
+    transcript = payload.get("transcript", "")
+    if not transcript.strip():
+        return {"status": "complete", "transcript": "", "reply": "", "intent": "chat", "action": {}}
+    result = process_voice_command(transcript)
+    return {
+        "status": "complete",
+        "transcript": transcript,
+        "reply": result.get("spoken_response", ""),
+        "intent": result.get("intent", "chat"),
+        "action": result.get("payload", {}),
+    }
 
 
 def cv_safety_scan(payload: dict[str, Any]) -> dict[str, Any]:

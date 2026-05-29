@@ -199,7 +199,9 @@ export type CalculationModule =
   | 'seismic'
   | 'crack_width'
   | 'water_hammer'
-  | 'winkler';
+  | 'winkler'
+  | 'masonry'
+  | 'black_cotton';
 
 export type RoadSubmodule = 'pavement' | 'drainage' | 'geometric_design' | 'traffic_load';
 

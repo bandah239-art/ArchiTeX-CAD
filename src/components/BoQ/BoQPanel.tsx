@@ -1,8 +1,10 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useBoQStore } from '../../store/boqStore';
 import { useViewerStore } from '../../store/viewerStore';
 import { elementsFromViewer, toBimPayload } from '../../services/ifcBoqService';
 import { useIfcModelStore } from '../../store/ifcModelStore';
+import { API_BASE } from '../../services/apiConfig';
+import { formatZppaBoQ } from '../../services/zppaExport';
 
 const COUNTRIES = [
   { code: 'ZM', label: '🇿🇲 Zambia' },
@@ -35,14 +37,32 @@ export function BoQPanel() {
     loadDemoProject,
     importFromBim,
     isImportingBim,
+    sketchBoQItems,
+    clearSketchBoQ,
   } = useBoQStore();
   const { selectedElement } = useViewerStore();
   const { getBoqElements } = useIfcModelStore();
+  const [zmwRates, setZmwRates] = useState<Record<string, { rate: number; unit: string; description: string }> | null>(null);
+  const [showZmwRates, setShowZmwRates] = useState(false);
+  const [loadingRates, setLoadingRates] = useState(false);
 
   const handleImportBim = () => {
     const parsed = getBoqElements();
     const els = elementsFromViewer(parsed.length ? parsed : null, selectedElement);
     importFromBim(toBimPayload(els));
+  };
+
+  const handleLoadZmwRates = async () => {
+    if (zmwRates) { setShowZmwRates((v) => !v); return; }
+    setLoadingRates(true);
+    try {
+      const res = await fetch(`${API_BASE}/boq/zambia-rates`);
+      const data = await res.json();
+      setZmwRates(data.rates);
+      setShowZmwRates(true);
+    } catch { /* fallback silent */ } finally {
+      setLoadingRates(false);
+    }
   };
 
   useEffect(() => {
@@ -51,8 +71,47 @@ export function BoQPanel() {
 
   const summary = compiledBoQ?.summary;
 
+  const sketchTotal = sketchBoQItems.reduce((s, i) => s + i.total_zmw, 0);
+
   return (
     <div className="flex flex-col h-full">
+
+      {/* ── Sketch BOQ banner ── */}
+      {sketchBoQItems.length > 0 && (
+        <div className="mx-3 mt-3 rounded-lg border border-infra-highlight/50 bg-infra-highlight/10 overflow-hidden">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-infra-highlight/30">
+            <span className="text-xs font-bold text-infra-highlight uppercase tracking-wider">
+              📐 Sketch BOQ — {sketchBoQItems.length} items
+            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-mono font-bold text-white">
+                ZMW {sketchTotal.toLocaleString()}
+              </span>
+              <button type="button" onClick={clearSketchBoQ} className="text-gray-500 hover:text-red-400 text-xs">✕</button>
+            </div>
+          </div>
+          <div className="max-h-48 overflow-y-auto">
+            {sketchBoQItems.map((item) => (
+              <div key={`${item.source_element_id}-${item.code}`}
+                className="flex items-start justify-between px-3 py-1.5 border-b border-infra-highlight/10 text-xs hover:bg-infra-highlight/5">
+                <div className="flex-1 min-w-0 pr-2">
+                  <span className="text-gray-400 font-mono mr-1.5">{item.code}</span>
+                  <span className="text-gray-200 truncate">{item.description}</span>
+                </div>
+                <div className="flex-shrink-0 text-right font-mono">
+                  <span className="text-gray-400">{item.qty} {item.unit}</span>
+                  <span className="text-white ml-2">ZMW {item.total_zmw.toLocaleString()}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="px-3 py-1.5 flex justify-between items-center bg-infra-highlight/5">
+            <span className="text-[10px] text-gray-500">From drawn sketch elements — verify quantities before submission</span>
+            <span className="text-xs font-bold text-infra-highlight">Total: ZMW {sketchTotal.toLocaleString()}</span>
+          </div>
+        </div>
+      )}
+
       <div className="p-4 border-b border-infra-accent/30">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-bold text-white uppercase tracking-wide">Bill of Quantities</h2>
@@ -109,6 +168,29 @@ export function BoQPanel() {
               >
                 💡 Load Demo Items
               </button>
+            </div>
+
+            {/* Zambia ZMW Rate Reference */}
+            <div>
+              <button
+                type="button"
+                onClick={handleLoadZmwRates}
+                disabled={loadingRates}
+                className="w-full py-1.5 text-xs border border-amber-500/40 hover:bg-amber-500/10 rounded text-amber-300 font-medium transition-colors disabled:opacity-50"
+              >
+                🇿🇲 {loadingRates ? 'Loading...' : showZmwRates ? 'Hide Zambia ZMW Rates' : 'Show Zambia ZMW Rates'}
+              </button>
+              {showZmwRates && zmwRates && (
+                <div className="mt-2 max-h-48 overflow-y-auto rounded border border-amber-500/20 bg-amber-900/10 text-xs">
+                  {Object.entries(zmwRates).map(([key, v]) => (
+                    <div key={key} className="flex justify-between px-2 py-1 border-b border-amber-500/10">
+                      <span className="text-gray-400 truncate max-w-[55%]" title={v.description}>{v.description}</span>
+                      <span className="text-amber-300 font-mono">ZMW {v.rate.toLocaleString()}/{v.unit}</span>
+                    </div>
+                  ))}
+                  <p className="text-gray-600 text-[10px] px-2 py-1">Q4-2025 benchmarks. Verify before tendering.</p>
+                </div>
+              )}
             </div>
 
             <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
@@ -190,22 +272,39 @@ export function BoQPanel() {
                   </div>
                 </div>
 
-                <div className="flex gap-4 mt-6 pt-4 border-t border-infra-accent/20">
+                <div className="flex gap-2 mt-6 pt-4 border-t border-infra-accent/20 flex-wrap">
                   <button
                     type="button"
                     onClick={() => exportExcel()}
                     disabled={isExporting}
-                    className="flex-1 py-2 text-xs border border-infra-accent/50 hover:bg-infra-accent/20 rounded-lg text-white font-medium shadow-md transition-all"
+                    className="flex-1 py-2 text-xs border border-infra-accent/50 hover:bg-infra-accent/20 rounded-lg text-white font-medium transition-all"
                   >
-                    📊 Export Excel Spreadsheet
+                    📊 Excel
                   </button>
                   <button
                     type="button"
                     onClick={() => exportPdf()}
                     disabled={isExporting}
-                    className="flex-1 py-2 text-xs border border-infra-accent/50 hover:bg-infra-accent/20 rounded-lg text-white font-medium shadow-md transition-all"
+                    className="flex-1 py-2 text-xs border border-infra-accent/50 hover:bg-infra-accent/20 rounded-lg text-white font-medium transition-all"
                   >
-                    📄 Export PDF Report
+                    📄 PDF
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const html = formatZppaBoQ(sketchBoQItems, {
+                        project_name: projectName || 'Project',
+                        employer:     client || 'Government of the Republic of Zambia',
+                        location:     'Zambia',
+                        date:         new Date().toLocaleDateString('en-ZM'),
+                      });
+                      const w = window.open('', '_blank');
+                      if (w) { w.document.write(html); w.document.close(); }
+                    }}
+                    className="flex-1 py-2 text-xs bg-amber-700/30 hover:bg-amber-700/50 border border-amber-600/40 rounded-lg text-amber-200 font-bold transition-all"
+                    title="Export in ZPPA standard BOQ format for government tender submission"
+                  >
+                    🇿🇲 ZPPA Format
                   </button>
                 </div>
               </div>

@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   readIfcFile: (filePath) => ipcRenderer.invoke('read-ifc-file', filePath),
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   getPythonServerStatus: () => ipcRenderer.invoke('python-server-status'),
+  restartPythonServer: () => ipcRenderer.invoke('restart-python-server'),
   onPythonStatus: (callback) => {
     ipcRenderer.on('python-server-status', (_, status) => callback(status));
     return () => ipcRenderer.removeAllListeners('python-server-status');

@@ -42,6 +42,7 @@ const KIND_COLORS: Record<SketchKind, [number, number, number]> = {
   region: [0.35, 0.65, 0.78],
   donut: [0.9, 0.7, 0.25],
   revcloud: [0.95, 0.45, 0.35],
+  text: [1, 1, 1],
 };
 
 export class DrawEngine {

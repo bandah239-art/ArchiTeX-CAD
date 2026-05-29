@@ -54,6 +54,8 @@ export interface ViewerControls {
   flyToPerspective: () => void;
   flyToOrthoView: (view: OrthoView) => void;
   fitToView: () => void;
+  /** Plan view for flat 2D CAD; otherwise standard model fit. */
+  fitDrawingToView: (bounds?: { min: [number, number, number]; max: [number, number, number] }) => void;
   resetView: () => void;
   setExploded: (enabled: boolean, factor?: number) => void;
   setXRayed: (enabled: boolean) => void;
@@ -358,6 +360,59 @@ export function createViewerControls(
   function fitToView() {
     const model = getModel();
     if (model) viewer.cameraFlight.flyTo(viewer.scene.models[MODEL_ID]);
+    viewer.scene.render();
+  }
+
+  function fitDrawingToView(bounds?: { min: [number, number, number]; max: [number, number, number] }) {
+    if (bounds) {
+      const min = bounds.min;
+      const max = bounds.max;
+      const cx = (min[0] + max[0]) / 2;
+      const cy = (min[1] + max[1]) / 2;
+      const cz = (min[2] + max[2]) / 2;
+      const spanX = Math.max(max[0] - min[0], 1);
+      const spanY = Math.max(max[1] - min[1], 1e-6);
+      const spanZ = Math.max(max[2] - min[2], 1);
+      const spanXZ = Math.max(spanX, spanZ, 1);
+      const spanXY = Math.max(spanX, spanY, 1);
+
+      // XZ-plane flat drawings (DWG/DXF with Y≈const): top-down ortho view.
+      // flyTo cannot correctly set ortho.scale from a thin-Y AABB, so we snap
+      // directly and set ortho.scale explicitly to fill the viewport.
+      if (spanY / spanXZ < 0.08) {
+        const dist = Math.max(spanXZ * 3.0, 50);
+        viewer.camera.projection = 'ortho';
+        viewer.camera.eye = [cx, cy + dist, cz];
+        viewer.camera.look = [cx, cy, cz];
+        viewer.camera.up = [0, 0, 1];
+        // ortho.scale = viewport width in world units — set to drawing extent + 25% margin.
+        viewer.camera.ortho.scale = spanXZ * 1.25;
+        viewer.scene.render();
+        return;
+      }
+
+      // XY-plane flat drawings (Z≈const): front ortho view.
+      if (spanZ / spanXY < 0.08) {
+        const dist = Math.max(spanXY * 3.0, 50);
+        viewer.camera.projection = 'ortho';
+        viewer.camera.eye = [cx, cy, cz + dist];
+        viewer.camera.look = [cx, cy, cz];
+        viewer.camera.up = [0, 1, 0];
+        viewer.camera.ortho.scale = spanXY * 1.25;
+        viewer.scene.render();
+        return;
+      }
+
+      viewer.camera.projection = 'perspective';
+      viewer.cameraFlight.flyTo({
+        aabb: [min[0], min[1], min[2], max[0], max[1], max[2]],
+        duration: 0.45,
+      });
+      viewer.scene.render();
+      return;
+    }
+
+    fitToView();
   }
 
   function resetView() {
@@ -831,6 +886,7 @@ export function createViewerControls(
     flyToPerspective,
     flyToOrthoView,
     fitToView,
+    fitDrawingToView,
     resetView,
     setExploded,
     setXRayed,
@@ -862,6 +918,19 @@ export function createViewerControls(
     mirrorSelectedSketch,
     arraySelectedSketch,
   };
+}
+
+/** Defer camera fit until xeokit has committed geometry and canvas layout is stable.
+ *  300 ms allows GPU geometry upload + first paint; one more rAF ensures layout is final. */
+export function scheduleCameraFitAfterLoad(
+  controls: Pick<ViewerControls, 'fitDrawingToView'>,
+  bounds?: { min: [number, number, number]; max: [number, number, number] },
+) {
+  setTimeout(() => {
+    requestAnimationFrame(() => {
+      controls.fitDrawingToView(bounds);
+    });
+  }, 300);
 }
 
 export function buildEntityTypeMap(

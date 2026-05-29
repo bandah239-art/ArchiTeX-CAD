@@ -112,6 +112,8 @@ export const TOOL_REGISTRY: ToolDef[] = [
   { id: 'calcFoundation', actionId: 'calc.foundation', labelKey: 'tools.calcFoundation', icon: 'text', text: 'Fd', group: 'tools.structure', tab: 'structure', row: 'primary' },
 
   // ── BIM tab ──
+  { id: 'sketchBoq',    actionId: 'sketch.boq',       labelKey: 'tools.sketchBoq',    icon: 'text', text: '📐→💰', group: 'tools.bim', tab: 'bim', row: 'primary' },
+  { id: 'sketchToIfc',  actionId: 'draw.exportIfc',   labelKey: 'tools.sketchToIfc',  icon: 'text', text: '→IFC', group: 'tools.bim', tab: 'bim', row: 'primary' },
   { id: 'bimBoq', actionId: 'bim.boq', labelKey: 'tools.bimBoq', icon: 'boq', group: 'tools.bim', tab: 'bim', row: 'primary' },
   { id: 'bimBoqImport', actionId: 'bim.boqImport', labelKey: 'tools.bimBoqImport', icon: 'text', text: 'Imp', group: 'tools.bim', tab: 'bim', row: 'primary' },
   { id: 'bimBoqExport', actionId: 'bim.boqExport', labelKey: 'tools.bimBoqExport', icon: 'text', text: 'Xls', group: 'tools.bim', tab: 'bim', row: 'primary' },

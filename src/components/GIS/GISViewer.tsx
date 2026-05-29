@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useGeoStore } from '../../store/geoStore';
+import { useCalculationStore } from '../../store/calculationStore';
+import { useWorkspaceStore } from '../../store/workspaceStore';
 
 export function GISViewer() {
   const mapRef = useRef<HTMLDivElement>(null);
@@ -92,23 +94,24 @@ export function GISViewer() {
             const data = await res.json();
             setResults(data);
           } else {
-            // Fallback mock if backend isn't ready
-            setTimeout(() => {
+            // Backend unavailable — try OpenElevation for real elevation data
+            try {
+              const elevRes = await fetch(
+                `https://api.open-elevation.com/api/v1/lookup?locations=${lat},${lng}`
+              ).catch(() => null);
+              const elevData = elevRes?.ok ? await elevRes.json() : null;
+              const elevation = elevData?.results?.[0]?.elevation ?? null;
               setResults({
-                elevation_m: Math.round(1200 + Math.random() * 100),
-                slope_degrees: (Math.random() * 15).toFixed(1),
-                earthworks: {
-                  cut_m3: Math.round(Math.random() * 500 + 200),
-                  fill_m3: Math.round(Math.random() * 300 + 100),
-                  net_balance_m3: 'Cut'
-                },
-                hydrology: {
-                  flow_direction: ['North', 'North-East', 'East', 'South-East', 'South', 'South-West', 'West', 'North-West'][Math.floor(Math.random() * 8)],
-                  flood_risk: Math.random() > 0.8 ? 'High' : 'Low'
-                }
+                elevation_m: elevation,
+                slope_degrees: null,
+                earthworks: null,
+                hydrology: null,
+                _partial: true,
               });
-              setAnalyzing(false);
-            }, 1000);
+            } catch {
+              setResults({ _unavailable: true });
+            }
+            setAnalyzing(false);
           }
         } catch (err) {
           console.error(err);
@@ -137,58 +140,144 @@ export function GISViewer() {
 
         {analyzing ? (
           <div className="flex flex-col items-center justify-center py-10">
-            <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-            <p className="text-sm text-emerald-300">Scanning Satellite Data...</p>
+            <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4" />
+            <p className="text-sm text-emerald-300">Fetching terrain data…</p>
           </div>
+
+        ) : results?._unavailable ? (
+          <div className="p-3 bg-slate-800 rounded-lg border border-slate-600 text-center text-xs text-gray-500">
+            Backend offline — terrain analytics unavailable.<br />
+            Start the Python server to enable full site analysis.
+          </div>
+
+        ) : results?._partial ? (
+          <div className="space-y-3">
+            {results.elevation_m !== null ? (
+              <div className="bg-slate-800 p-3 rounded-lg border border-slate-600">
+                <h3 className="text-xs uppercase tracking-wider text-gray-400 mb-2">Elevation (OpenElevation)</h3>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm">Elevation:</span>
+                  <span className="text-sm font-bold text-white">{results.elevation_m} m ASL</span>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-gray-500">Elevation data unavailable.</p>
+            )}
+            <div className="p-3 bg-amber-900/20 border border-amber-700/40 rounded text-xs text-amber-300">
+              Slope, earthworks and hydrology require the backend server.
+              Start Python server for full analysis.
+            </div>
+
+            {/* Push to geo calcs */}
+            {results.elevation_m && (
+              <button
+                type="button"
+                onClick={() => {
+                  useWorkspaceStore.getState().openPanel('calculator');
+                  useCalculationStore.getState().setModule('geo');
+                  useCalculationStore.getState().setInputs({ site_elevation_m: results.elevation_m });
+                }}
+                className="w-full py-2 text-xs bg-emerald-800/40 hover:bg-emerald-800/60 text-emerald-300 rounded border border-emerald-700/40 transition-colors"
+              >
+                Push elevation → Site Geotechnics calculator →
+              </button>
+            )}
+          </div>
+
         ) : results ? (
-          <div className="space-y-6">
+          <div className="space-y-3">
+            {/* Terrain */}
             <div className="bg-slate-800 p-3 rounded-lg border border-slate-600">
-              <h3 className="text-xs uppercase tracking-wider text-gray-400 mb-2">Terrain Model</h3>
-              <div className="flex justify-between items-center mb-1">
-                <span className="text-sm">Elevation:</span>
-                <span className="text-sm font-bold text-white">{results.elevation_m} m</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm">Slope Grade:</span>
-                <span className={`text-sm font-bold ${parseFloat(results.slope_degrees) > 10 ? 'text-amber-400' : 'text-emerald-400'}`}>
-                  {results.slope_degrees}°
-                </span>
-              </div>
+              <h3 className="text-xs uppercase tracking-wider text-gray-400 mb-2">Terrain</h3>
+              {results.elevation_m != null && (
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-sm">Elevation</span>
+                  <span className="text-sm font-bold text-white">{results.elevation_m} m</span>
+                </div>
+              )}
+              {results.slope_degrees != null && (
+                <div className="flex justify-between items-center">
+                  <span className="text-sm">Slope</span>
+                  <span className={`text-sm font-bold ${parseFloat(results.slope_degrees) > 10 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                    {results.slope_degrees}°
+                  </span>
+                </div>
+              )}
             </div>
 
-            <div className="bg-slate-800 p-3 rounded-lg border border-slate-600">
-              <h3 className="text-xs uppercase tracking-wider text-gray-400 mb-2">Earthworks (Cut & Fill)</h3>
-              <div className="flex justify-between items-center mb-1">
-                <span className="text-sm text-red-300">Excavation (Cut):</span>
-                <span className="text-sm font-bold">{results.earthworks.cut_m3} m³</span>
+            {/* Earthworks */}
+            {results.earthworks && (
+              <div className="bg-slate-800 p-3 rounded-lg border border-slate-600">
+                <h3 className="text-xs uppercase tracking-wider text-gray-400 mb-2">Earthworks</h3>
+                <div className="flex justify-between mb-1 text-sm">
+                  <span className="text-red-300">Cut</span>
+                  <span className="font-bold">{results.earthworks.cut_m3} m³</span>
+                </div>
+                <div className="flex justify-between mb-1 text-sm">
+                  <span className="text-blue-300">Fill</span>
+                  <span className="font-bold">{results.earthworks.fill_m3} m³</span>
+                </div>
+                <div className="flex justify-between text-xs pt-1 border-t border-slate-600">
+                  <span>Balance</span>
+                  <span className="font-bold">Net {results.earthworks.net_balance_m3}</span>
+                </div>
               </div>
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-sm text-blue-300">Backfill (Fill):</span>
-                <span className="text-sm font-bold">{results.earthworks.fill_m3} m³</span>
-              </div>
-              <div className="pt-2 border-t border-slate-600 flex justify-between items-center">
-                <span className="text-xs">Balance:</span>
-                <span className="text-xs font-bold bg-slate-700 px-2 py-1 rounded">Net {results.earthworks.net_balance_m3}</span>
-              </div>
-            </div>
+            )}
 
-            <div className="bg-slate-800 p-3 rounded-lg border border-slate-600">
-              <h3 className="text-xs uppercase tracking-wider text-gray-400 mb-2">Hydrological Flow</h3>
-              <div className="flex justify-between items-center mb-1">
-                <span className="text-sm">Gravity Vector:</span>
-                <span className="text-sm font-bold text-cyan-400">{results.hydrology.flow_direction}</span>
+            {/* Hydrology */}
+            {results.hydrology && (
+              <div className="bg-slate-800 p-3 rounded-lg border border-slate-600">
+                <h3 className="text-xs uppercase tracking-wider text-gray-400 mb-2">Hydrology</h3>
+                <div className="flex justify-between mb-1 text-sm">
+                  <span>Flow direction</span>
+                  <span className="font-bold text-cyan-400">{results.hydrology.flow_direction}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>Flood risk</span>
+                  <span className={`font-bold ${results.hydrology.flood_risk === 'High' ? 'text-red-400' : 'text-emerald-400'}`}>
+                    {results.hydrology.flood_risk}
+                  </span>
+                </div>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm">Flood Risk:</span>
-                <span className={`text-sm font-bold ${results.hydrology.flood_risk === 'High' ? 'text-red-400' : 'text-emerald-400'}`}>
-                  {results.hydrology.flood_risk}
-                </span>
-              </div>
+            )}
+
+            {/* Push to calculators */}
+            <div className="space-y-1 pt-1">
+              <p className="text-[10px] text-gray-500 uppercase tracking-wider">Push to Calculator</p>
+              {results.elevation_m != null && (
+                <button type="button"
+                  onClick={() => { useWorkspaceStore.getState().openPanel('calculator'); useCalculationStore.getState().setModule('geo'); useCalculationStore.getState().setInputs({ site_elevation_m: results.elevation_m }); }}
+                  className="w-full py-1.5 text-xs bg-emerald-900/40 hover:bg-emerald-900/60 text-emerald-300 rounded border border-emerald-700/30 transition-colors text-left px-2">
+                  🌍 Site elevation → Geotechnics
+                </button>
+              )}
+              {results.hydrology?.flood_risk === 'High' && (
+                <button type="button"
+                  onClick={() => { useWorkspaceStore.getState().openPanel('calculator'); useCalculationStore.getState().setModule('wash_stormwater'); }}
+                  className="w-full py-1.5 text-xs bg-blue-900/40 hover:bg-blue-900/60 text-blue-300 rounded border border-blue-700/30 transition-colors text-left px-2">
+                  💧 Flood risk → Stormwater Design
+                </button>
+              )}
+              {results.slope_degrees != null && parseFloat(results.slope_degrees) > 8 && (
+                <button type="button"
+                  onClick={() => { useWorkspaceStore.getState().openPanel('calculator'); useCalculationStore.getState().setModule('geo_slope'); useCalculationStore.getState().setInputs({ slope_angle_deg: parseFloat(results.slope_degrees) }); }}
+                  className="w-full py-1.5 text-xs bg-amber-900/40 hover:bg-amber-900/60 text-amber-300 rounded border border-amber-700/30 transition-colors text-left px-2">
+                  ⛰ Steep slope → Slope Stability
+                </button>
+              )}
+              {results.earthworks && (
+                <button type="button"
+                  onClick={() => { useWorkspaceStore.getState().openPanel('calculator'); useCalculationStore.getState().setModule('road'); useCalculationStore.getState().setInputs({ earthworks_cut_m3: results.earthworks.cut_m3, earthworks_fill_m3: results.earthworks.fill_m3 }); }}
+                  className="w-full py-1.5 text-xs bg-orange-900/40 hover:bg-orange-900/60 text-orange-300 rounded border border-orange-700/30 transition-colors text-left px-2">
+                  🛣 Earthworks → Road/Pavement Design
+                </button>
+              )}
             </div>
           </div>
+
         ) : (
-          <div className="flex-1 flex items-center justify-center border-2 border-dashed border-gray-600 rounded-lg p-4 text-center">
-            <p className="text-gray-500 text-sm">Awaiting coordinate selection...</p>
+          <div className="flex-1 flex items-center justify-center border-2 border-dashed border-gray-700 rounded-lg p-4 text-center">
+            <p className="text-gray-500 text-sm">Click anywhere on the map to analyse terrain.</p>
           </div>
         )}
       </div>

@@ -23,8 +23,11 @@ interface ViewerState {
   resolvedBoxSelection: IFCElement[];
   hiddenOverlays: OverlayLayerId[];
   viewerControls: ViewerControls | null;
+  /** Bounds stored after a CAD drawing (DWG/DXF) is loaded; null for 3D IFC models. */
+  cadDrawingBounds: { min: [number, number, number]; max: [number, number, number] } | null;
   loadModel: (path: string) => void;
   setLoadedModel: (model: IFCModel | null) => void;
+  setCadDrawingBounds: (bounds: { min: [number, number, number]; max: [number, number, number] } | null) => void;
   selectElement: (element: IFCElement | null) => void;
   selectAssetType: (type: string | null) => void;
   setStorey: (level: number | null) => void;
@@ -65,12 +68,14 @@ export const useViewerStore = create<ViewerState>((set, get) => ({
   resolvedBoxSelection: [],
   hiddenOverlays: [],
   viewerControls: null,
+  cadDrawingBounds: null,
 
   loadModel: (path: string) => {
     set({ modelPath: path, hiddenTypes: [], selectedAssetType: null });
   },
 
   setLoadedModel: (model) => set({ loadedModel: model }),
+  setCadDrawingBounds: (bounds) => set({ cadDrawingBounds: bounds }),
 
   selectElement: (element) => set({ selectedElement: element }),
 

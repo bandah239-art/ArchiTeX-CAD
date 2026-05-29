@@ -20,6 +20,9 @@ import type { BIMViewerProps } from './ViewerTypes';
 import type { IFCElement } from '../../types/ifc';
 import { DOFIndicator } from '../../cad/ui/DOFIndicator';
 import { ConflictAlert } from '../../cad/ui/ConflictAlert';
+import { DrawDimensionOverlay } from './DrawDimensionOverlay';
+import { SketchCalcPrompt } from './SketchCalcPrompt';
+import { CanvasTextInput } from './CanvasTextInput';
 import { ConstraintPanel } from '../../cad/ui/ConstraintPanel';
 import { useSketchConstraintStore } from '../../store/sketchConstraintStore';
 import { useViewerStore } from '../../store/viewerStore';
@@ -46,7 +49,12 @@ import { bimGeometryAPI } from '../../services/bimGeometryAPI';
 import { CadEngineStatusIndicator } from './CadEngineStatus';
 import { CollaborationPresence } from './CollaborationPresence';
 import { collaborationClient } from '../../services/collaborationWS';
-import { createViewerControls, buildEntityTypeMap, type ViewerPluginRefs } from '../../services/viewerControls';
+import {
+  createViewerControls,
+  buildEntityTypeMap,
+  scheduleCameraFitAfterLoad,
+  type ViewerPluginRefs,
+} from '../../services/viewerControls';
 import { DrawEngine } from '../../services/drawEngine';
 import { TransformGizmoController, parseSketchMeshId } from '../../services/transformGizmo';
 import { sketchMeshIdsForElement } from '../../services/sketchMeshIds';
@@ -116,6 +124,22 @@ export function BIMViewer({
     });
 
     viewerRef.current = viewer;
+
+    const resizeViewerCanvas = () => {
+      const parent = canvas.parentElement;
+      if (!parent) return;
+      const w = parent.clientWidth;
+      const h = parent.clientHeight;
+      if (w > 0 && h > 0) {
+        canvas.width = w;
+        canvas.height = h;
+        viewer.scene.render();
+      }
+    };
+    const resizeObserver = new ResizeObserver(() => resizeViewerCanvas());
+    if (canvas.parentElement) resizeObserver.observe(canvas.parentElement);
+    window.addEventListener('resize', resizeViewerCanvas);
+    requestAnimationFrame(resizeViewerCanvas);
 
     viewer.scene.highlightMaterial.fillAlpha = 0.3;
     viewer.scene.highlightMaterial.edgeAlpha = 1.0;
@@ -398,6 +422,8 @@ export function BIMViewer({
     setViewerReady(true);
 
     return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener('resize', resizeViewerCanvas);
       canvasEl.removeEventListener('click', onCanvasClick, true);
       canvasEl.removeEventListener('mousemove', onCanvasMove);
       canvasEl.removeEventListener('dblclick', onCanvasDblClick, true);
@@ -491,6 +517,7 @@ export function BIMViewer({
           );
           setViewerControls(controls);
           useViewerStore.getState().setActiveTool('select');
+          useViewerStore.getState().setCadDrawingBounds(null);
           controls.exitSketchSession();
           controls.fitToView();
 
@@ -625,7 +652,15 @@ export function BIMViewer({
           useDrawStore.getState().setFloorElevation(floorY);
           useDrawStore.getState().setSketchBounds(cx, cz, span);
 
-          controls.fitToView();
+          useViewerStore.getState().setCadDrawingBounds({
+            min: bmin as [number, number, number],
+            max: bmax as [number, number, number],
+          });
+
+          scheduleCameraFitAfterLoad(controls, {
+            min: bmin as [number, number, number],
+            max: bmax as [number, number, number],
+          });
 
           if (useViewerStore.getState().gridVisible) {
             controls.setGridVisible(true);
@@ -781,6 +816,9 @@ export function BIMViewer({
       <DrawToolBanner />
       <DOFIndicator />
       <ConflictAlert />
+      <DrawDimensionOverlay />
+      <SketchCalcPrompt />
+      <CanvasTextInput />
       {barVisible && (
         <div className="absolute top-16 left-4 w-80 h-[75%] z-20 pointer-events-auto">
           <ConstraintPanel />
@@ -790,6 +828,7 @@ export function BIMViewer({
       <canvas
         ref={canvasRef}
         id="bimCanvas"
+        tabIndex={0}
         className="absolute inset-0 w-full h-full z-0"
         style={{ outline: 'none' }}
       />

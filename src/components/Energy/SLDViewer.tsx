@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import {
   ReactFlow,
   MiniMap,
@@ -11,140 +11,329 @@ import {
   Edge,
   Node,
   Panel,
+  ReactFlowInstance,
+  NodeProps,
+  Handle,
+  Position,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-const initialNodes: Node[] = [
-  { id: '1', type: 'input', position: { x: 250, y: 50 }, data: { label: 'Utility Grid (110kV)' }, style: { background: '#2563eb', color: 'white', borderRadius: '8px' } },
-  { id: '2', position: { x: 250, y: 150 }, data: { label: 'Main Busbar A (110kV)' }, style: { background: '#475569', color: 'white', width: 200, height: 10 } },
-  { id: '3', position: { x: 250, y: 250 }, data: { label: 'Step-Down Trafo (110kV/20kV)' }, style: { background: '#eab308', color: 'black', borderRadius: '50%' } },
-  { id: '4', position: { x: 250, y: 350 }, data: { label: 'Distribution Busbar B (20kV)' }, style: { background: '#475569', color: 'white', width: 300, height: 10 } },
-  { id: '5', type: 'output', position: { x: 150, y: 450 }, data: { label: 'Factory Load (5 MW)' }, style: { background: '#ef4444', color: 'white', borderRadius: '8px' } },
-  { id: '6', type: 'output', position: { x: 350, y: 450 }, data: { label: 'Residential Load (2 MW)' }, style: { background: '#ef4444', color: 'white', borderRadius: '8px' } },
-  { id: '7', position: { x: 50, y: 350 }, data: { label: 'Capacitor Bank (2 MVAR)' }, style: { background: '#10b981', color: 'white', borderRadius: '50%', width: 100, height: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center' } },
+import { useCalculationStore } from '../../store/calculationStore';
+import { useWorkspaceStore } from '../../store/workspaceStore';
+import type { CalculationModule } from '../../types/calculations';
+
+// ── Component palette definitions ────────────────────────────────────────────
+
+interface PaletteItem {
+  type: string;
+  label: string;
+  icon: string;
+  color: string;
+  calcModule?: CalculationModule;
+  calcLabel?: string;
+  defaultData: Record<string, string | number>;
+}
+
+const PALETTE: PaletteItem[] = [
+  { type: 'grid',        label: 'Utility Grid',      icon: '🏭', color: '#3b82f6', defaultData: { voltage: '33kV', label: 'Utility Grid' } },
+  { type: 'transformer', label: 'Transformer',        icon: '⚡', color: '#eab308', calcModule: 'energy_transmission', calcLabel: 'Sag-Tension / Sizing', defaultData: { rating: '315 kVA', ratio: '33kV/415V', label: 'Transformer' } },
+  { type: 'generator',   label: 'Generator',          icon: '🔋', color: '#10b981', calcModule: 'energy_bess',         calcLabel: 'Solar & BESS Sizing',   defaultData: { rating: '200 kW', label: 'Generator' } },
+  { type: 'busbar',      label: 'Busbar',             icon: '━━', color: '#64748b', defaultData: { voltage: '415V', label: 'Main LV Busbar' } },
+  { type: 'breaker',     label: 'Circuit Breaker',    icon: '⊟',  color: '#94a3b8', calcModule: 'energy_grid_fault',   calcLabel: 'Fault Analysis',        defaultData: { rating: '630A', label: 'ACB' } },
+  { type: 'solar',       label: 'Solar PV',           icon: '☀️', color: '#f59e0b', calcModule: 'energy_bess',         calcLabel: 'Solar & BESS Sizing',   defaultData: { power_kw: 100, label: 'PV Array' } },
+  { type: 'battery',     label: 'Battery Storage',    icon: '🔋', color: '#8b5cf6', calcModule: 'energy_bess',         calcLabel: 'BESS Sizing',           defaultData: { capacity_kwh: 200, label: 'BESS' } },
+  { type: 'motor',       label: 'Motor / Load',       icon: '⚙',  color: '#ef4444', calcModule: 'energy_microgrid',    calcLabel: 'Cable & Load Sizing',   defaultData: { power_kw: 55, label: 'Motor Load' } },
+  { type: 'capacitor',   label: 'Capacitor Bank',     icon: '⊙',  color: '#06b6d4', defaultData: { rating: '150 kVAR', label: 'Cap Bank' } },
+  { type: 'load',        label: 'General Load',       icon: '💡', color: '#f97316', calcModule: 'energy_microgrid',    calcLabel: 'Cable Sizing',          defaultData: { power_kw: 20, label: 'Load' } },
 ];
 
-const initialEdges: Edge[] = [
-  { id: 'e1-2', source: '1', target: '2', animated: true },
-  { id: 'e2-3', source: '2', target: '3' },
-  { id: 'e3-4', source: '3', target: '4' },
-  { id: 'e4-5', source: '4', target: '5' },
-  { id: 'e4-6', source: '4', target: '6' },
-  { id: 'e4-7', source: '4', target: '7' },
+// ── Custom node component ─────────────────────────────────────────────────────
+
+function SLDNode({ data, selected }: NodeProps) {
+  const d = data as { label: string; icon: string; color: string; type: string; calcModule?: string; calcLabel?: string; [k: string]: unknown };
+
+  return (
+    <div
+      className={`relative flex flex-col items-center justify-center rounded-lg px-3 py-2 min-w-[110px] cursor-default
+        border-2 transition-all ${selected ? 'border-white shadow-lg shadow-white/20' : 'border-transparent'}`}
+      style={{ background: `${d.color}22`, borderColor: selected ? '#fff' : d.color }}
+      title={d.calcLabel ? `Double-click: ${d.calcLabel}` : d.label}
+    >
+      <Handle type="target" position={Position.Top}    className="!bg-gray-400 !w-2 !h-2" />
+      <Handle type="source" position={Position.Bottom} className="!bg-gray-400 !w-2 !h-2" />
+      <Handle type="target" position={Position.Left}   className="!bg-gray-400 !w-2 !h-2" />
+      <Handle type="source" position={Position.Right}  className="!bg-gray-400 !w-2 !h-2" />
+
+      <span className="text-xl leading-none mb-1">{d.icon as string}</span>
+      <span className="text-[11px] font-bold text-white text-center leading-tight">{d.label as string}</span>
+      {d.type === 'busbar' && (
+        <div className="absolute inset-x-0 top-1/2 h-1.5 rounded" style={{ background: d.color, opacity: 0.8 }} />
+      )}
+      {d.calcModule && (
+        <span className="text-[8px] text-gray-400 mt-0.5">↕ calc</span>
+      )}
+    </div>
+  );
+}
+
+const NODE_TYPES = { sld: SLDNode };
+
+// ── Default starter diagram ───────────────────────────────────────────────────
+
+const STARTER_NODES: Node[] = [
+  { id: 'n1', type: 'sld', position: { x: 300, y:  40 }, data: { ...PALETTE[0].defaultData, icon: PALETTE[0].icon, color: PALETTE[0].color, type: 'grid' } },
+  { id: 'n2', type: 'sld', position: { x: 300, y: 160 }, data: { ...PALETTE[1].defaultData, icon: PALETTE[1].icon, color: PALETTE[1].color, type: 'transformer', calcModule: 'energy_transmission', calcLabel: 'Sag-Tension / Sizing' } },
+  { id: 'n3', type: 'sld', position: { x: 300, y: 300 }, data: { label: 'Main LV Busbar', icon: '━━', color: '#64748b', type: 'busbar' } },
+  { id: 'n4', type: 'sld', position: { x: 160, y: 420 }, data: { label: 'Factory Load', icon: '⚙', color: '#ef4444', type: 'motor', power_kw: 55, calcModule: 'energy_microgrid', calcLabel: 'Cable & Load Sizing' } },
+  { id: 'n5', type: 'sld', position: { x: 440, y: 420 }, data: { label: 'Residential', icon: '💡', color: '#f97316', type: 'load', power_kw: 20, calcModule: 'energy_microgrid', calcLabel: 'Cable Sizing' } },
+  { id: 'n6', type: 'sld', position: { x: 80,  y: 300 }, data: { label: 'Solar PV 100kW', icon: '☀️', color: '#f59e0b', type: 'solar', power_kw: 100, calcModule: 'energy_bess', calcLabel: 'Solar & BESS Sizing' } },
 ];
+
+const STARTER_EDGES: Edge[] = [
+  { id: 'e1', source: 'n1', target: 'n2', animated: true,  label: '33kV cable' },
+  { id: 'e2', source: 'n2', target: 'n3', animated: false, label: '415V' },
+  { id: 'e3', source: 'n3', target: 'n4', animated: false, label: '150mm² Cu' },
+  { id: 'e4', source: 'n3', target: 'n5', animated: false, label: '70mm² Cu' },
+  { id: 'e5', source: 'n6', target: 'n3', animated: true,  label: 'AC tie' },
+];
+
+// ── Main component ────────────────────────────────────────────────────────────
 
 export function SLDViewer() {
-  const [nodes, , onNodesChange] = useNodesState(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
-  const [simulating, setSimulating] = useState(false);
-  const [results, setResults] = useState<any>(null);
+  const [nodes, setNodes, onNodesChange] = useNodesState(STARTER_NODES);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(STARTER_EDGES);
+  const [rfInstance, setRfInstance]       = useState<ReactFlowInstance | null>(null);
+  const [selectedNode, setSelectedNode]   = useState<Node | null>(null);
+  const [editingLabel, setEditingLabel]   = useState('');
+  const [showPanel, setShowPanel]         = useState<'props' | null>(null);
+  const reactFlowWrapper                  = useRef<HTMLDivElement>(null);
 
-  const onConnect = useCallback((params: Connection) => setEdges((eds) => addEdge(params, eds)), [setEdges]);
+  const onConnect = useCallback(
+    (params: Connection) =>
+      setEdges((eds) => addEdge({ ...params, label: 'cable' }, eds)),
+    [setEdges],
+  );
 
-  const simulateGrid = async () => {
-    setSimulating(true);
-    setResults(null);
-    try {
-      // In a full implementation, we map ReactFlow nodes/edges to Pandapower JSON
-      const payload = {
-        nodes: nodes.map(n => ({ id: n.id, label: n.data.label })),
-        edges: edges.map(e => ({ source: e.source, target: e.target }))
+  // Drag from palette
+  const onDragStart = (e: React.DragEvent, item: PaletteItem) => {
+    e.dataTransfer.setData('application/sld-type', item.type);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const onDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      const type = e.dataTransfer.getData('application/sld-type');
+      if (!type || !rfInstance || !reactFlowWrapper.current) return;
+      const palette = PALETTE.find((p) => p.type === type);
+      if (!palette) return;
+
+      const bounds = reactFlowWrapper.current.getBoundingClientRect();
+      const pos = rfInstance.screenToFlowPosition({
+        x: e.clientX - bounds.left,
+        y: e.clientY - bounds.top,
+      });
+
+      const newNode: Node = {
+        id: `n-${Date.now()}`,
+        type: 'sld',
+        position: pos,
+        data: {
+          ...palette.defaultData,
+          icon:       palette.icon,
+          color:      palette.color,
+          type:       palette.type,
+          calcModule: palette.calcModule,
+          calcLabel:  palette.calcLabel,
+        },
       };
-      // For now, we mock the API response if the backend is not ready
-      const res = await fetch('http://127.0.0.1:8000/api/energy/power-flow', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      }).catch(() => null);
+      setNodes((nds) => [...nds, newNode]);
+    },
+    [rfInstance, setNodes],
+  );
 
-      if (res && res.ok) {
-        const data = await res.json();
-        setResults(data);
-      } else {
-        // Fallback mock results to demonstrate the engine
-        setTimeout(() => {
-          setResults({
-            buses: [
-              { id: '2', name: 'Main Busbar A', vm_pu: 1.0 },
-              { id: '4', name: 'Distribution Busbar B', vm_pu: 0.985 },
-            ],
-            lines: [
-              { id: 'e4-5', loading_percent: 45.2 },
-              { id: 'e4-6', loading_percent: 88.5 },
-            ],
-            transformers: [
-              { id: '3', loading_percent: 65.4 }
-            ]
-          });
-          setSimulating(false);
-        }, 1500);
-      }
-    } catch (err) {
-      console.error(err);
-      setSimulating(false);
+  const onDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  // Double-click node → open calculator
+  const onNodeDoubleClick = useCallback((_: React.MouseEvent, node: Node) => {
+    const d = node.data as { calcModule?: string };
+    if (d.calcModule) {
+      useWorkspaceStore.getState().openPanel('calculator');
+      useCalculationStore.getState().setModule(d.calcModule as CalculationModule);
+    }
+  }, []);
+
+  // Single click node → select for property panel
+  const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
+    setSelectedNode(node);
+    setEditingLabel(String((node.data as { label: string }).label ?? ''));
+    setShowPanel('props');
+  }, []);
+
+  const applyLabelEdit = () => {
+    if (!selectedNode) return;
+    setNodes((nds) =>
+      nds.map((n) =>
+        n.id === selectedNode.id
+          ? { ...n, data: { ...n.data, label: editingLabel } }
+          : n,
+      ),
+    );
+    setShowPanel(null);
+  };
+
+  const deleteSelected = () => {
+    if (!selectedNode) return;
+    setNodes((nds) => nds.filter((n) => n.id !== selectedNode.id));
+    setEdges((eds) => eds.filter((e) => e.source !== selectedNode.id && e.target !== selectedNode.id));
+    setSelectedNode(null);
+    setShowPanel(null);
+  };
+
+  const openCalcForSelected = () => {
+    if (!selectedNode) return;
+    const d = selectedNode.data as { calcModule?: string };
+    if (d.calcModule) {
+      useWorkspaceStore.getState().openPanel('calculator');
+      useCalculationStore.getState().setModule(d.calcModule as CalculationModule);
+      setShowPanel(null);
+    }
+  };
+
+  // Export as image
+  const exportPng = () => {
+    const canvas = reactFlowWrapper.current?.querySelector('canvas');
+    if (canvas) {
+      const a = document.createElement('a');
+      a.href = (canvas as HTMLCanvasElement).toDataURL('image/png');
+      a.download = 'single-line-diagram.png';
+      a.click();
     }
   };
 
   return (
-    <div className="w-full h-full bg-[#0f172a] relative">
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
-        fitView
-      >
-        <Background color="#334155" gap={16} />
-        <Controls />
-        <MiniMap nodeStrokeColor={(n) => {
-          if (n.type === 'input') return '#2563eb';
-          if (n.type === 'output') return '#ef4444';
-          return '#eab308';
-        }} nodeColor="#1e293b" />
-        
-        <Panel position="top-right" className="bg-infra-dark/90 p-4 rounded-lg border border-gray-700 shadow-xl m-4 w-80 text-white backdrop-blur-md">
-          <h2 className="text-lg font-bold mb-2 text-infra-highlight">Electrical SLD Engine</h2>
-          <p className="text-sm text-gray-400 mb-4">
-            Drag and drop components to design the grid topology. Click simulate to run a full Newton-Raphson power flow analysis using Pandapower.
-          </p>
-          <button
-            onClick={simulateGrid}
-            disabled={simulating}
-            className="w-full bg-infra-accent hover:bg-infra-accent/80 text-white font-bold py-2 px-4 rounded transition-colors disabled:opacity-50"
-          >
-            {simulating ? 'Running Matrix Analysis...' : 'Simulate Power Flow'}
-          </button>
+    <div className="w-full h-full bg-[#0a0f1e] flex">
 
-          {results && (
-            <div className="mt-4 space-y-4">
+      {/* ── Component Palette ── */}
+      <div className="w-44 flex-shrink-0 bg-[#0f172a] border-r border-slate-700 flex flex-col">
+        <div className="px-3 py-2 border-b border-slate-700">
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Components</p>
+          <p className="text-[9px] text-gray-600 mt-0.5">Drag onto diagram</p>
+        </div>
+        <div className="flex-1 overflow-y-auto py-1 space-y-0.5">
+          {PALETTE.map((item) => (
+            <div
+              key={item.type}
+              draggable
+              onDragStart={(e) => onDragStart(e, item)}
+              className="flex items-center gap-2 px-3 py-1.5 cursor-grab hover:bg-slate-700/50 transition-colors"
+              title={item.calcModule ? `Opens ${item.calcLabel}` : item.label}
+            >
+              <span className="text-base w-6 text-center">{item.icon}</span>
               <div>
-                <h3 className="font-semibold text-emerald-400 border-b border-gray-700 pb-1 mb-2">Bus Voltages (p.u.)</h3>
-                {results.buses.map((b: any) => (
-                  <div key={b.id} className="flex justify-between text-sm">
-                    <span className="text-gray-300">{b.name}</span>
-                    <span className={b.vm_pu < 0.95 ? 'text-red-400 font-bold' : 'text-emerald-400'}>{b.vm_pu.toFixed(3)} p.u.</span>
-                  </div>
-                ))}
-              </div>
-              <div>
-                <h3 className="font-semibold text-amber-400 border-b border-gray-700 pb-1 mb-2">Cable/Trafo Loading (%)</h3>
-                {results.transformers.map((t: any) => (
-                  <div key={t.id} className="flex justify-between text-sm">
-                    <span className="text-gray-300">Trafo {t.id}</span>
-                    <span className={t.loading_percent > 80 ? 'text-amber-400 font-bold' : 'text-emerald-400'}>{t.loading_percent.toFixed(1)}%</span>
-                  </div>
-                ))}
-                {results.lines.map((l: any) => (
-                  <div key={l.id} className="flex justify-between text-sm">
-                    <span className="text-gray-300">Line {l.id}</span>
-                    <span className={l.loading_percent > 80 ? 'text-red-400 font-bold' : 'text-emerald-400'}>{l.loading_percent.toFixed(1)}%</span>
-                  </div>
-                ))}
+                <p className="text-[11px] text-gray-300 leading-tight">{item.label}</p>
+                {item.calcModule && (
+                  <p className="text-[9px] text-infra-highlight/60 leading-tight">↕ calc</p>
+                )}
               </div>
             </div>
-          )}
-        </Panel>
-      </ReactFlow>
+          ))}
+        </div>
+
+        {/* Tip */}
+        <div className="px-3 py-2 border-t border-slate-700 text-[9px] text-gray-600 space-y-0.5">
+          <p>🖱 Click node → properties</p>
+          <p>↔ Drag handle → connect</p>
+          <p>2×click → open calculator</p>
+        </div>
+      </div>
+
+      {/* ── ReactFlow Canvas ── */}
+      <div className="flex-1 relative" ref={reactFlowWrapper} onDrop={onDrop} onDragOver={onDragOver}>
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onConnect={onConnect}
+          onInit={setRfInstance}
+          onNodeDoubleClick={onNodeDoubleClick}
+          onNodeClick={onNodeClick}
+          nodeTypes={NODE_TYPES}
+          fitView
+          deleteKeyCode="Delete"
+        >
+          <Background color="#1e293b" gap={20} />
+          <Controls />
+          <MiniMap
+            nodeColor={(n) => String((n.data as { color: string }).color ?? '#64748b')}
+            className="!bg-slate-900 !border-slate-700"
+          />
+
+          {/* Toolbar */}
+          <Panel position="top-right">
+            <div className="flex gap-1 bg-slate-900/90 backdrop-blur border border-slate-700 rounded-lg p-1.5">
+              <button
+                type="button"
+                onClick={exportPng}
+                title="Export as PNG"
+                className="px-2 py-1 text-[10px] bg-slate-700 hover:bg-slate-600 text-gray-300 rounded"
+              >
+                📷 Export
+              </button>
+            </div>
+          </Panel>
+        </ReactFlow>
+
+        {/* ── Properties panel ── */}
+        {showPanel === 'props' && selectedNode && (
+          <div className="absolute top-3 left-3 w-56 bg-slate-900/95 backdrop-blur border border-slate-700 rounded-xl shadow-2xl z-10 overflow-hidden">
+            <div className="flex items-center justify-between px-3 py-2 border-b border-slate-700 bg-slate-800/80">
+              <span className="text-xs font-bold text-white">
+                {String((selectedNode.data as { icon: string }).icon)} Properties
+              </span>
+              <button type="button" onClick={() => setShowPanel(null)} className="text-gray-500 hover:text-white text-sm">✕</button>
+            </div>
+            <div className="p-3 space-y-2">
+              <div>
+                <label className="text-[10px] text-gray-400 block mb-0.5">Label</label>
+                <input
+                  type="text"
+                  value={editingLabel}
+                  onChange={(e) => setEditingLabel(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && applyLabelEdit()}
+                  className="w-full bg-slate-800 text-white text-xs px-2 py-1.5 rounded border border-slate-600 outline-none focus:border-infra-highlight"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={applyLabelEdit}
+                className="w-full py-1.5 text-xs bg-infra-highlight/80 hover:bg-infra-highlight text-white rounded transition-colors"
+              >
+                Apply
+              </button>
+              {(selectedNode.data as { calcModule?: string }).calcModule && (
+                <button
+                  type="button"
+                  onClick={openCalcForSelected}
+                  className="w-full py-1.5 text-xs bg-blue-700/50 hover:bg-blue-700 text-blue-200 rounded transition-colors"
+                >
+                  Open {(selectedNode.data as { calcLabel?: string }).calcLabel ?? 'Calculator'} →
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={deleteSelected}
+                className="w-full py-1.5 text-xs bg-red-900/40 hover:bg-red-900/70 text-red-300 rounded transition-colors"
+              >
+                Delete component
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

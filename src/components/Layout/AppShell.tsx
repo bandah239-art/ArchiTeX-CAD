@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { WorkspacePanel } from '../../types/boq';
 import { Sidebar } from './Sidebar';
@@ -35,9 +36,14 @@ import { useBIMViewer } from '../../hooks/useBIMViewer';
 import { ErrorBoundary } from '../ErrorBoundary';
 import { useToolbarStore } from '../BIMViewer/toolRegistry';
 import { FeatureTreePanel } from '../../cad/history/FeatureTreePanel';
+import { ProjectWorkspace } from '../Project/ProjectWorkspace';
+import { ZambiaSitePanel } from '../Site/ZambiaSitePanel';
+import { QuantityVerifier } from '../Verification/QuantityVerifier';
+import { MaterialPricePanel } from '../Materials/MaterialPricePanel';
 
 const PANEL_INFO: Record<WorkspacePanel, { title: string; icon: string; key: string }> = {
   viewer: { title: '3D Viewer', icon: '🏗️', key: 'sidebar.viewer' },
+  project: { title: 'Project Workspace', icon: '📂', key: 'sidebar.project' },
   calculator: { title: 'Calculator', icon: '📐', key: 'sidebar.calculator' },
   boq: { title: 'Bill of Quantities', icon: '📋', key: 'sidebar.boq' },
   schedule: { title: '4D Schedule', icon: '📅', key: 'sidebar.schedule' },
@@ -54,6 +60,9 @@ const PANEL_INFO: Record<WorkspacePanel, { title: string; icon: string; key: str
   energy: { title: 'Solar/Energy', icon: '☀️', key: 'sidebar.energy' },
   intelligence: { title: 'Digital Twin', icon: '🔮', key: 'sidebar.intelligence' },
   emerging: { title: 'Emerging Tech', icon: '🚀', key: 'sidebar.emerging' },
+  site:         { title: 'Zambia Site Intel',   icon: '🇿🇲', key: 'sidebar.site' },
+  verification: { title: 'Quantity Verifier',   icon: '🔍', key: 'sidebar.verification' },
+  materials:    { title: 'Material Prices',      icon: '💰', key: 'sidebar.materials' },
 };
 
 interface AppShellProps {
@@ -77,8 +86,14 @@ export function AppShell({ onBackToDashboard }: AppShellProps) {
   const { activeTab } = useToolbarStore();
   useViewerShortcuts();
 
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [treeCollapsed, setTreeCollapsed] = useState(false);
+  const [ribbonCollapsed, setRibbonCollapsed] = useState(false);
+
   const renderSidePanel = () => {
     switch (activePanel) {
+      case 'project':
+        return <ProjectWorkspace />;
       case 'calculator':
         return <CalculatorPanel />;
       case 'boq':
@@ -111,6 +126,12 @@ export function AppShell({ onBackToDashboard }: AppShellProps) {
         return <EmergingTechPanel />;
       case 'vision':
         return <VisionPanel />;
+      case 'site':
+        return <ZambiaSitePanel />;
+      case 'verification':
+        return <QuantityVerifier />;
+      case 'materials':
+        return <MaterialPricePanel />;
       default:
         return null;
     }
@@ -124,11 +145,19 @@ export function AppShell({ onBackToDashboard }: AppShellProps) {
         onToggleInspector={toggleInspector}
       />
       <div className="relative z-20 flex-shrink-0">
-        <ViewerToolRibbon />
+        <ViewerToolRibbon collapsed={ribbonCollapsed} onToggleCollapse={() => setRibbonCollapsed((v) => !v)} />
         <ToolResultBanner />
       </div>
       <div className="flex flex-1 min-h-0 overflow-hidden">
-        <Sidebar activePanel={activePanel} onPanelChange={setActivePanel} />
+        {!sidebarCollapsed && <Sidebar activePanel={activePanel} onPanelChange={setActivePanel} />}
+        <button
+          type="button"
+          onClick={() => setSidebarCollapsed((v) => !v)}
+          title={sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar'}
+          className="w-3.5 flex-shrink-0 flex items-center justify-center bg-[#16213e] border-r border-[#0f3460]/50 hover:bg-[#0f3460]/50 cursor-pointer transition-colors text-gray-500 hover:text-gray-200 text-[9px]"
+        >
+          {sidebarCollapsed ? '›' : '‹'}
+        </button>
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           {/* Workspace Tabs Header Bar */}
           <div className="flex items-center bg-[#11192e] border-b border-[#1f293d]/50 px-2 h-11 flex-shrink-0 gap-1 overflow-x-auto overflow-y-hidden select-none">
@@ -170,16 +199,26 @@ export function AppShell({ onBackToDashboard }: AppShellProps) {
           <div className="flex-1 min-h-0 overflow-hidden">
             {activePanel === 'viewer' ? (
               <div className="flex flex-1 h-full min-h-0 overflow-hidden">
-                <div className="panel-tree flex flex-col min-h-0">
-                  {activeTab === 'draw' ? (
-                    <FeatureTreePanel />
-                  ) : (
-                    <>
-                      <ModelTree />
-                      <LayerPanel />
-                    </>
-                  )}
-                </div>
+                {!treeCollapsed && (
+                  <div className="panel-tree flex flex-col min-h-0">
+                    {activeTab === 'draw' ? (
+                      <FeatureTreePanel />
+                    ) : (
+                      <>
+                        <ModelTree />
+                        <LayerPanel />
+                      </>
+                    )}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setTreeCollapsed((v) => !v)}
+                  title={treeCollapsed ? 'Show panel' : 'Hide panel'}
+                  className="w-3.5 flex-shrink-0 flex items-center justify-center bg-[#16213e] border-r border-[#0f3460]/50 hover:bg-[#0f3460]/50 cursor-pointer transition-colors text-gray-500 hover:text-gray-200 text-[9px] z-10"
+                >
+                  {treeCollapsed ? '›' : '‹'}
+                </button>
                 <div className="flex-1 relative min-h-0 min-w-0 overflow-hidden">
                   <ErrorBoundary>
                     {mainView === 'bim' && (

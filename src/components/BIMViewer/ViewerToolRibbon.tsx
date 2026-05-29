@@ -142,7 +142,7 @@ function ModifierInputs() {
   );
 }
 
-export function ViewerToolRibbon() {
+export function ViewerToolRibbon({ collapsed = false, onToggleCollapse }: { collapsed?: boolean; onToggleCollapse?: () => void }) {
   const { t } = useTranslation();
   const { run } = useToolActions();
   const { activeTab, setActiveTab } = useToolbarStore();
@@ -242,8 +242,8 @@ export function ViewerToolRibbon() {
   ].filter((t, i, arr) => arr.findIndex((x) => x.id === t.id) === i);
 
   return (
-    <div className="tool-ribbon-shell">
-      <div className="tool-ribbon-tabs">
+    <div className="tool-ribbon-shell" style={{ position: 'relative' }}>
+      <div className="tool-ribbon-tabs" style={{ paddingRight: '2.5rem' }}>
         {RIBBON_TABS.map((tab) => (
           <button
             key={tab.id}
@@ -258,24 +258,37 @@ export function ViewerToolRibbon() {
           </button>
         ))}
       </div>
+      <button
+        type="button"
+        onClick={onToggleCollapse}
+        title={collapsed ? 'Show toolbar' : 'Hide toolbar'}
+        style={{ position: 'absolute', top: '4px', right: '6px', zIndex: 10 }}
+        className="flex-shrink-0 px-2 py-1 text-gray-300 hover:text-white bg-[#1a1a2e] hover:bg-[#0f3460]/70 border border-[#0f3460]/50 rounded transition-colors text-xs font-bold"
+      >
+        {collapsed ? '▼' : '▲'}
+      </button>
 
-      <div className="tool-ribbon-row-primary">
-        {renderRow(primaryTools)}
-      </div>
+      {!collapsed && (
+        <>
+          <div className="tool-ribbon-row-primary">
+            {renderRow(primaryTools)}
+          </div>
 
-      <div className="tool-ribbon-row-modifier">
-        {renderRow(modifierTools)}
-        <ModifierInputs />
-        <div className="ml-auto flex-shrink-0 text-sm text-gray-400 px-3 hidden md:block">
-          {activeTool && activeTool !== 'select' ? (
-            <span>
-              {t('tools.activeTool')}: <span className="text-infra-highlight font-medium">{activeTool}</span>
-            </span>
-          ) : (
-            <span>{t('tools.hint')}</span>
-          )}
-        </div>
-      </div>
+          <div className="tool-ribbon-row-modifier">
+            {renderRow(modifierTools)}
+            <ModifierInputs />
+            <div className="ml-auto flex-shrink-0 text-sm text-gray-400 px-3 hidden md:block">
+              {activeTool && activeTool !== 'select' ? (
+                <span>
+                  {t('tools.activeTool')}: <span className="text-infra-highlight font-medium">{activeTool}</span>
+                </span>
+              ) : (
+                <span>{t('tools.hint')}</span>
+              )}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

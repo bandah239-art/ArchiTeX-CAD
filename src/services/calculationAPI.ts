@@ -217,6 +217,12 @@ export const calculationAPI = {
   calculateGeoTunneling: (inputs: Record<string, unknown>): Promise<CalculationResult> =>
     post('/geo/tunneling', inputs),
 
+  calculateMasonry: (inputs: Record<string, unknown>): Promise<CalculationResult> =>
+    post('/calculate/masonry', inputs),
+
+  calculateBlackCotton: (inputs: Record<string, unknown>): Promise<CalculationResult> =>
+    post('/geotechnical/black-cotton', inputs),
+
   checkHealth: async (): Promise<boolean> => {
     try {
       const res = await fetch(`${API_BASE}/health`);

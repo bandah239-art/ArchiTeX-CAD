@@ -1,7 +1,8 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useGeoStore } from '../../store/geoStore';
 import { GeoMap } from './GeoMap';
+import { GeoSimulationPanel } from '../Geo/GeoSimulationPanel';
 
 const COUNTRIES = [
   { code: 'ZM', label: '🇿🇲 Zambia' },
@@ -25,6 +26,7 @@ export function GeoPanel() {
   const { t } = useTranslation();
   const setLocation = useGeoStore((s) => s.setLocation);
   const geo = useGeoStore();
+  const [mainTab, setMainTab] = useState<'analysis' | 'sim'>('analysis');
 
   useEffect(() => {
     geo.loadCacheStatus();
@@ -49,9 +51,48 @@ export function GeoPanel() {
           🌍 {t('geo.title')}
         </h2>
         <p className="text-[10px] text-gray-500 mt-1">{t('geo.subtitle')}</p>
+        <div className="flex gap-1 mt-2">
+          {(['analysis', 'sim'] as const).map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setMainTab(tab)}
+              className={`flex-1 py-1 text-xs rounded font-medium transition-colors ${
+                mainTab === tab
+                  ? 'bg-emerald-600 text-white'
+                  : 'bg-infra-accent/30 text-gray-400 hover:bg-infra-accent/50'
+              }`}
+            >
+              {tab === 'analysis' ? '🗺 Site Analysis' : '📊 Simulations'}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
+
+        {/* ── Simulations tab ── */}
+        {mainTab === 'sim' && (
+          <GeoSimulationPanel inputs={{
+            clay_thickness_m: 5,
+            cv_m2_yr: 1.5,
+            cc: 0.25,
+            initial_void_ratio: 0.8,
+            sigma0_kpa: 100,
+            delta_sigma_kpa: 80,
+            slope_height_m: 8,
+            slope_angle_deg: 30,
+            cohesion_kpa: 15,
+            friction_angle_deg: 28,
+            soil_unit_weight_knm3: 18,
+            pile_length_m: 12,
+            pile_diameter_m: 0.4,
+            soil_friction_angle_deg: 30,
+          }} />
+        )}
+
+        {/* ── Site Analysis tab ── */}
+        {mainTab === 'analysis' && (<>
         <GeoMap latitude={geo.latitude} longitude={geo.longitude} onLocationChange={onMapPick} />
 
         {geo.locationLabel && (
@@ -290,6 +331,7 @@ export function GeoPanel() {
             </div>
           </>
         )}
+        </>)}
       </div>
     </div>
   );

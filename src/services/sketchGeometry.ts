@@ -24,6 +24,7 @@ export const MIN_POINTS: Record<SketchKind, number> = {
   region: 3,
   donut: 2,
   revcloud: 3,
+  text: 1,
 };
 
 /** Sketch tools that place geometry via clicks (not gizmo). */

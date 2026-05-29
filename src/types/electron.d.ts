@@ -14,6 +14,7 @@ export interface ElectronAPI {
   offlineSaveCalculation: (id: string, projectId: string, type: string, inputs: Record<string, unknown>, results: Record<string, unknown>) => Promise<void>;
   offlineLoadCalculations: (projectId: string) => Promise<Record<string, unknown>[]>;
   osAction?: (action: string, targetPath?: string) => Promise<void>;
+  restartPythonServer?: () => Promise<void>;
 }
 
 declare global {

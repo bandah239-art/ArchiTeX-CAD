@@ -8,6 +8,7 @@ interface SidebarProps {
 
 const PANELS: { id: WorkspacePanel; icon: string; key: string }[] = [
   { id: 'viewer', icon: '🏗️', key: 'sidebar.viewer' },
+  { id: 'project', icon: '📂', key: 'sidebar.project' },
   { id: 'calculator', icon: '📐', key: 'sidebar.calculator' },
   { id: 'boq', icon: '📋', key: 'sidebar.boq' },
   { id: 'schedule', icon: '📅', key: 'sidebar.schedule' },
@@ -24,6 +25,9 @@ const PANELS: { id: WorkspacePanel; icon: string; key: string }[] = [
   { id: 'energy', icon: '☀️', key: 'sidebar.energy' },
   { id: 'intelligence', icon: '🔮', key: 'sidebar.intelligence' },
   { id: 'emerging', icon: '🚀', key: 'sidebar.emerging' },
+  { id: 'site',         icon: '🇿🇲', key: 'sidebar.site' },
+  { id: 'verification', icon: '🔍', key: 'sidebar.verification' },
+  { id: 'materials',    icon: '💰', key: 'sidebar.materials' },
 ];
 
 export function Sidebar({ activePanel, onPanelChange }: SidebarProps) {

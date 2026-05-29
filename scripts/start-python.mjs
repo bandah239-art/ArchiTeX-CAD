@@ -53,17 +53,30 @@ function assertPythonRunnable(exe, cmd, shell) {
   }
 }
 
+function shouldUseReload() {
+  if (process.env.INFRA_PYTHON_RELOAD === '1') return true;
+  if (process.env.INFRA_PYTHON_RELOAD === '0') return false;
+  // uvicorn --reload + OneDrive file watching often leaves a hung listener on Windows.
+  const onOneDrive = /OneDrive/i.test(projectRoot);
+  if (process.platform === 'win32' && onOneDrive) return false;
+  return process.env.NODE_ENV !== 'production';
+}
+
 function startServer() {
   const exe = resolvePythonExecutable();
+  const reload = shouldUseReload();
   const { cmd, args, shell } = getUvicornLaunchConfig({
     host: HOST,
     port: PORT,
-    reload: true,
+    reload,
   });
 
   console.log(
     `Starting Python server at http://${HOST}:${PORT} (${describePythonSource(exe)}) ...`,
   );
+  if (!reload) {
+    console.log('  reload: off (stable mode — set INFRA_PYTHON_RELOAD=1 to enable hot reload)');
+  }
   if (exe) console.log(`  ${exe}`);
   else console.log(`  ${cmd}`);
 

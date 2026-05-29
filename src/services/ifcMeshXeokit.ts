@@ -168,7 +168,6 @@ export async function loadIfcIntoXeokit(
         id: entityId,
         meshIds,
         isObject: true,
-        name: element.name || entityId,
       });
       elementByEntityId.set(entityId, element);
     }
@@ -406,7 +405,6 @@ export async function loadCadServerIntoXeokit(
       id: entityId,
       meshIds: [meshId],
       isObject: true,
-      name: raw.name || entityId,
     });
 
     const element: ParsedIfcElement = {
@@ -436,6 +434,7 @@ export async function loadCadServerIntoXeokit(
   }
 
   sceneModel.finalize();
+  // Camera fit is handled by BIMViewer after meshes are committed (deferred rAF + render).
 
   const payloadHasBounds = !!(bounds?.min && bounds?.max);
   const displayBounds = hasExtents
@@ -449,10 +448,6 @@ export async function loadCadServerIntoXeokit(
           modelCenterOffset,
         )
       : { min: [-10, -1, -10] as [number, number, number], max: [10, 10, 10] as [number, number, number] };
-
-  viewer.cameraFlight.flyTo(
-    viewer.scene.aabb as unknown as Parameters<typeof viewer.cameraFlight.flyTo>[0],
-  );
 
   options?.onProgress?.(100);
 

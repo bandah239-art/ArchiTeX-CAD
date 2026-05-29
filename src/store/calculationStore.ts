@@ -435,6 +435,40 @@ const DEFAULT_INPUTS: Record<CalculationModule, Record<string, unknown>> = {
     P_kn: 100,
     support: 'free',
   },
+  masonry: {
+    width: 230,
+    height: 3.0,
+    length: 4.0,
+    load_type: 'udl',
+    axial_load: 100,
+    moment: 2.0,
+    brick_class: '3',
+    mortar_designation: 'ii',
+    wall_condition: 'normal',
+    restraint_top: 'restrained',
+    restraint_bottom: 'restrained',
+    openings: false,
+    project_id: 'default',
+  },
+  black_cotton: {
+    LL_pct: 55,
+    PL_pct: 22,
+    PI_pct: 33,
+    swell_pressure_kpa: 0,
+    depth_to_rock_m: 3.5,
+    GWT_m: 2.5,
+    dry_unit_weight_knm3: 15.5,
+    proposed_foundation: 'raft',
+    B_m: 1.5,
+    Df_m: 1.0,
+    soil_profile: {
+      clay_content_pct: 45,
+      natural_moisture_pct: 18,
+      undrained_cohesion_kpa: 50,
+      column_load_kn: 150,
+    },
+    project_id: 'default',
+  },
 };
 
 function asCalculationResult(raw: unknown, fallbackTitle: string): CalculationResult {
@@ -692,6 +726,8 @@ export const useCalculationStore = create<CalculationState>((set, get) => ({
   runCalculation: async () => {
     const { activeModule, currentInputs } = get();
     const inputs = mergeWithDefaults(activeModule, currentInputs);
+    const activeCode = localStorage.getItem('infra_active_design_code') || 'BS_8110';
+    inputs.design_code = activeCode;
     set({ isCalculating: true, error: null, currentInputs: inputs });
 
     try {
@@ -907,6 +943,23 @@ export const useCalculationStore = create<CalculationState>((set, get) => ({
           result = asCalculationResult(raw, 'Tunnel rock mass');
           const rmr = raw.rmr_score as number | undefined;
           if (typeof rmr === 'number' && rmr < 40) result.status = 'warning';
+          break;
+        }
+        case 'masonry': {
+          result = await calculationAPI.calculateMasonry(inputs);
+          break;
+        }
+        case 'black_cotton': {
+          const payload = {
+            ...inputs,
+            soil_profile: {
+              clay_content_pct: inputs.clay_content_pct ?? 45,
+              natural_moisture_pct: inputs.natural_moisture_pct ?? 18,
+              undrained_cohesion_kpa: inputs.undrained_cohesion_kpa ?? 50,
+              column_load_kn: inputs.column_load_kn ?? 150,
+            }
+          };
+          result = await calculationAPI.calculateBlackCotton(payload);
           break;
         }
         default:

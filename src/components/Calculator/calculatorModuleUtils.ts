@@ -2,6 +2,12 @@ import type { CalculationModule } from '../../types/calculations';
 
 /** Modules that render their own Calculate button (hide panel-level CALCULATE). */
 export const MODULES_WITH_INLINE_CALCULATE: CalculationModule[] = [
+  'beam',
+  'slab',
+  'column',
+  'masonry',
+  'black_cotton',
+  'road',
   'fea',
   'energy_bess',
   'energy_microgrid',

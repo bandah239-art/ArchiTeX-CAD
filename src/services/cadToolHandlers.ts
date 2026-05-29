@@ -193,6 +193,10 @@ export function runCadToolAction(actionId: string): boolean {
     case 'cad.annotate.dimDiameter':
     case 'cad.annotate.mtext':
     case 'cad.annotate.text':
+      // Activate text annotation tool — CanvasTextInput handles the click-to-place
+      viewer.setActiveTool('draw.text');
+      finish(actionId, 'Text tool active — click on the canvas to place a label.');
+      return true;
     case 'cad.annotate.dimStyle':
     case 'cad.annotate.table':
       finish(actionId, 'Annotation tool ready — place via canvas or inspector.');

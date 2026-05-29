@@ -84,9 +84,15 @@ export function useToolActions() {
         case 'view.ortho':
           viewer.setViewMode('ortho');
           break;
-        case 'view.fit':
-          vc?.fitToView();
+        case 'view.fit': {
+          const cadBounds = useViewerStore.getState().cadDrawingBounds;
+          if (cadBounds) {
+            vc?.fitDrawingToView(cadBounds);
+          } else {
+            vc?.fitToView();
+          }
           break;
+        }
         case 'view.reset':
           vc?.resetView();
           break;
@@ -439,6 +445,28 @@ export function useToolActions() {
           calc.setModule('foundation');
           workspace.openPanel('calculator');
           break;
+
+        // Generate BOQ from drawn sketch elements
+        case 'sketch.boq': {
+          void Promise.all([
+            import('../services/sketchToBoQ'),
+            import('../store/drawStore'),
+          ]).then(([{ sketchElementsToBoQ }, { useDrawStore }]) => {
+            const drawElements = useDrawStore.getState().elements;
+            const boqItems = sketchElementsToBoQ(
+              drawElements.filter((e) =>
+                ['wall', 'slab', 'column', 'pipe', 'rectangle', 'polygon'].includes(e.kind)
+              )
+            );
+            if (!boqItems.length) {
+              window.alert('No structural elements in sketch.\nDraw walls, slabs, columns or pipes first.');
+              return;
+            }
+            boq.setSketchBoQ(boqItems);
+            workspace.openPanel('boq');
+          });
+          break;
+        }
 
         // BIM pipeline
         case 'bim.boq':

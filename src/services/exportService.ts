@@ -2,14 +2,16 @@ import type { CalculationResult, CalculationStep } from '../types/calculations';
 import { useEngineerReviewStore } from '../store/engineerReviewStore';
 import { useCalculationStore } from '../store/calculationStore';
 
-export async function exportToPDF(result: CalculationResult): Promise<void> {
+export async function exportToPDF(result: CalculationResult, projectDetails?: Record<string, string>): Promise<void> {
   const savePath = window.electronAPI
     ? await window.electronAPI.saveFileDialog('calculation-report.pdf')
     : null;
 
   const { stepReviews, engineerName, registrationNumber } = useEngineerReviewStore.getState();
   const activeModule = useCalculationStore.getState().activeModule;
-  const reviewer = [engineerName, registrationNumber].filter(Boolean).join(' — ');
+  const engName = projectDetails?.engineer_name || engineerName;
+  const eiz = projectDetails?.eiz_number || registrationNumber;
+  const reviewer = [engName, eiz].filter(Boolean).join(' — ');
 
   const steps = result.steps ?? [];
   const counts = { accepted: 0, overridden: 0, flagged: 0, pending: 0 };
@@ -31,7 +33,10 @@ export async function exportToPDF(result: CalculationResult): Promise<void> {
     ...result,
     steps: mappedSteps,
     review_summary: counts,
-    engineer_name: reviewer,
+    engineer_name: engName,
+    eiz_number: eiz,
+    project_ref: projectDetails?.project_ref,
+    design_brief: projectDetails?.design_brief,
     module: activeModule,
   };
 

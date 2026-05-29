@@ -557,3 +557,63 @@ class TestSpiceOpAmp:
         v_out = r['node_voltages']['out']
         expected = (1 + 90000 / 10000) * 0.1   # = 1.0 V
         assert abs(v_out - expected) / abs(expected) < 0.01, f"Vout={v_out:.4f}, expected {expected}"
+
+
+# ---------------------------------------------------------------------------
+# WINKLER FOUNDATION
+# ---------------------------------------------------------------------------
+
+class TestWinkler:
+    """Beam on elastic foundation verification."""
+
+    def test_uniform_settlement(self):
+        """UDL q on free beam: uniform settlement w = q/(ks·B)."""
+        from calculations.structural.winkler import run_winkler
+        q, ks, B = 50.0, 20000.0, 1.0
+        r = run_winkler(L_m=10, B_m=B, EI_knm2=50000, ks_knm3=ks,
+                        load_type='udl', q_knm=q, support='free')
+        expected_mm = q / (ks * B) * 1000  # = 2.5 mm
+        actual_mm = r['summary']['max_deflection_mm']
+        assert abs(actual_mm - expected_mm) / expected_mm < 0.05, \
+            f"Settlement {actual_mm:.3f} mm vs expected {expected_mm:.3f} mm"
+
+    def test_zero_moment_uniform_load(self):
+        """UDL on free Winkler beam: bending moments ≈ 0 (uniform contact cancels load)."""
+        from calculations.structural.winkler import run_winkler
+        r = run_winkler(L_m=10, B_m=1, EI_knm2=50000, ks_knm3=20000,
+                        load_type='udl', q_knm=50, support='free')
+        assert r['summary']['max_moment_knm'] < 1.0, \
+            f"Moment {r['summary']['max_moment_knm']} kNm should be ~0 for UDL on free beam"
+
+    def test_beam_classification(self):
+        """Rigid beam: very stiff EI → λL < π/4."""
+        from calculations.structural.winkler import run_winkler
+        r = run_winkler(L_m=5, B_m=1, EI_knm2=1e9, ks_knm3=20000,
+                        load_type='udl', q_knm=50, support='free')
+        assert r['summary']['beam_class'] == 'rigid', \
+            f"Expected rigid, got {r['summary']['beam_class']}"
+
+    def test_flexible_beam(self):
+        """Flexible beam: λL > π."""
+        from calculations.structural.winkler import run_winkler
+        r = run_winkler(L_m=20, B_m=1, EI_knm2=100, ks_knm3=20000,
+                        load_type='point_center', P_kn=100, support='free')
+        assert r['summary']['beam_class'] == 'flexible', \
+            f"Expected flexible, got {r['summary']['beam_class']}"
+
+    def test_point_load_deflects(self):
+        """Point load at centre → positive maximum deflection under load."""
+        from calculations.structural.winkler import run_winkler
+        r = run_winkler(L_m=10, B_m=1, EI_knm2=50000, ks_knm3=20000,
+                        load_type='point_center', P_kn=200, support='free')
+        defl = r['summary']['max_deflection_mm']
+        assert defl > 0.0, "Point load should produce downward deflection"
+        assert defl < 100.0, f"Deflection {defl} mm seems excessive"
+
+    def test_profile_length(self):
+        """Profile arrays should have n_el+1 = 41 points."""
+        from calculations.structural.winkler import run_winkler
+        r = run_winkler(L_m=10, B_m=1, EI_knm2=50000, ks_knm3=20000,
+                        load_type='udl', q_knm=50, support='free', n_el=40)
+        assert len(r['profile']['x_m']) == 41
+        assert len(r['profile']['deflection_mm']) == 41

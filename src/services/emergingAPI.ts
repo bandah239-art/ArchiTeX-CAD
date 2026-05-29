@@ -25,10 +25,10 @@ export const emergingAPI = {
     return res.json();
   },
   voice: async (transcript: string) => {
-    const res = await fetch(apiUrl('/emerging/voice/command'), {
+    const res = await fetch(apiUrl('/ai/chat'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ payload: { transcript } }),
+      body: JSON.stringify({ message: transcript }),
     });
     if (!res.ok) throw new Error(await res.text());
     return res.json();

@@ -4,9 +4,11 @@ import { useIfcModelStore } from '../../store/ifcModelStore';
 import { bimGeometryAPI } from '../../services/bimGeometryAPI';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import { useTranslation } from 'react-i18next';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { APP_NAME } from '../../constants/brand';
 import { useWorkspaceStore } from '../../store/workspaceStore';
+import { useDesignCodeStore, CODE_LABELS } from '../../store/designCodeStore';
+import type { DesignCode } from '../../store/designCodeStore';
 
 interface TopBarProps {
   onBack: () => void;
@@ -20,8 +22,31 @@ export function TopBar({ onBack, onToggleCalculator, onToggleInspector }: TopBar
   const { openIFC, saveProject } = useProject();
   const ifcElements = useIfcModelStore((s) => s.elements);
   const { mainView, setMainView } = useWorkspaceStore();
+  const { activeCode, setCode } = useDesignCodeStore();
   const [exporting, setExporting] = useState(false);
+  const [serverRunning, setServerRunning] = useState(true);
 
+  useEffect(() => {
+    if (window.electronAPI) {
+      window.electronAPI.getPythonServerStatus().then(status => setServerRunning(status.running));
+      const cleanup = window.electronAPI.onPythonStatus((status) => {
+        setServerRunning(status.running);
+      });
+      return cleanup;
+    }
+  }, []);
+
+  const handleRestartServer = async () => {
+    if (window.electronAPI?.restartPythonServer) {
+      setServerRunning(true); // Optimistic UI update
+      await window.electronAPI.restartPythonServer();
+      setTimeout(async () => {
+        const status = await window.electronAPI?.getPythonServerStatus() ?? { running: false };
+        setServerRunning(status.running);
+      }, 3000);
+    }
+  };
+  
   const exportIfc = async () => {
     if (!ifcElements.length) {
       alert('Open an IFC model first to export elements.');
@@ -104,6 +129,28 @@ export function TopBar({ onBack, onToggleCalculator, onToggleInspector }: TopBar
         </button>
       </div>
       <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center mr-2 px-2 py-1 bg-infra-dark border border-gray-700 rounded gap-2">
+          <div className={`w-2.5 h-2.5 rounded-full ${serverRunning ? 'bg-green-500' : 'bg-red-500'}`} title={serverRunning ? 'Engine Online' : 'Engine Offline'} />
+          {!serverRunning && (
+            <button 
+              onClick={handleRestartServer}
+              className="text-xs text-red-400 hover:text-red-300 ml-1 font-semibold"
+            >
+              Restart Engine
+            </button>
+          )}
+        </div>
+        <select
+          value={activeCode}
+          onChange={(e) => setCode(e.target.value as DesignCode)}
+          className="bg-infra-dark border border-gray-700 rounded text-white text-xs px-2 py-1.5 focus:outline-none focus:border-infra-highlight"
+        >
+          {Object.entries(CODE_LABELS).map(([code, label]) => (
+            <option key={code} value={code}>
+              {label}
+            </option>
+          ))}
+        </select>
         <LanguageSwitcher />
         <button onClick={openIFC} className="topbar-btn bg-infra-accent hover:bg-infra-accent/80 text-white">
           {t('topbar.openIfc')}

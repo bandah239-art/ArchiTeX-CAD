@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { BoQElement, CompiledBoQ } from '../types/boq';
+import type { SketchBoQItem } from '../services/sketchToBoQ';
 import { boqAPI } from '../services/boqAPI';
 import { API_BASE } from '../services/apiConfig';
 
@@ -29,6 +30,9 @@ interface BoQState {
   generateBoQ: () => Promise<void>;
   exportExcel: () => Promise<void>;
   exportPdf: () => Promise<void>;
+  sketchBoQItems: SketchBoQItem[];
+  setSketchBoQ: (items: SketchBoQItem[]) => void;
+  clearSketchBoQ: () => void;
   loadDemoProject: () => void;
   importFromBim: (elements: Record<string, unknown>[]) => Promise<void>;
 }
@@ -110,6 +114,9 @@ export const useBoQStore = create<BoQState>((set, get) => ({
   isExporting: false,
   isImportingBim: false,
   error: null,
+  sketchBoQItems: [],
+  setSketchBoQ: (items) => set({ sketchBoQItems: items }),
+  clearSketchBoQ: () => set({ sketchBoQItems: [] }),
 
   setCountryCode: (code) => set({ countryCode: code }),
   setProjectName: (name) => set({ projectName: name }),

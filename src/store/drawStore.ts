@@ -28,7 +28,8 @@ export type SketchKind =
   | 'point'
   | 'region'
   | 'donut'
-  | 'revcloud';
+  | 'revcloud'
+  | 'text';
 
 export interface SketchPoint {
   x: number;
@@ -66,6 +67,8 @@ interface DrawState {
   sketchSpan: number;
   isDrawing: boolean;
   lastPickError: string | null;
+  lastFinishedElement: SketchElement | null;
+  clearLastFinished: () => void;
   setModifiers: (patch: Partial<DrawModifiers>) => void;
   setFloorElevation: (y: number) => void;
   setSketchBounds: (centerX: number, centerZ: number, span: number) => void;
@@ -91,6 +94,7 @@ interface DrawState {
   explodeElement: (id: string) => number;
   joinOpenPolylines: () => boolean;
   purgeEmptySketches: () => number;
+  addTextAnnotation: (params: { label: string; worldX: number; worldZ: number; worldY: number }) => void;
   toolToKind: (tool: DrawTool) => SketchKind | null;
 }
 
@@ -112,6 +116,19 @@ export const useDrawStore = create<DrawState>((set, get) => ({
   sketchSpan: 80,
   isDrawing: false,
   lastPickError: null,
+  lastFinishedElement: null,
+  clearLastFinished: () => set({ lastFinishedElement: null }),
+
+  addTextAnnotation: ({ label, worldX, worldZ, worldY }) => {
+    const el: SketchElement = {
+      id: `sk-txt-${Date.now()}`,
+      kind: 'text',
+      points: [{ x: worldX, y: worldY, z: worldZ }],
+      label,
+      createdAt: Date.now(),
+    };
+    set((s) => ({ elements: [...s.elements, el] }));
+  },
 
   setModifiers: (patch) => set((s) => ({ modifiers: { ...s.modifiers, ...patch } })),
 
@@ -196,6 +213,7 @@ export const useDrawStore = create<DrawState>((set, get) => ({
 
     set({
       elements: [...elements, el],
+      lastFinishedElement: el,
       activePoints: [],
       previewPoint: null,
       isDrawing: false,
