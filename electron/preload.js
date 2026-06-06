@@ -22,4 +22,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('offline:save-calculation', id, projectId, type, inputs, results),
   offlineLoadCalculations: (projectId) => ipcRenderer.invoke('offline:load-calculations', projectId),
   osAction: (action, targetPath) => ipcRenderer.invoke('os-action', action, targetPath),
+  /** Send a structured error object from the renderer to be written to electron/logs/crash.log */
+  logError: (payload) => ipcRenderer.invoke('log-frontend-error', payload),
+  onPythonStartupStatus: (callback) => {
+    ipcRenderer.on('python-startup-status', (_, data) => callback(data));
+    return () => ipcRenderer.removeAllListeners('python-startup-status');
+  },
 });

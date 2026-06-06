@@ -13,7 +13,9 @@ export default defineConfig({
   },
   base: './',
   server: {
-    port: 5173,
+    // Dedicated port so Electron never loads another Vite app on the default 5173.
+    port: Number(process.env.VITE_DEV_PORT) || 5190,
+    strictPort: true,
     // OneDrive / cloud-sync folders fire rapid file watchers → HMR storms.
     watch: {
       awaitWriteFinish: {

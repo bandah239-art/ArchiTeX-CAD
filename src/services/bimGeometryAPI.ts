@@ -139,4 +139,18 @@ export const bimGeometryAPI = {
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   },
+
+  async clashScan(payload: {
+    elements: Array<Record<string, unknown>>;
+    tolerance_m?: number;
+    discipline_filter?: string;
+  }): Promise<Record<string, unknown>> {
+    const res = await fetch(`${API_BASE}/bim/clash-scan`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
 };

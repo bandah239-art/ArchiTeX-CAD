@@ -5,9 +5,9 @@ from datetime import datetime, timezone
 from typing import Any
 
 from calculations.utils.formatters import round_value
+from geo.zambia_provinces import get_zambia_intelligence
 
-# Rainfall IDF curves parameters for major Zambian cities: i = a / (t + b)^c
-# Fitted from historical Zambia meteorological data for various return periods
+# Legacy city IDF curves (kept for backward compatibility)
 ZAMBIA_IDF = {
     "Lusaka": {
         2: {"a": 650.0, "b": 12.0, "c": 0.85},
@@ -39,121 +39,75 @@ ZAMBIA_IDF = {
 
 
 def get_zambia_site_data(lat: float, lon: float) -> dict[str, Any]:
-    """Retrieve localized wind, seismic, rainfall, and soil classification parameters for Zambia."""
-    # Determine nearest city / province
-    # Lusaka center is approx lat -15.4, lon 28.3
-    # Copperbelt (Ndola) is approx lat -13.0, lon 28.6
-    # Livingstone is approx lat -17.85, lon 25.85
-    # Chipata is approx lat -13.6, lon 32.6
-    
-    # Distance utility
-    def dist(la1, lo1, la2, lo2):
-        return math.sqrt((la1 - la2) ** 2 + (lo1 - lo2) ** 2)
+    """Retrieve localized wind, seismic, rainfall, and soil parameters for Zambia (10 provinces)."""
+    zm = get_zambia_intelligence(lat, lon)
+    slug = zm["province"]["slug"]
+    display = zm["province"]["display_name"]
 
-    cities = [
-        ("Lusaka", -15.4167, 28.2833),
-        ("Ndola", -12.9667, 28.6333),
-        ("Livingstone", -17.8500, 25.8500),
-        ("Chipata", -13.6333, 32.6500),
-    ]
-    
-    closest_city = min(cities, key=lambda c: dist(lat, lon, c[1], c[2]))[0]
-    
-    # 1. Wind speed from ZABS / BS 6399
-    # Lusaka 24 m/s, Copperbelt 26 m/s, Kafue 25 m/s, Livingstone 22 m/s, Chipata 23 m/s
-    if closest_city == "Lusaka":
-        wind_speed = 24.0
-        province = "Lusaka"
-        altitude_est = 1280.0
-    elif closest_city == "Ndola":
-        wind_speed = 26.0
-        province = "Copperbelt"
-        altitude_est = 1300.0
-    elif closest_city == "Livingstone":
-        wind_speed = 22.0
-        province = "Southern"
-        altitude_est = 900.0
-    else:
-        wind_speed = 23.0
-        province = "Eastern"
-        altitude_est = 1030.0
-
-    # Basic wind pressure: q = 0.5 * rho * Vz^2 / 1000 (kPa)
-    # Assume rho = 1.2 kg/m3, Vz = V_basic
-    basic_pressure = 0.5 * 1.2 * (wind_speed ** 2) / 1000.0
-
-    # 2. Seismic PGA (seismically benign region)
-    # Central 0.04g, Copperbelt 0.03g, Eastern 0.05g, Lusaka 0.04g, Southern 0.04g
-    pga = 0.04
-    if province == "Copperbelt":
-        pga = 0.03
-    elif province == "Eastern":
-        pga = 0.05
-
-    seismic_note = "Zambia is seismically benign. Seismic hazard is low; standard structural robustness is sufficient."
-
-    # 3. Rainfall IDF Lookup
+    # Map province slug to legacy city for IDF curve lookup
+    city_map = {
+        "lusaka": "Lusaka", "copperbelt": "Ndola", "southern": "Livingstone",
+        "eastern": "Chipata", "central": "Lusaka", "luapula": "Chipata",
+        "northern": "Chipata", "muchinga": "Chipata", "western": "Livingstone",
+        "north_western": "Ndola",
+    }
+    closest_city = city_map.get(slug, "Lusaka")
     city_idf = ZAMBIA_IDF.get(closest_city, ZAMBIA_IDF["Lusaka"])
-    idf_points = {}
-    
-    # Calculate intensity for 15-minute duration (t=15 min) for 10-year return
+    param_10yr = city_idf.get(10, city_idf[list(city_idf.keys())[0]])
     t_min = 15.0
-    param_10yr = city_idf.get(10, city_idf[10])
     intensity_10yr = param_10yr["a"] / ((t_min + param_10yr["b"]) ** param_10yr["c"])
 
-    # 4. Soil Probability
-    # Black Cotton Soil: high risk in Lusaka basin and Kafue flats
-    in_lusaka_basin = (-15.6 <= lat <= -15.2) and (28.1 <= lon <= 28.5)
-    in_kafue_flats = (-16.0 <= lat <= -15.5) and (27.0 <= lon <= 28.2)
-    
-    if in_lusaka_basin or in_kafue_flats:
-        soil_risk = "HIGH"
-        soil_type = "CH Expansive Clay (Black Cotton Soil)"
-        soil_color = "red"
-    elif province == "Copperbelt":
-        soil_risk = "MODERATE"
-        soil_type = "Lateritic Gravelly Soils"
-        soil_color = "yellow"
-    elif closest_city == "Livingstone":
-        soil_risk = "LOW"
-        soil_type = "Kalahari Sandy Soils"
-        soil_color = "green"
-    else:
-        soil_risk = "LOW"
-        soil_type = "Quartzite / Weathered Rock"
-        soil_color = "green"
+    wind_speed = zm["wind_basic_ms"]
+    basic_pressure = zm["wind_pressure_knm2"] / 1000.0  # kPa
+    pga = zm["seismic_pga_g"]
+    bcs = zm["black_cotton"]
 
-    # Altitude check
-    alt_warning = "Altitude affects concrete mix design. No correction required below 2000m in Zambia."
+    if bcs["in_zone"]:
+        soil_risk = zm["soil_prior"]["expansion_risk"]
+        soil_type = zm["soil_prior"]["type"]
+        soil_color = "red" if bcs["severity"] in ("severe", "high") else "yellow"
+    else:
+        soil_risk = zm["soil_prior"]["expansion_risk"]
+        soil_type = zm["soil_prior"]["type"]
+        soil_color = "green" if soil_risk == "LOW" else "yellow"
 
     return {
         "status": "ok",
         "coordinates": {"latitude": lat, "longitude": lon},
         "region": {
             "closest_city": closest_city,
-            "province": province,
-            "altitude_m": altitude_est,
-            "altitude_note": alt_warning
+            "province": display,
+            "province_slug": slug,
+            "altitude_m": zm.get("elevation_m", 1200),
+            "altitude_note": "Altitude affects concrete mix design. No correction required below 2000m in Zambia.",
         },
         "wind": {
             "zone_speed_ms": wind_speed,
             "basic_pressure_kpa": round_value(basic_pressure, 3),
-            "design_code": "ZABS/BS 6399"
+            "design_code": "EC1 / ZABS",
         },
         "seismic": {
             "pga_g": pga,
             "design_ground_type": "B",
-            "narrative": seismic_note
+            "narrative": zm["seismic_note"],
         },
         "hydrology": {
             "fitted_city": closest_city,
             "idf_intensity_15min_10yr_mm_hr": round_value(intensity_10yr, 1),
-            "coefficients": city_idf
+            "idf_intensity_60min_10yr_mm_hr": zm["rainfall_10yr_60min_mmhr"],
+            "coefficients": city_idf,
+            "wet_season_months": zm["wet_season_months"],
+            "dry_season_months": zm["dry_season_months"],
         },
         "soil_prior": {
             "soil_type": soil_type,
             "expansion_risk": soil_risk,
-            "risk_color": soil_color
+            "risk_color": soil_color,
+            "bearing_capacity_kpa": zm["soil_prior"]["bearing_capacity_kpa"],
         },
+        "black_cotton": bcs,
+        "foundation_recommendation": zm["foundation_recommendation"],
+        "flood_risk": zm["flood_risk"],
+        "risk_register": zm["risk_register"],
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }

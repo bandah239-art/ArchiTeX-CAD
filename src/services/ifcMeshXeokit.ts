@@ -190,6 +190,8 @@ export async function loadIfcIntoXeokit(
       max: [...displayBounds.max],
     },
     loadTime: performance.now() - start,
+    warnings: parsed.warnings,
+    metadata: parsed.metadata,
   };
 
   options?.onProgress?.(100);

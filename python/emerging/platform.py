@@ -2,10 +2,19 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import hashlib
 import json
+import os
 import time
 from typing import Any
+
+from emerging.capabilities import (
+    check_cv_safety,
+    check_drone,
+    check_satellite,
+)
 
 
 def blockchain_anchor(payload: dict[str, Any]) -> dict[str, Any]:
@@ -24,43 +33,38 @@ def blockchain_anchor(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def marketplace_listings(payload: dict[str, Any]) -> dict[str, Any]:
-    country = payload.get("country_code", "ZM")
-    return {
-        "status": "complete",
-        "listings": [
-            {"id": "M1", "type": "material", "title": "C25 Concrete Supply", "region": country, "price_usd": 95, "unit": "m³"},
-            {"id": "M2", "type": "labour", "title": "Mason Crew (8hr)", "region": country, "price_usd": 120, "unit": "day"},
-            {"id": "M3", "type": "equipment", "title": "Excavator Hire", "region": country, "price_usd": 450, "unit": "day"},
-            {"id": "M4", "type": "carbon_credit", "title": "Verified Carbon Offset", "region": country, "price_usd": 12, "unit": "tCO2e"},
-        ],
-    }
+    """Real SQLite-backed marketplace listings with optional filters."""
+    from emerging.marketplace_store import list_listings
+
+    return list_listings(
+        region=payload.get("country_code") or payload.get("region"),
+        listing_type=payload.get("type"),
+        q=payload.get("q"),
+        max_price=payload.get("max_price"),
+    )
 
 
 def disaster_response_plan(payload: dict[str, Any]) -> dict[str, Any]:
-    lat = payload.get("latitude", 0)
-    lon = payload.get("longitude", 0)
-    hazard = payload.get("hazard_type", "flood")
-    return {
-        "status": "complete",
-        "hazard_type": hazard,
-        "location": {"latitude": lat, "longitude": lon},
-        "response_phases": [
-            {"phase": 1, "action": "Evacuation route mapping", "hours": 0},
-            {"phase": 2, "action": "Temporary shelter deployment", "hours": 6},
-            {"phase": 3, "action": "Infrastructure damage assessment", "hours": 24},
-            {"phase": 4, "action": "Emergency repair prioritisation", "hours": 72},
-        ],
-        "assets_required": ["mobile generator", "water purification", "structural assessment team"],
-    }
+    """Real hazard-specific planning engine with population-scaled resources."""
+    from emerging.disaster_engine import build_plan
+
+    return build_plan(payload)
 
 
 def satellite_analysis(payload: dict[str, Any]) -> dict[str, Any]:
-    """Satellite imagery analysis stub — integrates lat/lon with land-use inference."""
+    """Satellite imagery analysis.
+
+    Runs real rasterio/Sentinel NDVI analysis when configured; otherwise returns
+    a deterministic land-cover preview plus the steps to enable production inference.
+    """
     lat = float(payload.get("latitude", 0))
     lon = float(payload.get("longitude", 0))
-    return {
-        "status": "complete",
-        "engine": "satellite_ai_stub",
+    cap = check_satellite()
+
+    preview = {
+        "status": "preview",
+        "enabled": False,
+        "engine": cap["engine"],
         "location": {"latitude": lat, "longitude": lon},
         "tile_source": "sentinel-2-compatible",
         "land_cover": {
@@ -70,21 +74,62 @@ def satellite_analysis(payload: dict[str, Any]) -> dict[str, Any]:
             "water_pct": 5,
         },
         "change_detection": {"construction_activity": "moderate", "period_months": 12},
-        "note": "Connect Sentinel Hub / Google Earth Engine API for production ML inference.",
+        "requires": cap["requires"],
+        "setup": (
+            "Install rasterio + pyproj (GDAL), set SENTINEL_HUB_KEY or EARTHENGINE_TOKEN, "
+            "then a bbox tile is downloaded and NDVI/land-cover computed."
+        ),
     }
+
+    if not cap["enabled"]:
+        return preview
+
+    try:
+        from emerging.providers.satellite_sentinel import analyse_tile  # type: ignore
+
+        result = analyse_tile(lat, lon, payload)
+        return {"status": "complete", "enabled": True, "engine": "rasterio_ndvi", **result}
+    except Exception as exc:  # pragma: no cover - depends on external provider
+        preview["status"] = "error"
+        preview["error"] = str(exc)
+        return preview
 
 
 def drone_photogrammetry(payload: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "status": "complete",
-        "engine": "photogrammetry_stub",
-        "images_count": payload.get("images_count", 0),
-        "gsd_cm": 2.5,
+    """Drone photogrammetry.
+
+    Submits an image set to a configured WebODM/NodeODM server, otherwise returns
+    a processing plan preview and the steps to enable real reconstruction.
+    """
+    webodm_url = payload.get("webodm_url") or os.environ.get("WEBODM_URL", "").strip()
+    cap = check_drone(webodm_url)
+    images_count = int(payload.get("images_count", len(payload.get("images", []) or [])))
+
+    preview = {
+        "status": "preview",
+        "enabled": False,
+        "engine": cap["engine"],
+        "images_count": images_count,
+        "gsd_cm_est": 2.5,
         "orthomosaic_ready": False,
         "point_cloud_points": 0,
         "workflow": ["upload_images", "sfm_alignment", "dense_reconstruction", "mesh_texturing", "export_glb"],
-        "note": "Integrate OpenDroneMap or Pix4D API for production processing.",
+        "requires": cap["requires"],
+        "setup": "Run WebODM (https://www.opendronemap.org/webodm/), set WEBODM_URL (and WEBODM_TOKEN if secured).",
     }
+
+    if not cap["enabled"]:
+        return preview
+
+    try:
+        from emerging.providers.drone_webodm import submit_task  # type: ignore
+
+        result = submit_task(webodm_url, payload)
+        return {"status": "submitted", "enabled": True, "engine": "webodm", **result}
+    except Exception as exc:  # pragma: no cover - depends on external server
+        preview["status"] = "error"
+        preview["error"] = str(exc)
+        return preview
 
 
 def voice_command(payload: dict[str, Any]) -> dict[str, Any]:
@@ -102,29 +147,63 @@ def voice_command(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _decode_image_bytes(payload: dict[str, Any]) -> bytes | None:
+    """Extract image bytes from a base64 data-URL or raw base64 payload."""
+    b64 = payload.get("image_base64") or payload.get("image") or ""
+    if not b64:
+        return None
+    if "," in b64:
+        b64 = b64.split(",", 1)[1]
+    try:
+        return base64.b64decode(b64)
+    except (binascii.Error, ValueError):
+        return None
+
+
 def cv_safety_scan(payload: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "status": "complete",
-        "engine": "cv_safety_stub",
+    """Construction-site PPE / hazard detection.
+
+    Runs a real YOLO model on an uploaded image when ultralytics is installed;
+    otherwise returns a manual-count preview and the steps to enable detection.
+    """
+    cap = check_cv_safety()
+    image_bytes = _decode_image_bytes(payload)
+
+    preview = {
+        "status": "preview",
+        "enabled": False,
+        "engine": cap["engine"],
+        "has_image": image_bytes is not None,
         "detections": [
-            {"class": "hard_hat", "count": payload.get("hard_hats", 3), "compliant": True},
-            {"class": "high_vis_vest", "count": payload.get("vests", 2), "compliant": True},
-            {"class": "missing_ppe", "count": payload.get("violations", 1), "compliant": False},
+            {"class": "hard_hat", "count": payload.get("hard_hats", 0), "compliant": True},
+            {"class": "high_vis_vest", "count": payload.get("vests", 0), "compliant": True},
+            {"class": "missing_ppe", "count": payload.get("violations", 0), "compliant": payload.get("violations", 0) == 0},
         ],
-        "safety_score": max(0, 100 - payload.get("violations", 0) * 15),
-        "note": "Integrate YOLO / MediaPipe for live site camera feeds.",
+        "safety_score": max(0, 100 - int(payload.get("violations", 0)) * 15),
+        "requires": cap["requires"],
+        "setup": "pip install ultralytics, then POST an image as image_base64 to run YOLO PPE detection.",
     }
+
+    if not cap["enabled"]:
+        return preview
+    if image_bytes is None:
+        preview["status"] = "no_image"
+        preview["message"] = "Detector is installed. Provide image_base64 to run a scan."
+        return preview
+
+    try:
+        from emerging.providers.cv_yolo import detect_ppe  # type: ignore
+
+        result = detect_ppe(image_bytes, payload)
+        return {"status": "complete", "enabled": True, "engine": "ultralytics_yolo", **result}
+    except Exception as exc:  # pragma: no cover - depends on model weights
+        preview["status"] = "error"
+        preview["error"] = str(exc)
+        return preview
 
 
 def ar_mobile_scene(payload: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "status": "complete",
-        "engine": "ar_stub",
-        "anchor": {"latitude": payload.get("latitude"), "longitude": payload.get("longitude")},
-        "overlays": [
-            {"type": "bim_ghost", "element_id": payload.get("element_id", "W-001")},
-            {"type": "dimension_label", "text": payload.get("label", "3.5m height")},
-        ],
-        "format": "glb+geo_anchor",
-        "note": "Use Expo AR / ARCore for mobile field overlay.",
-    }
+    """Real geo-anchored AR scene with ENU coordinate math."""
+    from emerging.ar_engine import build_scene
+
+    return build_scene(payload)

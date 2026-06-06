@@ -18,7 +18,7 @@ import type { IFCElement } from '../types/ifc';
 import { calculationAPI } from '../services/calculationAPI';
 import { pressureAPI } from '../services/pressureAPI';
 import { buildTankPressureInputsFromTreatment } from '../services/treatmentPlantTankInputs';
-import { calcInputsFromElement, calcModuleForIfcType } from '../services/selectionBridge';
+import { calcPrefillFromElement, calcModuleForIfcType } from '../services/selectionBridge';
 
 const DEFAULT_INPUTS: Record<CalculationModule, Record<string, unknown>> = {
   loadCombinations: {
@@ -672,8 +672,19 @@ interface CalculationState {
   savedCalculations: CalculationResult[];
   isCalculating: boolean;
   error: string | null;
+  ifcPrefillSource: { globalId: string; confidence: string } | null;
+  sitePrefillFields: Record<string, string[]>;
+  sitePrefillSource: { province: string; bcsWarning: boolean } | null;
+  modulePrefills: Partial<Record<CalculationModule, Record<string, unknown>>>;
   setModule: (module: CalculationModule) => void;
-  prefillFromElement: (element: IFCElement) => CalculationModule | null;
+  prefillFromSite: (
+    patches: Partial<Record<CalculationModule, Record<string, unknown>>>,
+    meta: {
+      sitePrefillFields: Record<string, string[]>;
+      sitePrefillSource: { province: string; bcsWarning: boolean };
+    }
+  ) => void;
+  prefillFromElement: (element: IFCElement, opts?: { logAudit?: boolean }) => CalculationModule | null;
   setInput: (key: string, value: unknown) => void;
   setInputs: (inputs: Record<string, unknown>) => void;
   applyGoverningLoad: (target: 'beam' | 'slab' | 'foundation', designLoad: number) => void;
@@ -689,30 +700,62 @@ export const useCalculationStore = create<CalculationState>((set, get) => ({
   savedCalculations: [],
   isCalculating: false,
   error: null,
+  ifcPrefillSource: null,
+  sitePrefillFields: {},
+  sitePrefillSource: null,
+  modulePrefills: {},
 
   setModule: (module) =>
     set({
       activeModule: module,
-      currentInputs: DEFAULT_INPUTS[module],
+      currentInputs: mergeWithDefaults(module, get().modulePrefills[module] ?? {}),
       currentResults: null,
       error: null,
     }),
 
-  prefillFromElement: (element) => {
+  prefillFromSite: (patches, meta) => {
+    const merged = { ...get().modulePrefills };
+    for (const [mod, inputs] of Object.entries(patches)) {
+      const m = mod as CalculationModule;
+      merged[m] = { ...(merged[m] ?? {}), ...inputs };
+    }
+    const active = get().activeModule;
+    set({
+      modulePrefills: merged,
+      sitePrefillFields: meta.sitePrefillFields,
+      sitePrefillSource: meta.sitePrefillSource,
+      currentInputs: mergeWithDefaults(active, merged[active] ?? {}),
+    });
+  },
+
+  prefillFromElement: (element, _opts) => {
     const module = calcModuleForIfcType(element.type);
     if (!module) return null;
-    const inputs = mergeWithDefaults(module, calcInputsFromElement(element));
+    const prefill = calcPrefillFromElement(element);
+    const inputs = mergeWithDefaults(module, prefill.inputs);
     set({
       activeModule: module,
       currentInputs: inputs,
       currentResults: null,
       error: null,
+      ifcPrefillSource: {
+        globalId: element.globalId,
+        confidence: prefill.confidence,
+      },
     });
     return module;
   },
 
   setInput: (key, value) => {
-    set({ currentInputs: { ...get().currentInputs, [key]: value } });
+    const mod = get().activeModule;
+    const fields = { ...get().currentInputs, [key]: value };
+    const siteFields = { ...get().sitePrefillFields };
+    if (siteFields[mod]?.includes(key)) {
+      siteFields[mod] = siteFields[mod].filter((k) => k !== key);
+    }
+    const modulePrefills = { ...get().modulePrefills };
+    modulePrefills[mod] = { ...(modulePrefills[mod] ?? {}), [key]: value };
+    set({ currentInputs: fields, sitePrefillFields: siteFields, modulePrefills });
   },
 
   setInputs: (inputs) => set({ currentInputs: inputs }),

@@ -1,4 +1,6 @@
 import type { IFCElement } from '../types/ifc';
+import type { ParsedIfcElement } from './ifcParser';
+import { mergePlacedMeshes, quantitiesFromMesh } from './ifcQuantities';
 
 /** Representative residential BIM elements when no geometry is available. */
 export function sampleBimElements(): IFCElement[] {
@@ -100,4 +102,24 @@ export function elementsFromViewer(
     return [selectedElement];
   }
   return sampleBimElements();
+}
+
+/** Build element list with AABB bounds for model-wide clash scan. */
+export function buildClashScanPayload(elements: ParsedIfcElement[]): Record<string, unknown>[] {
+  return elements
+    .filter((el) => el.meshBuffers.length > 0)
+    .map((el) => {
+      const merged = mergePlacedMeshes(el.meshBuffers);
+      const geom = quantitiesFromMesh(merged);
+      return {
+        id: el.id,
+        globalId: el.globalId,
+        type: el.type,
+        name: el.name,
+        bounds: {
+          min: [...geom.bounds.min],
+          max: [...geom.bounds.max],
+        },
+      };
+    });
 }

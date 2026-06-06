@@ -7,6 +7,7 @@ from emerging.platform import (
     disaster_response_plan, drone_photogrammetry,
     marketplace_listings, satellite_analysis, voice_command,
 )
+from emerging.capabilities import all_capabilities
 from simulations.thermal.thermal_building import simulate_thermal
 from simulations.seismic.seismic_response import simulate_seismic_response
 from ai.text_to_bim import generate_bim_from_text
@@ -15,6 +16,12 @@ router = APIRouter(tags=["emerging"])
 
 
 class EmergingInput(BaseModel):
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class CVSafetyInput(BaseModel):
+    image_base64: str = Field("", description="Base64 image (data-URL or raw) for PPE detection")
+    confidence: float = Field(0.35, ge=0.05, le=0.95)
     payload: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -38,9 +45,41 @@ def emerging_blockchain(inputs: EmergingInput):
     return blockchain_anchor(inputs.payload)
 
 
+class MarketplaceListingInput(BaseModel):
+    type: str = Field("material", description="material|labour|equipment|carbon_credit|service")
+    title: str = Field(..., min_length=1)
+    price_usd: float = Field(..., ge=0)
+    unit: str = "unit"
+    region: str = "ZM"
+    supplier: str | None = None
+    description: str | None = None
+
+
 @router.get("/emerging/marketplace")
-def emerging_marketplace(country_code: str = "ZM"):
-    return marketplace_listings({"country_code": country_code})
+def emerging_marketplace(
+    country_code: str = "ZM",
+    type: str | None = None,
+    q: str | None = None,
+    max_price: float | None = None,
+):
+    return marketplace_listings({
+        "country_code": country_code, "type": type, "q": q, "max_price": max_price,
+    })
+
+
+@router.post("/emerging/marketplace")
+def emerging_marketplace_create(listing: MarketplaceListingInput):
+    from emerging.marketplace_store import create_listing
+    try:
+        return {"status": "complete", "listing": create_listing(listing.model_dump())}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.delete("/emerging/marketplace/{listing_id}")
+def emerging_marketplace_delete(listing_id: str):
+    from emerging.marketplace_store import delete_listing
+    return delete_listing(listing_id)
 
 
 @router.post("/emerging/disaster/plan")
@@ -63,9 +102,15 @@ def emerging_voice(inputs: EmergingInput):
     return voice_command(inputs.payload)
 
 
+@router.get("/emerging/capabilities")
+def emerging_capabilities():
+    return all_capabilities()
+
+
 @router.post("/emerging/cv/safety")
-def emerging_cv_safety(inputs: EmergingInput):
-    return cv_safety_scan(inputs.payload)
+def emerging_cv_safety(inputs: CVSafetyInput):
+    merged = {**inputs.payload, "image_base64": inputs.image_base64, "confidence": inputs.confidence}
+    return cv_safety_scan(merged)
 
 
 @router.post("/emerging/ar/scene")

@@ -23,6 +23,7 @@ export function ReportExporter({ result }: ReportExporterProps) {
     (s) => s.status === 'fail' && (!s.review_status || s.review_status === 'pending')
   );
   const exportBlocked = hasFail || hasUnreviewedFail;
+  const isDraftExport = exportBlocked || (result.steps?.some((s) => !s.review_status || s.review_status === 'pending') ?? false);
 
   const blockReason = result.status === 'fail'
     ? 'Calculation has FAIL status — resolve all errors before exporting.'
@@ -75,6 +76,11 @@ export function ReportExporter({ result }: ReportExporterProps) {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-infra-surface p-6 rounded shadow-lg w-full max-w-md border border-infra-accent/20">
             <h2 className="text-lg font-bold mb-4 text-infra-text">Project Details</h2>
+            {isDraftExport && !exportBlocked && (
+              <p className="text-xs text-amber-400 mb-3">
+                Report will include DRAFT ONLY watermark until all steps are reviewed and accepted.
+              </p>
+            )}
             <div className="space-y-4">
               <div>
                 <label className="block text-xs mb-1">Engineer Name</label>

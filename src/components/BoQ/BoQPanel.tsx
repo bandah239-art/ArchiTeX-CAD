@@ -254,6 +254,18 @@ export function BoQPanel() {
                       </div>
                     ) : null
                   )}
+                  {summary.preliminaries_usd != null && summary.preliminaries_usd > 0 && (
+                    <div className="flex justify-between py-1 text-xs text-gray-400">
+                      <span>Preliminaries (5%)</span>
+                      <span className="font-mono">USD {summary.preliminaries_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                    </div>
+                  )}
+                  {summary.vat_usd != null && summary.vat_usd > 0 && (
+                    <div className="flex justify-between py-1 text-xs text-gray-400">
+                      <span>VAT ({summary.vat_pct ?? 16}%)</span>
+                      <span className="font-mono">USD {summary.vat_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                    </div>
+                  )}
                   
                   <div className="pt-3 mt-4 flex justify-between font-bold text-white text-base">
                     <span>ESTIMATED TOTAL COST</span>

@@ -171,6 +171,8 @@ export function CalculatorPanel() {
     currentResults,
     isCalculating,
     error,
+    sitePrefillSource,
+    sitePrefillFields,
   } = useCalculationStore();
 
   const [category, setCategory] = useState<CalcCategory>(() => getCategory(activeModule));
@@ -298,6 +300,20 @@ export function CalculatorPanel() {
             <h3 className="text-xs font-bold text-infra-highlight uppercase tracking-wider">
               Input Parameters
             </h3>
+
+            {sitePrefillSource && (sitePrefillFields[activeModule]?.length ?? 0) > 0 && (
+              <div className="p-2.5 bg-emerald-950/40 border border-emerald-500/40 rounded-lg text-xs text-emerald-200">
+                <span className="font-semibold">Site intelligence applied</span>
+                {sitePrefillSource.province && (
+                  <span className="text-emerald-300/80"> — {sitePrefillSource.province} Province</span>
+                )}
+                {sitePrefillSource.bcsWarning && (
+                  <span className="block mt-1 text-amber-300">Black cotton soil zone — verify founding depth and lime treatment.</span>
+                )}
+                <span className="block mt-1 text-[10px] text-gray-400">Edit any highlighted field to override site values.</span>
+              </div>
+            )}
+
             {renderModule()}
 
             {activeModule !== 'loadCombinations' &&

@@ -89,6 +89,13 @@ export interface IfcParseResult {
   elementByExpressId: Map<number, ParsedIfcElement>;
   triangleCount: number;
   bounds: { min: [number, number, number]; max: [number, number, number] };
+  warnings: string[];
+  metadata: {
+    schema?: string;
+    author?: string;
+    application?: string;
+    projectName?: string;
+  };
 }
 
 function readPropValue(val: unknown): string | number | undefined {
@@ -250,6 +257,8 @@ async function parseIfcBufferInner(buffer: ArrayBuffer): Promise<IfcParseResult>
     min: [Infinity, Infinity, Infinity] as [number, number, number],
     max: [-Infinity, -Infinity, -Infinity] as [number, number, number],
   };
+  const warnings: string[] = [];
+  let skippedElements = 0;
 
   const expressIds = new Set<number>();
   for (const typeId of ELEMENT_TYPE_IDS) {
@@ -263,6 +272,7 @@ async function parseIfcBufferInner(buffer: ArrayBuffer): Promise<IfcParseResult>
   }
 
   for (const expressId of expressIds) {
+    try {
     const meshBuffers = meshByExpressId.get(expressId) ?? [];
     const properties = extractProperties(api, modelId, expressId);
     const type = resolveTypeName(api, modelId, expressId);
@@ -311,7 +321,34 @@ async function parseIfcBufferInner(buffer: ArrayBuffer): Promise<IfcParseResult>
       meshBuffers,
     };
     elementByExpressId.set(expressId, element);
+    } catch (err) {
+      skippedElements += 1;
+      if (skippedElements <= 20) {
+        warnings.push(`Element #${expressId} skipped: ${err instanceof Error ? err.message : 'parse error'}`);
+      }
+    }
   }
+
+  if (skippedElements > 20) {
+    warnings.push(`…and ${skippedElements - 20} more elements skipped (malformed geometry)`);
+  }
+  if (elementByExpressId.size === 0 && expressIds.size > 0) {
+    warnings.push('No elements could be fully parsed — model loaded with partial geometry');
+  }
+
+  // IFC metadata (best-effort)
+  const metadata: IfcParseResult['metadata'] = {};
+  try {
+    const projectIds = api.GetLineIDsWithType(modelId, 103); // IfcProject
+    if (projectIds.size() > 0) {
+      const proj = api.GetLine(modelId, projectIds.get(0));
+      metadata.projectName = readPropValue(proj?.Name?.value ?? proj?.Name) as string | undefined;
+    }
+  } catch {
+    /* metadata optional */
+  }
+  metadata.schema = 'IFC2x3/IFC4';
+  metadata.application = 'ARCHITEX-CAD viewer';
 
   if (!Number.isFinite(globalBounds.min[0])) {
     globalBounds.min = [0, 0, 0];
@@ -324,6 +361,8 @@ async function parseIfcBufferInner(buffer: ArrayBuffer): Promise<IfcParseResult>
     elementByExpressId,
     triangleCount,
     bounds: globalBounds,
+    warnings,
+    metadata,
   };
 }
 

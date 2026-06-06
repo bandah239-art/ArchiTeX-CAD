@@ -18,3 +18,9 @@ reportlab>=4.0.0
 # Optional extras (not required for npm run electron:dev):
 #   pip install -r python/requirements-wntr.txt   # EPANET pipe network (needs MSVC on Windows)
 #   pip install -r python/requirements-geo.txt    # GDAL stack (needs OSGeo4W on Windows)
+
+# Emerging-tech feature enablers (auto-detected at runtime; install to go LIVE):
+#   pip install ultralytics    # CV Safety — real YOLO PPE detection (pulls torch)
+#   pip install rasterio       # Satellite AI — NDVI/land-cover (also needs SENTINEL_HUB_KEY)
+#   pip install eppy           # Thermal (enhanced) — EnergyPlus (also needs the EnergyPlus binary)
+# Drone Photogrammetry needs a running WebODM/NodeODM server (set WEBODM_URL).

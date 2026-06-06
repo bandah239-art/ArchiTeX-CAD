@@ -31,6 +31,13 @@ export interface ModelStats {
   triangleCount: number;
   bounds: { min: number[]; max: number[] };
   loadTime: number;
+  warnings?: string[];
+  metadata?: {
+    schema?: string;
+    author?: string;
+    application?: string;
+    projectName?: string;
+  };
 }
 
 export type ViewMode = 'perspective' | 'ortho' | 'plan';

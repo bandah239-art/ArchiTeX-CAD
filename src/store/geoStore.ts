@@ -234,23 +234,47 @@ export const useGeoStore = create<GeoState>((set, get) => ({
   },
 
   pushToCalculators: () => {
-    const params = get().analysis?.design_parameters;
+    const analysis = get().analysis;
+    const params = analysis?.design_parameters;
     if (!params) return;
-    const calc = useCalculationStore.getState();
+    const zm = (analysis as Record<string, unknown>)?.zambia as Record<string, unknown> | undefined;
+    const province = (params as Record<string, unknown>).province_slug as string | undefined;
+    const p = params as Record<string, unknown>;
 
-    calc.setModule('foundation');
-    calc.setInput('soil_bearing', params.soil_bearing_capacity_knm2);
-    calc.setInput('foundation_depth', params.min_foundation_depth_m);
+    const patches: Partial<Record<import('../types/calculations').CalculationModule, Record<string, unknown>>> = {};
+    const siteFields: Record<string, string[]> = {};
 
-    calc.setModule('road');
-    calc.setInput('cbr_subgrade', params.cbr_subgrade_pct);
-    calc.setInput('rainfall_intensity', params.design_rainfall_10yr_mmhr);
+    patches.foundation = {
+      soil_bearing: params.soil_bearing_capacity_knm2,
+      foundation_depth: params.min_foundation_depth_m,
+    };
+    siteFields.foundation = ['soil_bearing', 'foundation_depth'];
 
-    calc.setModule('loads');
-    calc.setInput('wind_load_w', params.design_wind_pressure_knm2);
+    patches.road = {
+      cbr_subgrade: params.cbr_subgrade_pct,
+      rainfall_intensity: params.design_rainfall_10yr_mmhr,
+      ...(province ? { province } : {}),
+    };
+    siteFields.road = ['cbr_subgrade', 'rainfall_intensity', ...(province ? ['province'] : [])];
 
-    calc.setModule('wind');
-    calc.setInput('basic_wind_speed', params.design_wind_speed_ms);
+    patches.wind = {
+      basic_wind_speed: params.design_wind_speed_ms,
+      ...(province ? { province } : {}),
+    };
+    siteFields.wind = ['basic_wind_speed', ...(province ? ['province'] : [])];
+
+    if (p.seismic_pga_g != null) {
+      patches.seismic = { ag: p.seismic_pga_g };
+      siteFields.seismic = ['ag'];
+    }
+
+    useCalculationStore.getState().prefillFromSite(patches, {
+      sitePrefillFields: siteFields,
+      sitePrefillSource: {
+        province: String(p.province ?? ''),
+        bcsWarning: Boolean(zm && (zm.black_cotton as Record<string, unknown>)?.in_zone),
+      },
+    });
   },
 
   applyBudgetToAi: () => {
@@ -307,7 +331,7 @@ export const useGeoStore = create<GeoState>((set, get) => ({
     const { latitude, longitude, countryCode, projectName, offlineOnly, useCache } = get();
     set({ error: null });
     try {
-      await geoAPI.siteReport({
+      const blob = await geoAPI.siteReportDownload({
         latitude,
         longitude,
         country_code: countryCode,
@@ -315,6 +339,13 @@ export const useGeoStore = create<GeoState>((set, get) => ({
         use_cache: useCache,
         offline_only: offlineOnly,
       });
+      const ext = blob.type.includes('pdf') ? 'pdf' : 'html';
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `site-report-${projectName.replace(/\s+/g, '_')}.${ext}`;
+      a.click();
+      URL.revokeObjectURL(url);
     } catch (err) {
       set({ error: err instanceof Error ? err.message : 'Report export failed' });
     }

@@ -155,33 +155,105 @@ export function calcModuleForIfcType(type: string): 'beam' | 'slab' | 'column' |
   return CALC_MODULE_BY_IFC[type] ?? null;
 }
 
-export function calcInputsFromElement(el: IFCElement): Record<string, unknown> {
-  const L = el.length ?? 6;
-  const W = (el.width ?? 0.3) * (el.width && el.width < 3 ? 1000 : 1);
-  const D = (el.height ?? 0.5) * (el.height && el.height < 3 ? 1000 : 1);
+export type FieldConfidence = 'high' | 'medium' | 'low';
+
+/** Convert metres → mm when value looks like IFC metres (< 3 m). */
+function toMm(value: number | undefined, fallbackMm: number): { value: number; confidence: FieldConfidence } {
+  if (value == null || !Number.isFinite(value) || value <= 0) {
+    return { value: fallbackMm, confidence: 'low' };
+  }
+  if (value < 3) {
+    return { value: Math.round(value * 1000), confidence: 'high' };
+  }
+  if (value < 30) {
+    return { value: Math.round(value * 1000), confidence: 'medium' };
+  }
+  return { value: Math.round(value), confidence: 'high' };
+}
+
+function toMetres(value: number | undefined, fallbackM: number): { value: number; confidence: FieldConfidence } {
+  if (value == null || !Number.isFinite(value) || value <= 0) {
+    return { value: fallbackM, confidence: 'low' };
+  }
+  if (value > 100) {
+    return { value: value / 1000, confidence: 'medium' };
+  }
+  return { value, confidence: 'high' };
+}
+
+export interface CalcPrefillResult {
+  module: 'beam' | 'slab' | 'column' | 'foundation';
+  element: IFCElement;
+  inputs: Record<string, unknown>;
+  confidence: FieldConfidence;
+  confidenceNote: string;
+  fieldConfidence: Record<string, FieldConfidence>;
+}
+
+export function calcPrefillFromElement(el: IFCElement): CalcPrefillResult {
+  const module = calcModuleForIfcType(el.type)!;
+  const fieldConfidence: Record<string, FieldConfidence> = {};
+  const inputs: Record<string, unknown> = {};
+
+  const spanM = toMetres(el.length, 6);
+  const widthMm = toMm(el.width, 300);
+  const depthMm = toMm(el.height, 500);
+
   switch (el.type) {
     case 'IfcBeam':
-      return { span: L, width: W < 10 ? 300 : W, depth: D < 10 ? 500 : D };
-    case 'IfcSlab':
-      return {
-        span_lx: L,
-        span_ly: el.width ?? L,
-        depth: D < 10 ? 175 : D,
-      };
+      inputs.span = spanM.value;
+      inputs.width = widthMm.value;
+      inputs.depth = depthMm.value;
+      fieldConfidence.span = spanM.confidence;
+      fieldConfidence.width = widthMm.confidence;
+      fieldConfidence.depth = depthMm.confidence;
+      break;
+    case 'IfcSlab': {
+      const ly = toMetres(el.width, spanM.value);
+      inputs.span_lx = spanM.value;
+      inputs.span_ly = ly.value;
+      inputs.depth = depthMm.value < 10 ? 175 : depthMm.value;
+      fieldConfidence.span_lx = spanM.confidence;
+      fieldConfidence.span_ly = ly.confidence;
+      fieldConfidence.depth = depthMm.confidence;
+      break;
+    }
     case 'IfcColumn':
-      return {
-        height: L,
-        width: W < 10 ? 300 : W,
-        depth: D < 10 ? 300 : D,
-      };
+      inputs.height = spanM.value;
+      inputs.width = widthMm.value;
+      inputs.depth = depthMm.value;
+      fieldConfidence.height = spanM.confidence;
+      fieldConfidence.width = widthMm.confidence;
+      fieldConfidence.depth = depthMm.confidence;
+      break;
     case 'IfcFooting':
-    case 'IfcFoundation':
-      return {
-        foundation_width: el.width ?? 2.4,
-        foundation_length: L,
-        foundation_depth_concrete: (el.height ?? 0.45) * 1000,
-      };
-    default:
-      return {};
+    case 'IfcFoundation': {
+      const fw = toMetres(el.width, 2.4);
+      inputs.foundation_width = fw.value;
+      inputs.foundation_length = spanM.value;
+      inputs.foundation_depth_concrete = depthMm.value;
+      fieldConfidence.foundation_width = fw.confidence;
+      fieldConfidence.foundation_length = spanM.confidence;
+      fieldConfidence.foundation_depth_concrete = depthMm.confidence;
+      break;
+    }
   }
+
+  const levels = Object.values(fieldConfidence);
+  const lowCount = levels.filter((c) => c === 'low').length;
+  const confidence: FieldConfidence =
+    lowCount === 0 ? 'high' : lowCount <= 1 ? 'medium' : 'low';
+  const confidenceNote =
+    confidence === 'high'
+      ? 'Dimensions from IFC geometry — verify before design'
+      : confidence === 'medium'
+        ? 'Some dimensions estimated — check in inspector'
+        : 'Missing IFC data — manual entry required';
+
+  return { module, element: el, inputs, confidence, confidenceNote, fieldConfidence };
+}
+
+/** @deprecated Use calcPrefillFromElement for confidence metadata. */
+export function calcInputsFromElement(el: IFCElement): Record<string, unknown> {
+  return calcPrefillFromElement(el).inputs;
 }

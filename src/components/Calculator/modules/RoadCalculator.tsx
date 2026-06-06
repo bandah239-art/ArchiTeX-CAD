@@ -282,7 +282,7 @@ function PavementForm({ inputs, onInputChange }: CalculatorFormProps) {
       <NumField label="Traffic Count (AADT vehicles/day)" value={inputs.traffic_count ?? 500} onChange={(v) => onInputChange('traffic_count', v)} />
       <NumField label="Heavy Vehicle (%)" value={inputs.heavy_vehicle_pct ?? 12} onChange={(v) => onInputChange('heavy_vehicle_pct', v)} />
       <NumField label="Design Life (years)" value={inputs.design_life ?? 20} onChange={(v) => onInputChange('design_life', v)} />
-      <NumField label="Subgrade CBR (%)" value={inputs.cbr_subgrade ?? 6} onChange={(v) => onInputChange('cbr_subgrade', v)} />
+      <NumField label="Subgrade CBR (%)" fieldKey="cbr_subgrade" value={inputs.cbr_subgrade ?? 6} onChange={(v) => onInputChange('cbr_subgrade', v)} />
       <SelectField label="Subbase Material" value={(inputs.subbase_material as string) ?? 'natural_gravel'} options={SUBBASE_MATERIALS} onChange={(v) => onInputChange('subbase_material', v)} />
       <SelectField label="Base Material" value={(inputs.base_material as string) ?? 'crushed_stone'} options={BASE_MATERIALS} onChange={(v) => onInputChange('base_material', v)} />
       <SelectField label="Climate Zone" value={(inputs.climate_zone as string) ?? 'semi_arid'} options={CLIMATE_ZONES} onChange={(v) => onInputChange('climate_zone', v)} />
@@ -295,7 +295,7 @@ function DrainageForm({ inputs, onInputChange }: CalculatorFormProps) {
   return (
     <>
       <NumField label="Catchment Area (ha)" value={inputs.catchment_area ?? 2.5} onChange={(v) => onInputChange('catchment_area', v)} />
-      <NumField label="Rainfall Intensity (mm/hr, 0 = lookup)" value={inputs.rainfall_intensity ?? 65} onChange={(v) => onInputChange('rainfall_intensity', v)} />
+      <NumField label="Rainfall Intensity (mm/hr, 0 = lookup)" fieldKey="rainfall_intensity" value={inputs.rainfall_intensity ?? 65} onChange={(v) => onInputChange('rainfall_intensity', v)} />
       <NumField label="Runoff Coefficient" value={inputs.runoff_coefficient ?? 0.6} onChange={(v) => onInputChange('runoff_coefficient', v)} />
       <NumField label="Pipe Gradient (%)" value={inputs.pipe_gradient ?? 1.5} onChange={(v) => onInputChange('pipe_gradient', v)} />
       <SelectField label="Pipe Material" value={(inputs.pipe_material as string) ?? 'concrete'} options={PIPE_MATERIALS} onChange={(v) => onInputChange('pipe_material', v)} />

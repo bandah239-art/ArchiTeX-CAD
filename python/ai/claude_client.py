@@ -5,19 +5,33 @@ import os
 import re
 from typing import Any
 
-import anthropic
+try:
+    import anthropic as _anthropic
+    _ANTHROPIC_AVAILABLE = True
+except ImportError:
+    _anthropic = None  # type: ignore[assignment]
+    _ANTHROPIC_AVAILABLE = False
+    import warnings
+    warnings.warn(
+        "anthropic package not installed — Claude AI features will be unavailable. "
+        "Install with: pip install anthropic",
+        stacklevel=1,
+    )
 
 MODEL = "claude-sonnet-4-6"
 MAX_TOKENS = 4000
 
 
 def call_claude(system: str, user: str) -> dict[str, Any]:
+    if not _ANTHROPIC_AVAILABLE:
+        return {"error": "anthropic_not_installed", "fallback": True}
+
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
     if not api_key:
         return {"error": "no_api_key", "fallback": True}
 
     try:
-        client = anthropic.Anthropic(api_key=api_key)
+        client = _anthropic.Anthropic(api_key=api_key)
         message = client.messages.create(
             model=MODEL,
             max_tokens=MAX_TOKENS,
@@ -28,7 +42,7 @@ def call_claude(system: str, user: str) -> dict[str, Any]:
             block.text for block in message.content if block.type == "text"
         )
         return parse_json_response(text)
-    except anthropic.APIError as e:
+    except _anthropic.APIError as e:
         return {"error": str(e), "fallback": True}
 
 

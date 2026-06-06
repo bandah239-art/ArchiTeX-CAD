@@ -1,7 +1,19 @@
 import { useState, useEffect } from 'react';
+import { useCalculationStore } from '../../store/calculationStore';
 
 const CLS =
   'w-full px-2 py-1.5 text-sm bg-infra-darker border border-infra-accent/40 rounded text-white focus:outline-none focus:border-infra-highlight/60';
+
+function SiteIntelBadge({ fieldKey }: { fieldKey?: string }) {
+  const activeModule = useCalculationStore((s) => s.activeModule);
+  const sitePrefillFields = useCalculationStore((s) => s.sitePrefillFields);
+  if (!fieldKey || !sitePrefillFields[activeModule]?.includes(fieldKey)) return null;
+  return (
+    <span className="ml-1.5 text-[9px] font-semibold uppercase tracking-wide text-emerald-400/90 bg-emerald-950/50 px-1.5 py-0.5 rounded border border-emerald-500/30">
+      Site intel
+    </span>
+  );
+}
 
 function toStr(v: unknown): string {
   if (v == null || v === '') return '';
@@ -62,6 +74,7 @@ export function NumField({
   label,
   value,
   onChange,
+  fieldKey,
   warnLow,
   warnHigh,
   warnMsg,
@@ -69,10 +82,14 @@ export function NumField({
   label: string;
   value: unknown;
   onChange: (v: number) => void;
+  fieldKey?: string;
   warnLow?: number;
   warnHigh?: number;
   warnMsg?: string;
 }) {
+  const activeModule = useCalculationStore((s) => s.activeModule);
+  const sitePrefillFields = useCalculationStore((s) => s.sitePrefillFields);
+  const fromSite = Boolean(fieldKey && sitePrefillFields[activeModule]?.includes(fieldKey));
   const n = Number(value);
   const outOfRange =
     (!isNaN(n) && warnLow !== undefined && n < warnLow) ||
@@ -84,12 +101,17 @@ export function NumField({
 
   return (
     <div>
-      <label className="block text-xs text-gray-400 mb-1">{label}</label>
+      <label className="block text-xs text-gray-400 mb-1">
+        {label}
+        <SiteIntelBadge fieldKey={fieldKey} />
+      </label>
       <NumericInput
         value={value}
         onChange={onChange}
         className={`w-full px-2 py-1.5 text-sm bg-infra-darker border rounded text-white focus:outline-none transition-colors ${
-          outOfRange
+          fromSite
+            ? 'border-emerald-500/50 focus:border-emerald-400'
+            : outOfRange
             ? 'border-amber-500/70 focus:border-amber-400'
             : 'border-infra-accent/40 focus:border-infra-highlight/60'
         }`}

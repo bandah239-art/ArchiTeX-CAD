@@ -370,12 +370,36 @@ def create_module_drawing(result: dict[str, Any]) -> rshapes.Drawing | None:
 def render_calculation_pdf(result: dict[str, Any], title: str = "Calculation Report") -> bytes:
     """Generate a structured PDF report from an engineer-controlled calculation result."""
     buffer = io.BytesIO()
+    proj_ref = result.get("project_ref", "N/A")
+    draft = result.get("is_draft", True)
+    review_summary = result.get("review_summary") or {}
+    if review_summary.get("pending", 0) > 0 or review_summary.get("flagged", 0) > 0:
+        draft = True
+    if result.get("status", "").lower() in ("fail", "failed"):
+        draft = True
+
+    def _page_decor(canvas, doc):
+        canvas.saveState()
+        canvas.setFont("Helvetica", 8)
+        canvas.setFillColor(colors.HexColor("#64748b"))
+        canvas.drawString(2 * cm, A4[1] - 1.2 * cm, f"ARCHITEX-CAD — {title}")
+        canvas.drawRightString(A4[0] - 2 * cm, A4[1] - 1.2 * cm, str(proj_ref))
+        canvas.drawString(2 * cm, 1 * cm, f"Page {doc.page}")
+        canvas.drawRightString(A4[0] - 2 * cm, 1 * cm, datetime.now().strftime("%d %B %Y"))
+        if draft:
+            canvas.setFont("Helvetica-Bold", 44)
+            canvas.setFillColor(colors.Color(0.86, 0.15, 0.15, alpha=0.11))
+            canvas.translate(A4[0] / 2, A4[1] / 2)
+            canvas.rotate(45)
+            canvas.drawCentredString(0, 0, "DRAFT ONLY — NOT FOR CONSTRUCTION")
+        canvas.restoreState()
+
     doc = SimpleDocTemplate(
         buffer,
         pagesize=A4,
         rightMargin=2*cm,
         leftMargin=2*cm,
-        topMargin=2*cm,
+        topMargin=2.5*cm,
         bottomMargin=2*cm
     )
     
@@ -634,5 +658,5 @@ def render_calculation_pdf(result: dict[str, Any], title: str = "Calculation Rep
     ]))
     elements.append(t_seal)
             
-    doc.build(elements)
+    doc.build(elements, onFirstPage=_page_decor, onLaterPages=_page_decor)
     return buffer.getvalue()

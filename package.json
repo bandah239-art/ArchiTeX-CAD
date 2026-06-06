@@ -13,7 +13,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "native:rebuild": "node scripts/rebuild-native.mjs",
-    "electron:dev": "npm run python:install && npm run native:rebuild && concurrently -k \"vite\" \"node scripts/start-python.mjs\" \"wait-on http://localhost:5173 http-get://127.0.0.1:8000/health && node scripts/start-electron.mjs\"",
+    "electron:dev": "npm run python:install && npm run native:rebuild && concurrently -k \"vite\" \"node scripts/start-python.mjs\" \"wait-on http://localhost:5190 http-get://127.0.0.1:8000/health && node scripts/start-electron.mjs\"",
     "electron:build": "npm run native:rebuild && npm run build && electron-builder",
     "python:install": "node scripts/install-python-deps.mjs",
     "python:dev": "node scripts/start-python.mjs",

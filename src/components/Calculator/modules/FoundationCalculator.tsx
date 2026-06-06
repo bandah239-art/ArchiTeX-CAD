@@ -23,9 +23,9 @@ export function FoundationCalculator({ inputs, onInputChange }: CalculatorFormPr
       <NumField label="Column Load (kN)" value={inputs.column_load ?? 800} onChange={(v) => onInputChange('column_load', v)} />
       <NumField label="Moment X (kNm)" value={inputs.moment_x ?? 0} onChange={(v) => onInputChange('moment_x', v)} />
       <NumField label="Moment Y (kNm)" value={inputs.moment_y ?? 0} onChange={(v) => onInputChange('moment_y', v)} />
-      <NumField label="Soil Bearing Capacity (kN/m²)" value={inputs.soil_bearing ?? 150} onChange={(v) => onInputChange('soil_bearing', v)} />
+      <NumField label="Soil Bearing Capacity (kN/m²)" fieldKey="soil_bearing" value={inputs.soil_bearing ?? 150} onChange={(v) => onInputChange('soil_bearing', v)} />
       <NumField label="Soil Unit Weight (kN/m³)" value={inputs.soil_unit_weight ?? 18} onChange={(v) => onInputChange('soil_unit_weight', v)} />
-      <NumField label="Foundation Embedment Depth (m)" value={inputs.foundation_depth ?? 1.2} onChange={(v) => onInputChange('foundation_depth', v)} />
+      <NumField label="Foundation Embedment Depth (m)" fieldKey="foundation_depth" value={inputs.foundation_depth ?? 1.2} onChange={(v) => onInputChange('foundation_depth', v)} />
       {ftype === 'strip' && (
         <>
           <NumField label="Foundation Width (m)" value={inputs.foundation_width ?? 1.2} onChange={(v) => onInputChange('foundation_width', v)} />

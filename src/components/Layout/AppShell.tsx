@@ -40,6 +40,7 @@ import { ProjectWorkspace } from '../Project/ProjectWorkspace';
 import { ZambiaSitePanel } from '../Site/ZambiaSitePanel';
 import { QuantityVerifier } from '../Verification/QuantityVerifier';
 import { MaterialPricePanel } from '../Materials/MaterialPricePanel';
+import { useAutoSave } from '../../hooks/useAutoSave';
 
 const PANEL_INFO: Record<WorkspacePanel, { title: string; icon: string; key: string }> = {
   viewer: { title: '3D Viewer', icon: '🏗️', key: 'sidebar.viewer' },
@@ -85,6 +86,7 @@ export function AppShell({ onBackToDashboard }: AppShellProps) {
   const { handleElementSelected, handleModelLoaded } = useBIMViewer();
   const { activeTab } = useToolbarStore();
   useViewerShortcuts();
+  useAutoSave();
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [treeCollapsed, setTreeCollapsed] = useState(false);

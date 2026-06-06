@@ -4,7 +4,7 @@ import { useIfcModelStore } from '../../store/ifcModelStore';
 import { bimGeometryAPI } from '../../services/bimGeometryAPI';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import { useTranslation } from 'react-i18next';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { APP_NAME } from '../../constants/brand';
 import { useWorkspaceStore } from '../../store/workspaceStore';
 import { useDesignCodeStore, CODE_LABELS } from '../../store/designCodeStore';
@@ -18,13 +18,14 @@ interface TopBarProps {
 
 export function TopBar({ onBack, onToggleCalculator, onToggleInspector }: TopBarProps) {
   const { t } = useTranslation();
-  const { currentProject } = useProjectStore();
+  const { currentProject, hasUnsavedChanges, lastSavedAt, markSaved } = useProjectStore();
   const { openIFC, saveProject } = useProject();
   const ifcElements = useIfcModelStore((s) => s.elements);
   const { mainView, setMainView } = useWorkspaceStore();
   const { activeCode, setCode } = useDesignCodeStore();
   const [exporting, setExporting] = useState(false);
   const [serverRunning, setServerRunning] = useState(true);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (window.electronAPI) {
@@ -35,6 +36,16 @@ export function TopBar({ onBack, onToggleCalculator, onToggleInspector }: TopBar
       return cleanup;
     }
   }, []);
+
+  const handleSave = useCallback(async () => {
+    setSaving(true);
+    try {
+      saveProject();
+      markSaved();
+    } finally {
+      setSaving(false);
+    }
+  }, [saveProject, markSaved]);
 
   const handleRestartServer = async () => {
     if (window.electronAPI?.restartPythonServer) {
@@ -95,18 +106,32 @@ export function TopBar({ onBack, onToggleCalculator, onToggleInspector }: TopBar
       >
         ← {t('topbar.dashboard')}
       </button>
-      <div className="flex-1 min-w-0">
-        <span className="font-semibold text-white text-lg">
+      <div className="flex-1 min-w-0 flex items-center gap-2">
+        <span className="font-semibold text-white text-lg truncate">
           {currentProject?.name || 'Untitled Project'}
         </span>
-        <span className="ml-2 text-[10px] uppercase tracking-wider text-gray-500 hidden sm:inline">
+        {/* Unsaved changes indicator */}
+        {currentProject && (
+          hasUnsavedChanges ? (
+            <span
+              className="flex-shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/15 text-amber-400 border border-amber-500/30"
+              title="You have unsaved changes"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+              Unsaved
+            </span>
+          ) : lastSavedAt ? (
+            <span
+              className="flex-shrink-0 text-[10px] text-gray-500"
+              title={`Last saved ${new Date(lastSavedAt).toLocaleTimeString()}`}
+            >
+              Saved
+            </span>
+          ) : null
+        )}
+        <span className="ml-1 text-[10px] uppercase tracking-wider text-gray-500 hidden sm:inline flex-shrink-0">
           {APP_NAME}
         </span>
-        {currentProject?.ifcPath && (
-          <span className="ml-3 text-sm text-gray-400 truncate">
-            {currentProject.ifcPath}
-          </span>
-        )}
       </div>
       <div className="flex bg-infra-dark border border-gray-700 rounded-md overflow-hidden mr-4">
         <button
@@ -156,10 +181,16 @@ export function TopBar({ onBack, onToggleCalculator, onToggleInspector }: TopBar
           {t('topbar.openIfc')}
         </button>
         <button
-          onClick={saveProject}
-          className="topbar-btn bg-infra-accent/50 hover:bg-infra-accent/70 text-white"
+          onClick={handleSave}
+          disabled={saving}
+          className={`topbar-btn text-white transition-colors ${
+            hasUnsavedChanges
+              ? 'bg-amber-600 hover:bg-amber-500 border border-amber-400/50'
+              : 'bg-infra-accent/50 hover:bg-infra-accent/70'
+          } disabled:opacity-50`}
+          title={hasUnsavedChanges ? 'Save unsaved changes' : 'Project saved'}
         >
-          {t('topbar.save')}
+          {saving ? '…' : t('topbar.save')}
         </button>
         <button
           onClick={exportIfc}

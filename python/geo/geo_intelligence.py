@@ -55,6 +55,15 @@ def run_site_analysis(payload: dict[str, Any]) -> dict[str, Any]:
     buildability = terrain["buildability_score"]
     flood_risk = "Low" if terrain["slope_deg"] > 1 else "Moderate"
 
+    zambia: dict[str, Any] | None = None
+    if country == "ZM":
+        from geo.zambia_provinces import get_zambia_intelligence
+        zambia = get_zambia_intelligence(lat, lon)
+        zm_flood = zambia["flood_risk"]
+        flood_risk = zm_flood.capitalize() if zm_flood in ("high", "moderate") else flood_risk
+        if zambia["black_cotton"]["in_zone"]:
+            flood_risk = "High" if zm_flood == "high" else flood_risk
+
     design_params = {
         "soil_bearing_capacity_knm2": soil["bearing_capacity_mid"],
         "soil_bearing_range_knm2": soil["bearing_capacity_range_knm2"],
@@ -69,6 +78,19 @@ def run_site_analysis(payload: dict[str, Any]) -> dict[str, Any]:
         "elevation_m": terrain["elevation_m"],
     }
 
+    if zambia:
+        design_params["design_wind_speed_ms"] = zambia["wind_basic_ms"]
+        design_params["design_wind_pressure_knm2"] = zambia["wind_pressure_knm2"]
+        design_params["design_rainfall_10yr_mmhr"] = float(zambia["rainfall_10yr_60min_mmhr"])
+        design_params["soil_bearing_capacity_knm2"] = zambia["soil_prior"]["bearing_capacity_kpa"]
+        design_params["soil_bearing_range_knm2"] = [
+            max(50, zambia["soil_prior"]["bearing_capacity_kpa"] - 30),
+            zambia["soil_prior"]["bearing_capacity_kpa"] + 50,
+        ]
+        design_params["seismic_pga_g"] = zambia["seismic_pga_g"]
+        design_params["province"] = zambia["province"]["display_name"]
+        design_params["province_slug"] = zambia["province"]["slug"]
+
     recommendations = [
         "Site is suitable for construction" if buildability >= 7 else "Site requires additional earthworks assessment",
         f"Terrain slope {terrain['slope_deg']}° — {terrain['slope_classification']}",
@@ -79,6 +101,15 @@ def run_site_analysis(payload: dict[str, Any]) -> dict[str, Any]:
     if climate["wet_season_months"]:
         wet = ", ".join(str(m) for m in climate["wet_season_months"][:4])
         recommendations.append(f"Protect foundations during wet season (months {wet})")
+
+    if zambia:
+        recommendations.insert(0, f"Province: {zambia['province']['display_name']} (Zambia calibrated parameters applied)")
+        recommendations.append(zambia["foundation_recommendation"])
+        if zambia["black_cotton"]["in_zone"]:
+            recommendations.append(
+                f"⚠ Black cotton soil zone ({zambia['black_cotton']['zone_name']}) — "
+                "lime stabilisation and deep founding required"
+            )
 
     result = {
         "status": "complete",
@@ -103,10 +134,18 @@ def run_site_analysis(payload: dict[str, Any]) -> dict[str, Any]:
         "seismic": seismic,
         "design_parameters": design_params,
         "recommendations": recommendations,
-        "data_sources": ["SRTM / OpenTopoData", "Open-Meteo", "USGS", "ISRIC SoilGrids"],
+        "data_sources": ["SRTM / OpenTopoData", "Open-Meteo", "USGS", "ISRIC SoilGrids", "Zambia ZMD / EC1 calibration"],
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "from_cache": False,
     }
+    if zambia:
+        result["zambia"] = zambia
+        result["executive_summary_zambia"] = {
+            "province": zambia["province"]["display_name"],
+            "black_cotton_warning": zambia["black_cotton"]["in_zone"],
+            "foundation_recommendation": zambia["foundation_recommendation"],
+            "risk_register": zambia["risk_register"],
+        }
     if use_cache and not offline_only:
         set_cached("site-analysis", lat, lon, result, country)
     return result

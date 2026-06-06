@@ -288,22 +288,35 @@ export const usePlatformToolsStore = create<PlatformToolsState>((set, get) => ({
           }
           break;
         case 'bim.clash': {
-          if (collectTargetEntityIds().length < 2) {
+          const targets = collectTargetEntityIds();
+          if (targets.length >= 2) {
+            const { mesh_a, mesh_b } = resolveTwoMeshPayloads();
+            const r = await bimGeometryAPI.intersectionVolume({
+              operation: 'intersection',
+              mesh_a,
+              mesh_b,
+            });
             finish(
               'Clash check',
-              'Select two elements first (pick one, then box-select or pick another)',
+              `Volume ${String(r.intersection_volume_m3 ?? r.volume_m3 ?? '—')} m³`,
+              r,
             );
             break;
           }
-          const { mesh_a, mesh_b } = resolveTwoMeshPayloads();
-          const r = await bimGeometryAPI.intersectionVolume({
-            operation: 'intersection',
-            mesh_a,
-            mesh_b,
+          const { elements } = useIfcModelStore.getState();
+          if (!elements.length) {
+            finish('Clash scan', 'Load an IFC model first');
+            break;
+          }
+          const { buildClashScanPayload } = await import('../services/ifcBoqService');
+          const scanEls = buildClashScanPayload(elements);
+          const r = await bimGeometryAPI.clashScan({
+            elements: scanEls,
+            discipline_filter: 'structural_mep',
           });
           finish(
-            'Clash check',
-            `Volume ${String(r.intersection_volume_m3 ?? r.volume_m3 ?? '—')} m³`,
+            'Model clash scan',
+            `${String(r.clash_count ?? 0)} clashes (${String(r.critical_count ?? 0)} critical)`,
             r,
           );
           break;

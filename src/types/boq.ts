@@ -26,6 +26,9 @@ export interface BoQSummary {
   profit_usd: number;
   subtotal_usd: number;
   contingency_usd: number;
+  preliminaries_usd?: number;
+  vat_usd?: number;
+  vat_pct?: number;
   total_project_estimate_usd: number;
   total_project_range_usd: [number, number];
   local_currency: string;

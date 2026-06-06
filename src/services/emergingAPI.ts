@@ -1,8 +1,31 @@
 import { apiUrl } from './apiConfig';
 
 export const emergingAPI = {
-  marketplace: async (countryCode: string) => {
-    const res = await fetch(apiUrl(`/emerging/marketplace?country_code=${countryCode}`));
+  capabilities: async () => {
+    const res = await fetch(apiUrl('/emerging/capabilities'));
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+  marketplace: async (countryCode: string, opts: { type?: string; q?: string; maxPrice?: number } = {}) => {
+    const params = new URLSearchParams({ country_code: countryCode });
+    if (opts.type) params.set('type', opts.type);
+    if (opts.q) params.set('q', opts.q);
+    if (opts.maxPrice != null) params.set('max_price', String(opts.maxPrice));
+    const res = await fetch(apiUrl(`/emerging/marketplace?${params.toString()}`));
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+  createListing: async (listing: Record<string, unknown>) => {
+    const res = await fetch(apiUrl('/emerging/marketplace'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(listing),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+  deleteListing: async (id: string) => {
+    const res = await fetch(apiUrl(`/emerging/marketplace/${id}`), { method: 'DELETE' });
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   },
@@ -60,11 +83,11 @@ export const emergingAPI = {
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   },
-  cvSafety: async (payload: Record<string, unknown>) => {
+  cvSafety: async (payload: Record<string, unknown>, imageBase64 = '') => {
     const res = await fetch(apiUrl('/emerging/cv/safety'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ payload }),
+      body: JSON.stringify({ image_base64: imageBase64, payload }),
     });
     if (!res.ok) throw new Error(await res.text());
     return res.json();

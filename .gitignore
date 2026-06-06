@@ -12,3 +12,9 @@ __pycache__/
 venv/
 python/cache/last_project.json
 python/geo/cache/
+
+# Emerging-tech runtime artifacts
+*.pt
+data/marketplace.db
+data/marketplace.db-wal
+data/marketplace.db-shm

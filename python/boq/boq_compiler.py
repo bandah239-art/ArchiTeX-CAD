@@ -129,9 +129,23 @@ def compile_boq(payload: dict[str, Any]) -> dict[str, Any]:
     contingency_max = subtotal_max * contingency_pct
     contingency_mid = subtotal_mid * contingency_pct
 
-    total_min = subtotal_min + contingency_min
-    total_max = subtotal_max + contingency_max
-    total_mid = subtotal_mid + contingency_mid
+    prelim_pct = payload.get("preliminaries_pct", 5) / 100
+    prelim_min = construction_min * prelim_pct
+    prelim_max = construction_max * prelim_pct
+    prelim_mid = construction_mid * prelim_pct
+
+    net_min = subtotal_min + contingency_min + prelim_min
+    net_max = subtotal_max + contingency_max + prelim_max
+    net_mid = subtotal_mid + contingency_mid + prelim_mid
+
+    vat_pct = payload.get("vat_pct", 16 if country_code == "ZM" else 0) / 100
+    vat_min = net_min * vat_pct
+    vat_max = net_max * vat_pct
+    vat_mid = net_mid * vat_pct
+
+    total_min = net_min + vat_min
+    total_max = net_max + vat_max
+    total_mid = net_mid + vat_mid
 
     fx = EXCHANGE_RATES.get(country_code, EXCHANGE_RATES["ZM"])
     local_currency = fx["currency"]
@@ -154,6 +168,9 @@ def compile_boq(payload: dict[str, Any]) -> dict[str, Any]:
             "profit_usd": round(profit_mid, 2),
             "subtotal_usd": round(subtotal_mid, 2),
             "contingency_usd": round(contingency_mid, 2),
+            "preliminaries_usd": round(prelim_mid, 2),
+            "vat_usd": round(vat_mid, 2),
+            "vat_pct": round(vat_pct * 100, 1),
             "total_project_estimate_usd": round(total_mid, 2),
             "total_project_range_usd": [round(total_min, 2), round(total_max, 2)],
             "local_currency": local_currency,

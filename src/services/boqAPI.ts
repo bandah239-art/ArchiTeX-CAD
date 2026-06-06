@@ -79,6 +79,16 @@ export const geoAPI = {
       payload
     ),
 
+  siteReportDownload: async (payload: GeoSitePayload): Promise<Blob> => {
+    const res = await fetch(`${API_BASE}/geo/site-report/download`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.blob();
+  },
+
   geocode: (query: string) =>
     post<{ results: import('../types/geo').GeocodeResult[] }>('/geo/geocode', { query }),
 

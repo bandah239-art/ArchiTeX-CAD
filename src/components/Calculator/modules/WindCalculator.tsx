@@ -11,7 +11,7 @@ const EXPOSURE = [
 export function WindCalculator({ inputs, onInputChange }: CalculatorFormProps) {
   return (
     <div className="space-y-3">
-      <NumField label="Basic wind speed Vb (m/s)" value={inputs.basic_wind_speed ?? 45} onChange={(v) => onInputChange('basic_wind_speed', v)} />
+      <NumField label="Basic wind speed Vb (m/s)" fieldKey="basic_wind_speed" value={inputs.basic_wind_speed ?? 45} onChange={(v) => onInputChange('basic_wind_speed', v)} />
       <NumField label="Building height (m)" value={inputs.building_height ?? 12} onChange={(v) => onInputChange('building_height', v)} />
       <NumField label="Building width B (m)" value={inputs.building_width ?? 20} onChange={(v) => onInputChange('building_width', v)} />
       <NumField label="Building length L (m)" value={inputs.building_length ?? 30} onChange={(v) => onInputChange('building_length', v)} />

@@ -236,6 +236,8 @@ export const useBoQStore = create<BoQState>((set, get) => ({
         contractor_overhead: 15,
         contractor_profit: 10,
         contingency: 10,
+        preliminaries_pct: 5,
+        vat_pct: countryCode === 'ZM' ? 16 : 0,
         elements: extracted,
       });
       set({ compiledBoQ: compiled, elements: extracted, isGenerating: false });
@@ -262,6 +264,8 @@ export const useBoQStore = create<BoQState>((set, get) => ({
         contractor_overhead: 15,
         contractor_profit: 10,
         contingency: 10,
+        preliminaries_pct: 5,
+        vat_pct: countryCode === 'ZM' ? 16 : 0,
         elements,
       });
       downloadBlob(blob, 'architex-cad_boq.xlsx');
@@ -289,6 +293,8 @@ export const useBoQStore = create<BoQState>((set, get) => ({
         contractor_overhead: 15,
         contractor_profit: 10,
         contingency: 10,
+        preliminaries_pct: 5,
+        vat_pct: countryCode === 'ZM' ? 16 : 0,
         elements,
       });
       const ext = blob.type.includes('pdf') ? 'pdf' : 'html';

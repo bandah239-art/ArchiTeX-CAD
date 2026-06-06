@@ -6,17 +6,23 @@ interface ProjectState {
   currentProject: Project | null;
   recentProjects: Project[];
   isLoading: boolean;
+  hasUnsavedChanges: boolean;
+  lastSavedAt: string | null;
   openProject: (path: string) => void;
   saveProject: () => void;
   createNewProject: (name: string) => void;
   setCurrentProject: (project: Project | null) => void;
   restoreLastProject: () => void;
+  markUnsaved: () => void;
+  markSaved: () => void;
 }
 
 export const useProjectStore = create<ProjectState>((set, get) => ({
   currentProject: null,
   recentProjects: [],
   isLoading: false,
+  hasUnsavedChanges: false,
+  lastSavedAt: null,
 
   openProject: (path: string) => {
     set({ isLoading: true });
@@ -41,16 +47,20 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   saveProject: () => {
     const current = get().currentProject;
     if (current) {
-      const updated = { ...current, updatedAt: new Date().toISOString() };
-      set({ currentProject: updated });
+      const now = new Date().toISOString();
+      const updated = { ...current, updatedAt: now };
+      set({ currentProject: updated, hasUnsavedChanges: false, lastSavedAt: now });
       saveProjectMetaLocal({
         name: updated.name,
         path: updated.path,
         ifcPath: updated.ifcPath,
-        savedAt: updated.updatedAt,
+        savedAt: now,
       });
     }
   },
+
+  markUnsaved: () => set({ hasUnsavedChanges: true }),
+  markSaved: () => set({ hasUnsavedChanges: false, lastSavedAt: new Date().toISOString() }),
 
   createNewProject: (name: string) => {
     const project: Project = {

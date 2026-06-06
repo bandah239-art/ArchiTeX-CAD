@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { API_BASE } from '../../../services/apiConfig';
 import { ResponseSpectrumChart } from '../../Seismic/ResponseSpectrumChart';
+import { useCalculationStore } from '../../../store/calculationStore';
 
 interface SeismicCalculatorProps {
   inputs: Record<string, unknown>;
@@ -47,6 +48,7 @@ export function SeismicCalculator({ inputs, onInputChange }: SeismicCalculatorPr
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedMode, setSelectedMode] = useState(0);
+  const fromSite = useCalculationStore((s) => s.sitePrefillFields.seismic?.includes('ag') ?? false);
 
   async function compute() {
     setLoading(true);
@@ -101,12 +103,21 @@ export function SeismicCalculator({ inputs, onInputChange }: SeismicCalculatorPr
       <div className="grid grid-cols-2 gap-3 text-xs">
         {/* ag */}
         <div className="flex flex-col space-y-1">
-          <label className="text-gray-400 font-semibold">PGA ag (g)</label>
+          <label className="text-gray-400 font-semibold">
+            PGA ag (g)
+            {fromSite && (
+              <span className="ml-1.5 text-[9px] font-semibold uppercase tracking-wide text-emerald-400/90 bg-emerald-950/50 px-1.5 py-0.5 rounded border border-emerald-500/30">
+                Site intel
+              </span>
+            )}
+          </label>
           <input
             type="number" step="0.01" min="0.01" max="1.0"
             value={String(inputs.ag ?? 0.15)}
             onChange={(e) => onInputChange('ag', Number(e.target.value))}
-            className="w-full px-2 py-1.5 bg-infra-darker border border-infra-accent/40 rounded text-white text-xs focus:outline-none focus:border-infra-highlight/60"
+            className={`w-full px-2 py-1.5 bg-infra-darker border rounded text-white text-xs focus:outline-none ${
+              fromSite ? 'border-emerald-500/50 focus:border-emerald-400' : 'border-infra-accent/40 focus:border-infra-highlight/60'
+            }`}
           />
         </div>
 

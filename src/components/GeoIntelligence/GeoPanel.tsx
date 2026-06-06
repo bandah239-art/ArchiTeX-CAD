@@ -290,6 +290,10 @@ export function GeoPanel() {
 
         {exec && (
           <>
+            {(geo.analysis as Record<string, unknown>)?.zambia && (
+              <ZambiaIntelCard analysis={geo.analysis as Record<string, unknown>} />
+            )}
+
             <div className="grid grid-cols-2 gap-2">
               <SummaryCard title="Terrain" value={`${exec.buildability_score}/10`} sub={exec.buildability_label} ok={exec.buildability_score >= 7} />
               <SummaryCard title="Climate" value={`${exec.annual_rainfall_mm}mm`} sub={exec.climate_zone} ok />
@@ -363,6 +367,33 @@ function SummaryCard({ title, value, sub, ok }: { title: string; value: string; 
       <div className="text-xs text-gray-500 uppercase">{title}</div>
       <div className="text-lg font-bold text-white mt-1">{value}</div>
       <div className={`text-xs mt-1 ${ok ? 'text-green-400' : 'text-yellow-400'}`}>{sub}</div>
+    </div>
+  );
+}
+
+function ZambiaIntelCard({ analysis }: { analysis: Record<string, unknown> }) {
+  const zm = analysis.zambia as Record<string, unknown>;
+  const bcs = zm.black_cotton as Record<string, unknown>;
+  const risks = (zm.risk_register as Array<Record<string, string>>) ?? [];
+  return (
+    <div className="p-3 bg-amber-950/30 border border-amber-500/40 rounded space-y-2">
+      <div className="text-xs font-semibold text-amber-300 uppercase">🇿🇲 Zambia Site Intelligence</div>
+      <div className="grid grid-cols-2 gap-2 text-xs">
+        <Row label="Province" value={String((zm.province as Record<string, string>)?.display_name ?? '')} />
+        <Row label="BCS zone" value={bcs.in_zone ? `Yes — ${bcs.zone_name}` : 'No'} />
+        <Row label="Wind Vb" value={`${zm.wind_basic_ms} m/s`} />
+        <Row label="PGA" value={`${zm.seismic_pga_g}g`} />
+      </div>
+      {risks.length > 0 && (
+        <div className="text-[10px] text-gray-400 space-y-0.5 max-h-20 overflow-y-auto">
+          {risks.slice(0, 4).map((r) => (
+            <div key={r.risk} className="flex justify-between gap-2">
+              <span className="truncate">{r.risk}</span>
+              <span className="text-amber-400 uppercase shrink-0">{r.severity}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

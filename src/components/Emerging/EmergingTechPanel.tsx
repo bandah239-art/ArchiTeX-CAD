@@ -43,6 +43,58 @@ function ResultBox({ data }: { data: Record<string, unknown> | null }) {
   return <pre className={resultsCls}>{JSON.stringify(data, null, 2)}</pre>;
 }
 
+interface Capability {
+  feature: string;
+  enabled: boolean;
+  engine: string;
+  requires?: { pip?: string[]; system?: string[]; env?: string[]; notes?: string };
+}
+
+const CAP_LABELS: Record<string, string> = {
+  cv_safety: 'CV Safety',
+  thermal: 'Thermal',
+  satellite: 'Satellite AI',
+  drone: 'Drone',
+};
+
+function CapabilitiesBanner() {
+  const [caps, setCaps] = useState<Record<string, Capability> | null>(null);
+
+  useEffect(() => {
+    emergingAPI.capabilities().then((r) => setCaps(r.capabilities)).catch(() => null);
+  }, []);
+
+  if (!caps) return null;
+
+  return (
+    <div className={sectionCls}>
+      <p className={`${summaryBaseCls} cursor-default`}>Engine Status</p>
+      <div className="px-3 pb-3 pt-1 space-y-1.5">
+        {Object.values(caps).map((c) => {
+          const reqs = [
+            ...(c.requires?.pip ?? []).map((p) => `pip: ${p}`),
+            ...(c.requires?.system ?? []),
+            ...(c.requires?.env ?? []).map((e) => `env: ${e}`),
+          ];
+          return (
+            <div key={c.feature} className="flex items-start justify-between gap-2 text-[10px]">
+              <span className="text-gray-300">{CAP_LABELS[c.feature] ?? c.feature}</span>
+              <div className="text-right">
+                <span className={c.enabled ? 'text-emerald-400 font-bold' : 'text-amber-400'}>
+                  {c.enabled ? '● LIVE' : '○ PREVIEW'}
+                </span>
+                {!c.enabled && reqs.length > 0 && (
+                  <div className="text-gray-500 mt-0.5">needs {reqs.join(', ')}</div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function ErrorMsg({ msg }: { msg: string | null }) {
   if (!msg) return null;
   return <p className="text-red-400 text-[10px] mt-1">{msg}</p>;
@@ -109,7 +161,8 @@ function DisasterSection() {
   const [disaster_type, setType] = useState('flood');
   const [affected_population, setPop] = useState('5000');
   const [location, setLoc] = useState('Lusaka');
-  const [infrastructure_type, setInfra] = useState('all');
+  const [intensity, setIntensity] = useState('0.6');
+  const [enrich, setEnrich] = useState(false);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<Record<string, unknown> | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -117,43 +170,76 @@ function DisasterSection() {
   const run = async () => {
     setLoading(true); setErr(null);
     try {
-      const r = await emergingAPI.disaster({ disaster_type, affected_population: +affected_population, location, infrastructure_type });
+      const r = await emergingAPI.disaster({
+        hazard_type: disaster_type,
+        affected_population: +affected_population,
+        location,
+        intensity: +intensity,
+        enrich_with_ai: enrich,
+      });
       setResult(r);
     } catch (e: unknown) { setErr(e instanceof Error ? e.message : String(e)); }
     finally { setLoading(false); }
   };
 
-  const plan = result?.response_plan as string | undefined;
+  const severity = result?.severity as string | undefined;
+  const phases = result?.response_phases as { phase: number; hour_offset: number; action: string }[] | undefined;
+  const resources = result?.resource_estimate as Record<string, number> | undefined;
+  const risks = result?.key_risks as string[] | undefined;
   const actions = result?.priority_actions as string[] | undefined;
+  const sevColor = severity === 'catastrophic' || severity === 'severe' ? 'text-red-400' : severity === 'moderate' ? 'text-amber-400' : 'text-emerald-400';
 
   return (
     <Toggle label="Disaster Response Plan">
       <div className="grid grid-cols-2 gap-2">
-        <Field label="Disaster type">
+        <Field label="Hazard type">
           <select value={disaster_type} onChange={e => setType(e.target.value)} className={inputCls}>
             <option value="flood">Flood</option>
             <option value="earthquake">Earthquake</option>
             <option value="fire">Fire</option>
-            <option value="wind_storm">Wind Storm</option>
+            <option value="storm">Storm</option>
+            <option value="drought">Drought</option>
           </select>
         </Field>
         <Field label="Affected population"><input type="number" value={affected_population} onChange={e => setPop(e.target.value)} className={inputCls} /></Field>
         <Field label="Location"><input type="text" value={location} onChange={e => setLoc(e.target.value)} className={inputCls} /></Field>
-        <Field label="Infrastructure type">
-          <select value={infrastructure_type} onChange={e => setInfra(e.target.value)} className={inputCls}>
-            <option value="roads">Roads</option>
-            <option value="bridges">Bridges</option>
-            <option value="water">Water</option>
-            <option value="all">All</option>
-          </select>
-        </Field>
+        <Field label="Intensity (0-1)"><input type="number" step="0.1" min="0" max="1" value={intensity} onChange={e => setIntensity(e.target.value)} className={inputCls} /></Field>
       </div>
+      <label className="flex items-center gap-2 text-[10px] text-gray-400">
+        <input type="checkbox" checked={enrich} onChange={e => setEnrich(e.target.checked)} />
+        Enrich with AI (requires ANTHROPIC_API_KEY)
+      </label>
       <button type="button" onClick={run} disabled={loading} className={btnCls}>{loading ? 'Planning…' : 'Generate Response Plan'}</button>
       <ErrorMsg msg={err} />
-      {plan && <p className="text-gray-300 text-[10px] mt-1 leading-relaxed">{plan}</p>}
+      {severity && (
+        <p className="text-[10px] mt-1">Severity: <span className={`${sevColor} font-bold uppercase`}>{severity}</span></p>
+      )}
+      {phases && phases.length > 0 && (
+        <div className="mt-1 space-y-0.5">
+          <p className="text-gray-400 text-[10px] font-semibold uppercase">Response Timeline</p>
+          {phases.map((p) => (
+            <div key={p.phase} className="flex gap-2 text-[10px] text-gray-300 bg-black/20 rounded px-2 py-1">
+              <span className="text-infra-accent font-bold whitespace-nowrap">+{p.hour_offset}h</span><span>{p.action}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {resources && (
+        <div className="grid grid-cols-2 gap-1 mt-1">
+          {Object.entries(resources).map(([k, v]) => (
+            <div key={k} className="flex justify-between bg-black/20 rounded px-2 py-1">
+              <span className="text-gray-400 text-[10px]">{k.replace(/_/g, ' ')}</span>
+              <span className="text-emerald-400 text-[10px] font-bold">{v.toLocaleString()}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {risks && risks.length > 0 && (
+        <p className="text-amber-400/80 text-[10px] mt-1">Key risks: {risks.join(', ')}</p>
+      )}
       {actions && actions.length > 0 && (
         <div className="mt-1 space-y-0.5">
-          <p className="text-gray-400 text-[10px] font-semibold uppercase">Priority Actions</p>
+          <p className="text-gray-400 text-[10px] font-semibold uppercase">AI Priority Actions</p>
           {actions.map((a, i) => (
             <div key={i} className="flex gap-2 text-[10px] text-gray-300 bg-black/20 rounded px-2 py-1">
               <span className="text-infra-accent font-bold">{i + 1}.</span><span>{a}</span>
@@ -161,7 +247,6 @@ function DisasterSection() {
           ))}
         </div>
       )}
-      {result && !plan && !actions && <ResultBox data={result} />}
     </Toggle>
   );
 }
@@ -451,12 +536,37 @@ function SeismicSection() {
 
 export function EmergingTechPanel() {
   const [marketplace, setMarketplace] = useState<Record<string, unknown> | null>(null);
+  const [mktType, setMktType] = useState('');
   const [satellite, setSatellite] = useState<Record<string, unknown> | null>(null);
   const [satLoading, setSatLoading] = useState(false);
+  const [showAdd, setShowAdd] = useState(false);
+  const [newTitle, setNewTitle] = useState('');
+  const [newType, setNewType] = useState('material');
+  const [newPrice, setNewPrice] = useState('');
+  const [newUnit, setNewUnit] = useState('unit');
+
+  const loadMarket = (type = mktType) => {
+    emergingAPI.marketplace('ZM', { type: type || undefined }).then(setMarketplace).catch(() => null);
+  };
 
   useEffect(() => {
-    emergingAPI.marketplace('ZM').then(setMarketplace).catch(() => null);
+    loadMarket('');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const addListing = async () => {
+    if (!newTitle || !newPrice) return;
+    await emergingAPI.createListing({
+      type: newType, title: newTitle, price_usd: +newPrice, unit: newUnit, region: 'ZM',
+    }).catch(() => null);
+    setNewTitle(''); setNewPrice(''); setShowAdd(false);
+    loadMarket();
+  };
+
+  const removeListing = async (id: string) => {
+    await emergingAPI.deleteListing(id).catch(() => null);
+    loadMarket();
+  };
 
   const runSatellite = async () => {
     setSatLoading(true);
@@ -474,14 +584,50 @@ export function EmergingTechPanel() {
         <h2 className="text-sm font-bold text-white uppercase tracking-wide">Emerging Technology</h2>
       </div>
       <div className="flex-1 overflow-y-auto p-4 space-y-3 text-xs">
+        <CapabilitiesBanner />
         <div className={sectionCls}>
-          <p className={`${summaryBaseCls} cursor-default`}>Marketplace</p>
-          <div className="px-3 pb-3 pt-1">
-            {listings.length === 0 && <p className="text-gray-500 text-[10px]">Loading…</p>}
+          <p className={`${summaryBaseCls} cursor-default`}>Marketplace ({listings.length})</p>
+          <div className="px-3 pb-3 pt-1 space-y-2">
+            <div className="flex gap-2">
+              <select
+                value={mktType}
+                onChange={(e) => { setMktType(e.target.value); loadMarket(e.target.value); }}
+                className={inputCls}
+              >
+                <option value="">All types</option>
+                <option value="material">Material</option>
+                <option value="labour">Labour</option>
+                <option value="equipment">Equipment</option>
+                <option value="carbon_credit">Carbon credit</option>
+                <option value="service">Service</option>
+              </select>
+              <button type="button" onClick={() => setShowAdd((s) => !s)} className="px-2 py-1 text-[10px] bg-infra-accent/30 rounded text-white whitespace-nowrap">
+                {showAdd ? 'Cancel' : '+ Add'}
+              </button>
+            </div>
+            {showAdd && (
+              <div className="space-y-1.5 bg-black/20 rounded p-2">
+                <input type="text" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder="Title" className={inputCls} />
+                <div className="grid grid-cols-3 gap-1.5">
+                  <select value={newType} onChange={(e) => setNewType(e.target.value)} className={inputCls}>
+                    <option value="material">Material</option>
+                    <option value="labour">Labour</option>
+                    <option value="equipment">Equipment</option>
+                    <option value="carbon_credit">Carbon</option>
+                    <option value="service">Service</option>
+                  </select>
+                  <input type="number" value={newPrice} onChange={(e) => setNewPrice(e.target.value)} placeholder="USD" className={inputCls} />
+                  <input type="text" value={newUnit} onChange={(e) => setNewUnit(e.target.value)} placeholder="unit" className={inputCls} />
+                </div>
+                <button type="button" onClick={addListing} className={btnCls}>Save listing</button>
+              </div>
+            )}
+            {listings.length === 0 && <p className="text-gray-500 text-[10px]">No listings.</p>}
             {listings.map((l) => (
-              <div key={String(l.id)} className="flex justify-between py-1.5 border-b border-infra-accent/10 text-gray-300">
-                <span>{String(l.title)}</span>
-                <span className="text-emerald-400">${String(l.price_usd)}/{String(l.unit)}</span>
+              <div key={String(l.id)} className="flex items-center justify-between py-1.5 border-b border-infra-accent/10 text-gray-300">
+                <span className="flex-1 truncate">{String(l.title)}</span>
+                <span className="text-emerald-400 mx-2">${String(l.price_usd)}/{String(l.unit)}</span>
+                <button type="button" onClick={() => removeListing(String(l.id))} className="text-red-400/70 hover:text-red-400 text-[11px]" title="Remove">✕</button>
               </div>
             ))}
           </div>

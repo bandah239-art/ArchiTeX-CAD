@@ -22,6 +22,7 @@ import { DOFIndicator } from '../../cad/ui/DOFIndicator';
 import { ConflictAlert } from '../../cad/ui/ConflictAlert';
 import { DrawDimensionOverlay } from './DrawDimensionOverlay';
 import { SketchCalcPrompt } from './SketchCalcPrompt';
+import { IfcCalcPrompt } from './IfcCalcPrompt';
 import { CanvasTextInput } from './CanvasTextInput';
 import { ConstraintPanel } from '../../cad/ui/ConstraintPanel';
 import { useSketchConstraintStore } from '../../store/sketchConstraintStore';
@@ -818,6 +819,7 @@ export function BIMViewer({
       <ConflictAlert />
       <DrawDimensionOverlay />
       <SketchCalcPrompt />
+      <IfcCalcPrompt />
       <CanvasTextInput />
       {barVisible && (
         <div className="absolute top-16 left-4 w-80 h-[75%] z-20 pointer-events-auto">
@@ -861,6 +863,20 @@ export function BIMViewer({
             Use File → Open or the Open button above
           </p>
           <CadEngineStatusIndicator className="mt-4 pointer-events-auto" />
+        </div>
+      )}
+
+      {modelStats?.warnings && modelStats.warnings.length > 0 && !loading && (
+        <div className="absolute top-14 left-4 right-4 z-10 pointer-events-none">
+          <div className="bg-amber-900/85 backdrop-blur rounded-lg p-3 text-xs text-amber-100 max-h-24 overflow-y-auto pointer-events-auto">
+            <div className="font-bold mb-1">IFC loaded with warnings ({modelStats.warnings.length})</div>
+            {modelStats.warnings.slice(0, 5).map((w) => (
+              <div key={w} className="opacity-90">{w}</div>
+            ))}
+            {modelStats.metadata?.projectName && (
+              <div className="mt-1 text-amber-200/70">Project: {modelStats.metadata.projectName}</div>
+            )}
+          </div>
         </div>
       )}
 

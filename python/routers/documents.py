@@ -2,8 +2,11 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import Any
 
+from fastapi.responses import Response
+
 from documents.tender_generator import generate_tender
 from documents.calculation_report import generate_calculation_report
+from documents.structural_report_pdf import render_structural_report_pdf
 from documents.eia_screening import screen_eia
 from documents.esg_report import generate_esg_report
 from mobile.quick_calculators import concrete_mix, quick_beam_check, rebar_weight
@@ -78,6 +81,20 @@ def doc_calc_report(inputs: CalcReportInput):
         return generate_calculation_report(inputs.model_dump())
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/documents/structural-report-pdf")
+def doc_structural_report_pdf(inputs: CalcReportInput):
+    """Production structural report PDF with draft watermark and page headers."""
+    try:
+        pdf_bytes = render_structural_report_pdf(inputs.model_dump())
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": "attachment; filename=structural_report.pdf"},
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/documents/eia-screening")

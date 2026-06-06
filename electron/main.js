@@ -23,8 +23,9 @@ import {
   closeOfflineDb,
 } from './offline-sync.js';
 
-const API_BASE = process.env.VITE_API_BASE ?? 'http://127.0.0.1:8000';
 const PYTHON_EXTERNAL = process.env.INFRA_PYTHON_EXTERNAL === '1';
+let PYTHON_PORT = 8000;
+let API_BASE = process.env.VITE_API_BASE ?? `http://127.0.0.1:${PYTHON_PORT}`;
 
 // Prevent crash when concurrently closes stdout/stderr (common in electron:dev).
 function ignorePipeErrors(stream) {
@@ -34,11 +35,6 @@ function ignorePipeErrors(stream) {
 }
 ignorePipeErrors(process.stdout);
 ignorePipeErrors(process.stderr);
-
-process.on('uncaughtException', (err) => {
-  if (err?.code === 'EPIPE') return;
-  console.error('Uncaught exception:', err);
-});
 
 function safeLog(...args) {
   try {
@@ -128,6 +124,80 @@ function waitForServer(port, maxAttempts = 30, interval = 1000) {
   });
 }
 
+/** Check if a TCP port is in use (any process). Resolves true if port is occupied. */
+function isPortOccupied(port) {
+  return new Promise((resolve) => {
+    const net = require('net');
+    const tester = net.createServer()
+      .once('error', () => resolve(true))
+      .once('listening', () => { tester.close(); resolve(false); })
+      .listen(port, '127.0.0.1');
+  });
+}
+
+/**
+ * Find a free port starting from `startPort`.
+ * If `startPort` is occupied by our own Python server (responds to /health),
+ * we reuse it. Otherwise we increment until a truly free port is found.
+ */
+async function findPythonPort(startPort = 8000, maxAttempts = 10) {
+  for (let port = startPort; port < startPort + maxAttempts; port++) {
+    const occupied = await isPortOccupied(port);
+    if (!occupied) {
+      safeLog(`[Python] Port ${port} is free — will bind there.`);
+      return port;
+    }
+    // Port is in use — check if it's OUR Python server
+    const isOurs = await checkServerHealth(port);
+    if (isOurs) {
+      safeLog(`[Python] Port ${port} already has our server running — reusing.`);
+      return port;
+    }
+    safeWarn(`[Python] Port ${port} is occupied by another process — trying ${port + 1}.`);
+  }
+  safeWarn(`[Python] No free port found in range ${startPort}–${startPort + maxAttempts - 1}; falling back to ${startPort}.`);
+  return startPort;
+}
+
+/** Build the loading screen HTML shown while Python starts up. */
+function loadingScreenHTML(status = 'Starting calculation engine\u2026') {
+  const safe = status.replace(/[<>&"']/g, '');
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>ARCHITEX-CAD</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { height: 100vh; display: flex; flex-direction: column;
+         align-items: center; justify-content: center;
+         background: #0f1117; color: #e2e8f0;
+         font-family: system-ui, -apple-system, sans-serif; }
+  .logo { font-size: 1.6rem; font-weight: 700; letter-spacing: 2px;
+          color: #60a5fa; margin-bottom: 0.5rem; }
+  .sub  { font-size: 0.75rem; letter-spacing: 3px; color: #475569;
+          text-transform: uppercase; margin-bottom: 2.5rem; }
+  .spinner { width: 40px; height: 40px; border: 3px solid #1e293b;
+             border-top-color: #3b82f6; border-radius: 50%;
+             animation: spin 0.8s linear infinite; margin-bottom: 1.5rem; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .status { font-size: 0.85rem; color: #64748b; max-width: 360px; text-align: center; }
+  #progress { width: 260px; height: 3px; background: #1e293b;
+              border-radius: 2px; margin-top: 1.5rem; overflow: hidden; }
+  #bar { height: 100%; width: 0%; background: #3b82f6;
+         border-radius: 2px; transition: width 0.4s ease;
+         animation: indeterminate 1.5s ease infinite; }
+  @keyframes indeterminate {
+    0%   { transform: translateX(-100%); width: 40%; }
+    100% { transform: translateX(360px); width: 40%; }
+  }
+</style></head>
+<body>
+  <div class="logo">ARCHITEX-CAD</div>
+  <div class="sub">Infrastructure Engineering Platform</div>
+  <div class="spinner"></div>
+  <div class="status" id="msg">${safe}</div>
+  <div id="progress"><div id="bar"></div></div>
+</body></html>`;
+}
+
 function getPythonPipArgs() {
   const { cmd, args, shell } = getPipInstallConfig();
   return { cmd, args, shell };
@@ -169,19 +239,33 @@ function ensurePythonDependencies() {
 }
 
 function spawnPythonServer() {
-  checkServerHealth(PYTHON_PORT).then((alreadyRunning) => {
-    if (alreadyRunning) {
+  const alreadyRunning = checkServerHealth(PYTHON_PORT).then((running) => {
+    if (running) {
       safeLog('Python server already running on port', PYTHON_PORT);
       return;
     }
 
     const pythonDir = getPythonScriptPath();
-    const { cmd, args, shell } = getPythonSpawnArgs();
+
+    // Build spawn args using the resolved port (may differ from default 8000)
+    const { cmd: _cmd, args: _defaultArgs, shell } = getPythonSpawnArgs();
     const exe = resolvePythonExecutable();
-    safeLog(
-      `[Python] Starting server (${describePythonSource(exe)})...`,
-      exe ?? cmd,
+
+    // Override the port in uvicorn args to match the resolved port
+    const portArg = `--port=${PYTHON_PORT}`;
+    const args = _defaultArgs.map((a) =>
+      typeof a === 'string' && a.startsWith('--port') ? portArg : a
     );
+    // If args don't include --port, add it
+    if (!args.some((a) => typeof a === 'string' && a.startsWith('--port'))) {
+      args.push('--port', String(PYTHON_PORT));
+    }
+
+    safeLog(
+      `[Python] Starting server on port ${PYTHON_PORT} (${describePythonSource(exe)})...`,
+      exe ?? _cmd,
+    );
+    const cmd = _cmd;
 
     pythonProcess = spawn(cmd, args, {
       cwd: pythonDir,
@@ -219,29 +303,26 @@ function killPythonServer() {
 }
 
 async function getDevServerUrl() {
-  // Prefer explicit port from environment (set by start-electron.mjs / electron:dev)
-  const envPort = process.env.VITE_DEV_PORT;
-  const ports = envPort ? [Number(envPort), 5173, 5174, 5175] : [5173, 5174, 5175];
-  // Deduplicate in case envPort matches one of the defaults
-  const uniquePorts = [...new Set(ports)];
+  const envPort = Number(process.env.VITE_DEV_PORT) || 5190;
+  const ports = [envPort];
   const maxAttempts = 45;
   const delay = 1000;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     safeLog(`[Electron] Checking dev server ports (attempt ${attempt}/${maxAttempts})...`);
-    for (const port of uniquePorts) {
+    for (const port of ports) {
       try {
         const ok = await new Promise((resolve) => {
           const req = http.get(`http://localhost:${port}`, (res) => {
-            // Read the response body to verify it's actually a Vite dev server
             let body = '';
             res.on('data', (chunk) => { body += chunk.toString(); });
             res.on('end', () => {
-              // Check for our app's root div or Vite's module script
-              const isVite = res.statusCode === 200 && (
-                body.includes('id="root"') || body.includes('/@vite/client')
+              const isArchitex = res.statusCode === 200 && (
+                body.includes('data-app="architex-cad"') ||
+                body.includes("data-app='architex-cad'") ||
+                body.includes('<title>ARCHITEX-CAD</title>')
               );
-              resolve(isVite);
+              resolve(isArchitex);
             });
           });
           req.on('error', () => resolve(false));
@@ -251,7 +332,7 @@ async function getDevServerUrl() {
           });
         });
         if (ok) {
-          safeLog(`[Electron] Found active Vite dev server on port ${port}`);
+          safeLog(`[Electron] Found ARCHITEX-CAD dev server on port ${port}`);
           return `http://localhost:${port}`;
         }
       } catch {
@@ -262,8 +343,8 @@ async function getDevServerUrl() {
       await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
-  safeLog('[Electron] No active dev server found, falling back to default.');
-  return `http://localhost:${uniquePorts[0]}`;
+  safeLog('[Electron] No ARCHITEX-CAD dev server found on port', envPort);
+  return `http://localhost:${envPort}`;
 }
 
 function createWindow() {
@@ -518,6 +599,49 @@ ipcMain.handle('offline:save-calculation', (_, id, projectId, type, inputs, resu
 );
 ipcMain.handle('offline:load-calculations', (_, projectId) => loadCalculationsLocal(projectId));
 
+// ── Frontend error logging ────────────────────────────────────────────────────
+const _logDir = path.join(__dirname, 'logs');
+try { fs.mkdirSync(_logDir, { recursive: true }); } catch { /* already exists */ }
+
+const _crashLogPath = path.join(_logDir, 'crash.log');
+
+function appendCrashLog(entry) {
+  try {
+    const line = JSON.stringify({ ...entry, _written: new Date().toISOString() }) + '\n';
+    fs.appendFileSync(_crashLogPath, line, 'utf8');
+  } catch { /* never crash the crash logger */ }
+}
+
+ipcMain.handle('log-frontend-error', (_, payload) => {
+  appendCrashLog({ ...payload, source: 'renderer' });
+  safeWarn('[FrontendError]', payload?.errorId, payload?.message);
+  return { ok: true };
+});
+
+// Upgrade uncaughtException to also write to crash.log
+process.on('uncaughtException', (err) => {
+  if (err?.code === 'EPIPE') return;
+  appendCrashLog({
+    timestamp: new Date().toISOString(),
+    level: 'fatal',
+    source: 'main-process',
+    message: err.message,
+    stack: err.stack,
+  });
+  console.error('Uncaught exception:', err);
+});
+
+process.on('unhandledRejection', (reason) => {
+  appendCrashLog({
+    timestamp: new Date().toISOString(),
+    level: 'fatal',
+    source: 'main-process',
+    message: String(reason),
+    stack: reason instanceof Error ? reason.stack : undefined,
+  });
+  console.error('Unhandled rejection:', reason);
+});
+
 // OS Action IPC
 ipcMain.handle('os-action', async (_, action, targetPath) => {
   try {
@@ -559,9 +683,48 @@ app.whenReady().then(async () => {
     });
   }
 
+  // ── Port resolution ──────────────────────────────────────────────────────
+  if (!PYTHON_EXTERNAL) {
+    PYTHON_PORT = await findPythonPort(8000);
+    API_BASE = `http://127.0.0.1:${PYTHON_PORT}`;
+    safeLog(`[Python] Resolved API port: ${PYTHON_PORT} → ${API_BASE}`);
+  }
+
+  // ── Create loading window early so the user sees progress ────────────────
+  const loadingWindow = new BrowserWindow({
+    width: 480,
+    height: 320,
+    frame: false,
+    resizable: false,
+    center: true,
+    show: false,
+    backgroundColor: '#0f1117',
+    webPreferences: { contextIsolation: true, nodeIntegration: false },
+  });
+  loadingWindow.loadURL(
+    `data:text/html;charset=utf-8,${encodeURIComponent(loadingScreenHTML('Checking Python environment\u2026'))}`
+  );
+  loadingWindow.once('ready-to-show', () => loadingWindow.show());
+
+  /** Update the loading screen message via JS eval */
+  function setLoadingStatus(msg) {
+    if (loadingWindow && !loadingWindow.isDestroyed()) {
+      loadingWindow.webContents.executeJavaScript(
+        `document.getElementById('msg') && (document.getElementById('msg').textContent = ${JSON.stringify(msg)})`
+      ).catch(() => {});
+    }
+    // Mirror to main window if it exists (IPC)
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('python-startup-status', { message: msg });
+    }
+  }
+
+  // ── Python startup ────────────────────────────────────────────────────────
+  setLoadingStatus('Installing Python dependencies\u2026');
   await ensurePythonDependencies();
 
-  if (!process.env.INFRA_PYTHON_EXTERNAL) {
+  if (!PYTHON_EXTERNAL) {
+    setLoadingStatus(`Starting calculation engine on port ${PYTHON_PORT}\u2026`);
     spawnPythonServer();
   } else {
     const ok = await checkServerHealth(PYTHON_PORT);
@@ -572,13 +735,29 @@ app.whenReady().then(async () => {
     );
   }
 
+  setLoadingStatus('Waiting for calculation engine to be ready\u2026');
+
+  let serverReady = false;
   try {
     await waitForServer(PYTHON_PORT, PYTHON_EXTERNAL ? 60 : 30);
+    serverReady = true;
+    setLoadingStatus('Calculation engine ready — launching interface\u2026');
     safeLog('Python calculation server is ready');
-    createWindow();
   } catch (err) {
     safeWarn('Failed to start Python server:', err.message);
-    createWindow();
+    setLoadingStatus('Calculation engine unavailable — launching in offline mode\u2026');
+  }
+
+  // Small delay so user can read the final status message
+  await new Promise((resolve) => setTimeout(resolve, serverReady ? 400 : 800));
+
+  // ── Launch main window and close loading window ───────────────────────────
+  createWindow();
+  if (!loadingWindow.isDestroyed()) {
+    // Wait for main window to show before closing the loading screen
+    setTimeout(() => {
+      if (!loadingWindow.isDestroyed()) loadingWindow.close();
+    }, 1500);
   }
 
   app.on('activate', () => {

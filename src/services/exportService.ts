@@ -38,6 +38,7 @@ export async function exportToPDF(result: CalculationResult, projectDetails?: Re
     project_ref: projectDetails?.project_ref,
     design_brief: projectDetails?.design_brief,
     module: activeModule,
+    is_draft: counts.pending > 0 || counts.flagged > 0 || result.status === 'fail',
   };
 
   if (counts.pending > 0) {
