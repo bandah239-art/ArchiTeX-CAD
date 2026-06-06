@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from government.evm_engine import EVM_ALERT_THRESHOLD
 from government.portfolio_database import compute_evm, list_projects, seed_demo_projects
 
 
@@ -14,8 +15,8 @@ def portfolio_summary() -> dict[str, Any]:
         p["evm"] = compute_evm(p["id"])
 
     total = len(projects)
-    active = [p for p in projects if p.get("status") == "active"]
-    completed = [p for p in projects if p.get("status") == "complete"]
+    active = [p for p in projects if p.get("status") in ("active", "construction")]
+    completed = [p for p in projects if p.get("status") in ("complete", "closed")]
     suspended = [p for p in projects if p.get("status") == "suspended"]
 
     total_value = sum(float(p.get("contract_value_usd") or 0) for p in projects)
@@ -25,6 +26,19 @@ def portfolio_summary() -> dict[str, Any]:
     delayed = 0
     critical = 0
     alerts: list[dict[str, Any]] = []
+
+    for p in projects:
+        evm = p.get("evm") or {}
+        cpi = evm.get("CPI", 1)
+        spi = evm.get("SPI", 1)
+        if cpi < EVM_ALERT_THRESHOLD or spi < EVM_ALERT_THRESHOLD:
+            alerts.append({
+                "severity": "CRITICAL",
+                "project_id": p["id"],
+                "project_name": p["project_name"],
+                "message": f"EVM alert — CPI {cpi:.2f} / SPI {spi:.2f} below {EVM_ALERT_THRESHOLD}",
+                "action_required": "Review cost and schedule recovery plan",
+            })
 
     for p in projects:
         pct = float(p.get("completion_pct") or 0)

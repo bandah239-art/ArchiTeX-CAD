@@ -166,6 +166,29 @@ export const governmentAPI = {
   generateCertificate: (id: string, payload: Record<string, unknown>) =>
     post<Record<string, unknown>>(`/government/projects/${id}/certificate`, payload),
 
+  approveCertificate: (projectId: string, certId: string, payload: Record<string, unknown>) =>
+    fetch(`${API_BASE}/government/projects/${projectId}/certificates/${certId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }).then((r) => r.json()),
+
+  updateProject: (id: string, payload: Record<string, unknown>) =>
+    fetch(`${API_BASE}/government/projects/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }).then((r) => r.json()),
+
+  exportRegister: (params?: Record<string, string>) => {
+    const qs = params ? `?${new URLSearchParams(params)}` : '';
+    return fetch(`${API_BASE}/government/projects/export${qs}`).then((r) => r.blob());
+  },
+
+  registerOptions: () => fetch(`${API_BASE}/government/register-options`).then((r) => r.json()),
+
+  evmSeries: (id: string) => fetch(`${API_BASE}/government/projects/${id}/evm-series`).then((r) => r.json()),
+
   generateReport: (type: string, payload: Record<string, unknown>) =>
     post<Record<string, unknown>>(`/government/reports/${type}`, payload),
 };

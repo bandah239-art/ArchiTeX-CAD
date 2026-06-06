@@ -1,17 +1,31 @@
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import Response
+from pydantic import BaseModel
 from typing import Any
 
 from government.dashboard_engine import portfolio_summary
+from government.evm_engine import evm_monthly_series
 from government.portfolio_database import (
-    add_snapshot, add_variation, create_project, init_db,
-    list_projects, seed_demo_projects, update_project,
+    add_snapshot, add_variation, create_project, export_register_csv, init_db,
+    list_projects, seed_demo_projects, update_certificate_status, update_project,
 )
 from government.project_tracker import cashflow_projection, generate_s_curve, get_project_detail
 from government.payment_certificates import generate_certificate
 from government.reporting_engine import generate_report
 
 router = APIRouter(prefix="/government", tags=["government"])
+
+LIFECYCLE_STATUSES = [
+    "feasibility", "design", "tender", "construction", "defects", "closed",
+    "active", "complete", "suspended",
+]
+
+SECTORS = ["road", "water_wash", "building", "energy", "social"]
+FUNDING_SOURCES = ["GRZ", "World_Bank", "AfDB", "bilateral", "PPP"]
+PROVINCES = [
+    "Central", "Copperbelt", "Eastern", "Luapula", "Lusaka", "Muchinga",
+    "Northern", "North-Western", "Southern", "Western",
+]
 
 
 class GovProjectInput(BaseModel):
@@ -21,14 +35,20 @@ class GovProjectInput(BaseModel):
     country_code: str = "ZM"
     province: str = ""
     district: str = ""
+    gps_lat: float | None = None
+    gps_lon: float | None = None
     contract_value_usd: float = 0
+    contract_value_local: float = 0
+    currency: str = "ZMW"
     funding_source: str = "GRZ"
     contractor_name: str = ""
     consultant_name: str = ""
+    contract_date: str = ""
     commencement_date: str = ""
     original_completion: str = ""
-    status: str = "active"
+    status: str = "construction"
     completion_pct: float = 0
+    changed_by: str = "user"
 
 
 class GovSnapshotInput(BaseModel):
@@ -53,11 +73,18 @@ class GovCertificateInput(BaseModel):
     previous_net_certified_usd: float = 0
     works_value_usd: float = 0
     materials_on_site_usd: float = 0
-    retention_pct: float = 10
+    retention_pct: float | None = None
+    advance_recovery_usd: float = 0
     period_from: str = ""
     period_to: str = ""
     exchange_rate: float = 26.5
     currency: str = "ZMW"
+
+
+class GovCertApprovalInput(BaseModel):
+    status: str
+    approved_by: str = ""
+    role: str = "engineer"
 
 
 class GovReportInput(BaseModel):
@@ -75,6 +102,16 @@ def gov_portfolio_summary():
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.get("/register-options")
+def gov_register_options():
+    return {
+        "statuses": LIFECYCLE_STATUSES,
+        "sectors": SECTORS,
+        "funding_sources": FUNDING_SOURCES,
+        "provinces": PROVINCES,
+    }
+
+
 @router.post("/projects/seed")
 def gov_seed_projects():
     return {"projects": seed_demo_projects()}
@@ -89,9 +126,43 @@ def gov_create_project(inputs: GovProjectInput):
 
 
 @router.get("/projects")
-def gov_list_projects():
+def gov_list_projects(
+    status: str | None = None,
+    province: str | None = None,
+    project_type: str | None = None,
+    funding_source: str | None = None,
+    search: str | None = None,
+    min_value_usd: float | None = None,
+    max_value_usd: float | None = None,
+):
     init_db()
-    return {"projects": list_projects()}
+    filters = {
+        k: v for k, v in {
+            "status": status,
+            "province": province,
+            "project_type": project_type,
+            "funding_source": funding_source,
+            "search": search,
+            "min_value_usd": min_value_usd,
+            "max_value_usd": max_value_usd,
+        }.items() if v is not None
+    }
+    return {"projects": list_projects(filters)}
+
+
+@router.get("/projects/export")
+def gov_export_register(
+    status: str | None = None,
+    province: str | None = None,
+    project_type: str | None = None,
+):
+    filters = {k: v for k, v in {"status": status, "province": province, "project_type": project_type}.items() if v}
+    csv_data = export_register_csv(filters)
+    return Response(
+        content=csv_data,
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=project-register.csv"},
+    )
 
 
 @router.get("/projects/{project_id}")
@@ -144,10 +215,33 @@ def gov_certificate(project_id: str, inputs: GovCertificateInput):
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.patch("/projects/{project_id}/certificates/{certificate_id}")
+def gov_approve_certificate(project_id: str, certificate_id: str, inputs: GovCertApprovalInput):
+    try:
+        result = update_certificate_status(
+            project_id, certificate_id, inputs.status, inputs.approved_by, inputs.role
+        )
+        if not result:
+            raise HTTPException(status_code=404, detail="Certificate not found")
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.get("/projects/{project_id}/timeline")
 def gov_timeline(project_id: str):
     try:
         return generate_s_curve(project_id)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/projects/{project_id}/evm-series")
+def gov_evm_series(project_id: str):
+    try:
+        return {"series": evm_monthly_series(project_id)}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

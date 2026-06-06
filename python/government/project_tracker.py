@@ -4,6 +4,7 @@ import math
 from datetime import datetime
 from typing import Any
 
+from government.evm_engine import EVM_ALERT_THRESHOLD, evm_monthly_series
 from government.portfolio_database import (
     add_certificate,
     add_snapshot,
@@ -14,6 +15,8 @@ from government.portfolio_database import (
     get_project,
     get_project_raw,
     get_snapshots,
+    get_status_log,
+    get_baseline_programme,
     get_variations,
     list_projects,
     update_project,
@@ -74,10 +77,12 @@ def generate_s_curve(project_id: str) -> dict[str, Any]:
         if planned_at > 0:
             spi = round(float(latest["completion_pct"]) / planned_at, 3)
 
+    evm_series = evm_monthly_series(project_id)
     return {
         "project_id": project_id,
         "planned": planned,
         "actual": actual,
+        "evm_series": evm_series,
         "spi": spi,
         "forecast_completion": project.get("revised_completion") or project.get("original_completion"),
     }
@@ -94,16 +99,31 @@ def cashflow_projection(project_id: str) -> dict[str, Any]:
     contract = float(project.get("contract_value_usd") or 0)
     months = _months_between(project.get("commencement_date", ""), project.get("original_completion", ""))
     monthly = contract / max(months, 1)
+    certs = get_certificates(project_id)
+    approved = [c for c in certs if c.get("status") in ("approved", "paid", "ready_for_payment")]
+    actual_spend = float(approved[-1]["cumulative_certified"]) if approved else 0.0
+    elapsed = _months_elapsed(project.get("commencement_date", ""))
+    burn = actual_spend / max(elapsed, 1)
+    forecast_total = actual_spend + burn * max(0, months - elapsed)
+    deficit_alert = forecast_total > contract * 1.05
     return {
         "project_id": project_id,
         "contract_value_usd": contract,
         "months": months,
         "monthly_forecast_usd": round(monthly, 0),
+        "actual_spend_usd": round(actual_spend, 0),
+        "forecast_to_complete_usd": round(forecast_total, 0),
+        "cash_deficit_alert": deficit_alert,
         "cashflow": [
             {"month": m, "planned_disbursement_usd": round(monthly * (m / max(months, 1)), 0)}
             for m in range(1, months + 1)
         ],
     }
+
+
+def _months_elapsed(commencement: str, as_of: str | None = None) -> int:
+    from government.evm_engine import _months_elapsed as me
+    return me(commencement, as_of)
 
 
 def get_project_detail(project_id: str) -> dict[str, Any]:
@@ -115,6 +135,8 @@ def get_project_detail(project_id: str) -> dict[str, Any]:
         "snapshots": get_snapshots(project_id),
         "variations": get_variations(project_id),
         "certificates": get_certificates(project_id),
+        "status_log": get_status_log(project_id),
+        "baseline": get_baseline_programme(project_id),
         "s_curve": generate_s_curve(project_id),
         "evm": analyse_budget_variance(project_id),
         "cashflow": cashflow_projection(project_id),
